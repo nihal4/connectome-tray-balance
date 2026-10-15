@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+data/raw/
+data/*.npz
+runs/
+*.mp4
+.DS_Store
+.venv/
