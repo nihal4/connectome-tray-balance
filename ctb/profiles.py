@@ -1,5 +1,9 @@
 """Hardware profiles. Pick with --profile. Any value can be overridden on the command line."""
 
+# Kept here (not imported from ctb.envs) so scripts can parse arguments before
+# numpy/torch load, which lets the thread limits take effect.
+ENV_NAMES = ["tray", "maze_fixed3", "maze3", "maze3h", "maze4", "maze5"]
+
 PROFILES = {
     # Mac M1 8 GB: small, slow, cool. Meant for checking that things learn, not final results.
     "mac": dict(

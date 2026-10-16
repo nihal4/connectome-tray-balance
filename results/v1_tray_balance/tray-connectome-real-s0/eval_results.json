@@ -1,0 +1,32 @@
+{
+  "clean": {
+    "return": 988.3,
+    "length": 500.0,
+    "full_episode_rate": 1.0
+  },
+  "noise_0.1": {
+    "return": 865.7,
+    "length": 500.0,
+    "full_episode_rate": 1.0
+  },
+  "noise_0.3": {
+    "return": 608.9,
+    "length": 500.0,
+    "full_episode_rate": 1.0
+  },
+  "blind": {
+    "return": 22.5,
+    "length": 31.2,
+    "full_episode_rate": 0.0
+  },
+  "heavy_ball": {
+    "return": 988.1,
+    "length": 500.0,
+    "full_episode_rate": 1.0
+  },
+  "push": {
+    "return": 979.2,
+    "length": 500.0,
+    "full_episode_rate": 1.0
+  }
+}

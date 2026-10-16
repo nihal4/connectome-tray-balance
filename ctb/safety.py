@@ -46,6 +46,15 @@ def lower_priority(level: int = 10):
         pass
 
 
+def battery_status():
+    """psutil battery info, or None when the machine has no battery
+    (servers, Kaggle, Docker raise errors instead of returning None)."""
+    try:
+        return psutil.sensors_battery()
+    except Exception:
+        return None
+
+
 def mac_thermal_status() -> dict:
     """Parse `pmset -g therm`. Returns {'warning': int, 'cpu_limit': int} (best effort)."""
     out = {"warning": 0, "cpu_limit": 100, "raw": ""}
@@ -109,7 +118,7 @@ class SafetyCallback(BaseCallback):
         if free_gb < self.min_free_gb:
             return self._stop(f"low memory ({free_gb:.1f} GB free)")
 
-        batt = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
+        batt = battery_status()
         if batt is not None and not batt.power_plugged and batt.percent < self.min_battery:
             return self._stop(f"on battery at {batt.percent:.0f}%")
 

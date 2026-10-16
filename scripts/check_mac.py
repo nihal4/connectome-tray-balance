@@ -2,13 +2,14 @@
 
 Checks, in order:
   1. packages import, versions, threads, free RAM, battery, thermal state
-  2. the MuJoCo tray environment steps and reports its speed
-  3. a hand-written PD controller can balance the ball (proves the task is solvable)
+  2. the MuJoCo environment (--env) steps and reports its speed
+  3. a hand-written controller solves it, doing nothing does not (task is solvable)
   4. the connectome subset loads and the brain-shaped network runs forward + backward
   5. estimated training speed on this machine
 
 Usage:
     python scripts/check_mac.py
+    python scripts/check_mac.py --env maze3
     python scripts/check_mac.py --subset data/subset_synthetic_N300.npz   # before downloading
 """
 import argparse
@@ -20,7 +21,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from ctb.safety import limit_threads, lower_priority, mac_thermal_status  # noqa: E402
+from ctb.safety import battery_status, limit_threads, lower_priority, mac_thermal_status  # noqa: E402
 
 limit_threads(2)
 lower_priority(10)
@@ -32,20 +33,10 @@ def section(t):
     print(f"\n== {t}")
 
 
-def pd_controller(obs):
-    """Tilt the tray against the ball: uses wrist pitch and roll only."""
-    import numpy as np
-    bx, by = obs[10] / 10, obs[11] / 10
-    vx, vy = obs[13], obs[14]
-    a = np.zeros(5)
-    a[3] = -(3.0 * bx + 1.5 * vx)
-    a[4] = 3.0 * by + 1.5 * vy
-    return a
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--subset", default="data/subset_flywire783_N1000.npz")
+    ap.add_argument("--env", default="tray")
     args = ap.parse_args()
 
     section("System")
@@ -54,7 +45,7 @@ def main():
     print(f"{OK} {platform.system()} {platform.machine()}, python {platform.python_version()}")
     vm = psutil.virtual_memory()
     print(f"{OK} RAM free {vm.available / 1e9:.1f} / {vm.total / 1e9:.1f} GB")
-    batt = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
+    batt = battery_status()
     if batt:
         print(f"{OK if batt.power_plugged else BAD} battery {batt.percent:.0f}% "
               f"({'plugged in' if batt.power_plugged else 'ON BATTERY - plug in before training'})")
@@ -72,9 +63,9 @@ def main():
         print(f"{BAD} missing package: {e}. Run: pip install -r requirements.txt")
         return
 
-    section("Environment")
-    from ctb.envs import TrayBalanceEnv
-    env = TrayBalanceEnv(seed=0)
+    section(f"Environment: {args.env}")
+    from ctb.envs import build_env, scripted_controller
+    env = build_env(args.env, seed=0)
     obs, _ = env.reset()
     t0, n = time.time(), 0
     while n < 2000:
@@ -85,17 +76,19 @@ def main():
     sps = n / (time.time() - t0)
     print(f"{OK} obs dim {obs.shape[0]}, action dim {env.action_space.shape[0]}, {sps:.0f} env steps/s (1 core)")
 
-    section("Task is solvable (hand-written PD controller vs doing nothing)")
-    for name, ctrl in [("do nothing", lambda o: np.zeros(5)), ("PD controller", pd_controller)]:
-        lens = []
+    section("Task is solvable (hand-written controller vs doing nothing)")
+    for name, ctrl in [("do nothing", lambda e, o: np.zeros(5)), ("scripted", scripted_controller)]:
+        lens, wins = [], []
         for ep in range(5):
             obs, _ = env.reset(seed=ep)
-            for t in range(500):
-                obs, r, te, tr, _ = env.step(ctrl(obs))
+            info = {}
+            for t in range(env.max_steps):
+                obs, r, te, tr, info = env.step(ctrl(env, obs))
                 if te or tr:
                     break
             lens.append(t + 1)
-        print(f"{OK} {name:14s} survives {np.mean(lens):5.0f} / 500 steps")
+            wins.append(info.get("is_success", not info.get("fell", False)))
+        print(f"{OK} {name:10s} success {np.mean(wins) * 100:5.0f}%   mean length {np.mean(lens):5.0f} / {env.max_steps}")
     env.close()
 
     section("Connectome network")
@@ -131,7 +124,7 @@ def main():
     per_200k = (rollout_s + update_s) * (200_000 / 2048) / 60
     print(f"{OK} roughly {per_200k:.0f} min of compute per 200k steps "
           f"(+25% rest time from the duty cycle). Rough estimate only.")
-    print("\nAll checks done. Next: python scripts/train.py --policy connectome --profile smoke")
+    print(f"\nAll checks done. Next: python scripts/train.py --env {args.env} --policy connectome --profile smoke")
 
 
 if __name__ == "__main__":

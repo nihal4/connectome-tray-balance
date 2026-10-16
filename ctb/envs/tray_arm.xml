@@ -1,7 +1,8 @@
 <!--
   5-DOF arm on a table holding a flat tray (no rim). A ball rolls on the tray.
   Arm links use gravcomp so the position servos only have to move the arm,
-  not fight gravity. The tray is welded to the wrist.
+  not fight gravity. The tray sits on a short post welded to the wrist.
+  Arm geoms are in collision group 2, so the ball only touches the tray (group 1).
 -->
 <mujoco model="tray_arm">
   <compiler angle="radian" autolimits="true"/>
@@ -31,21 +32,22 @@
     <geom name="table" type="box" pos="0 0 0.35" size="0.3 0.3 0.35" rgba="0.55 0.4 0.3 1"/>
 
     <body name="base" pos="0 0 0.7">
-      <geom type="cylinder" size="0.06 0.04" material="arm"/>
+      <geom type="cylinder" size="0.06 0.04" material="arm" contype="2" conaffinity="2"/>
       <body name="link1" pos="0 0 0.04" gravcomp="1">
         <joint name="shoulder_yaw" type="hinge" axis="0 0 1" range="-1.5 1.5"/>
-        <geom type="capsule" fromto="0 0 0 0 0 0.12" size="0.04" material="arm" mass="1.0"/>
+        <geom type="capsule" fromto="0 0 0 0 0 0.12" size="0.04" material="arm" contype="2" conaffinity="2" mass="1.0"/>
         <body name="link2" pos="0 0 0.12" gravcomp="1">
           <joint name="shoulder_pitch" type="hinge" axis="0 1 0" range="-1.2 1.6"/>
-          <geom type="capsule" fromto="0 0 0 0.3 0 0" size="0.035" material="arm" mass="0.8"/>
+          <geom type="capsule" fromto="0 0 0 0.3 0 0" size="0.035" material="arm" contype="2" conaffinity="2" mass="0.8"/>
           <body name="link3" pos="0.3 0 0" gravcomp="1">
             <joint name="elbow_pitch" type="hinge" axis="0 1 0" range="-2.5 2.5"/>
-            <geom type="capsule" fromto="0 0 0 0.25 0 0" size="0.03" material="arm" mass="0.6"/>
+            <geom type="capsule" fromto="0 0 0 0.25 0 0" size="0.03" material="arm" contype="2" conaffinity="2" mass="0.6"/>
             <body name="wrist" pos="0.25 0 0" gravcomp="1">
               <joint name="wrist_pitch" type="hinge" axis="0 1 0" range="-1.5 1.5"/>
               <joint name="wrist_roll" type="hinge" axis="1 0 0" range="-1.0 1.0"/>
-              <geom type="sphere" size="0.035" material="arm" mass="0.2"/>
-              <body name="tray" pos="0.0 0 0.04">
+              <geom type="sphere" size="0.035" material="arm" contype="2" conaffinity="2" mass="0.2"/>
+              <body name="tray" pos="0.0 0 0.07" gravcomp="1">
+                <geom type="cylinder" pos="0 0 -0.035" size="0.012 0.03" material="arm" contype="2" conaffinity="2" mass="0.05"/>
                 <site name="tray_center" pos="0 0 0.006" size="0.005"/>
                 <geom name="tray" type="box" size="0.15 0.15 0.006" material="tray" mass="0.3"/>
               </body>

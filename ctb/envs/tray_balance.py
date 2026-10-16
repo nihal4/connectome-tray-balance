@@ -22,11 +22,12 @@ XML_PATH = os.path.join(os.path.dirname(__file__), "tray_arm.xml")
 
 # Pose where the tray is level and in front of the robot.
 # shoulder_yaw, shoulder_pitch, elbow_pitch, wrist_pitch, wrist_roll
-HOME_QPOS = np.array([0.0, -0.5, 0.9, -0.353, -0.0125])
+HOME_QPOS = np.array([0.0, -0.5, 0.9, -0.4, 0.0])  # pitch angles sum to 0 -> tray level
 
 
 class TrayBalanceEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 50}
+    camera = (1.6, 135, -25)   # distance, azimuth, elevation for videos
 
     def __init__(
         self,
@@ -43,7 +44,7 @@ class TrayBalanceEnv(gym.Env):
         render_mode: str | None = None,
         seed: int | None = None,
     ):
-        self.model = mujoco.MjModel.from_xml_path(XML_PATH)
+        self.model = self._make_model()
         self.data = mujoco.MjData(self.model)
         self.frame_skip = frame_skip
         self.max_steps = max_steps
@@ -82,6 +83,9 @@ class TrayBalanceEnv(gym.Env):
         self.home_tray_pos = None
 
     # ------------------------------------------------------------------ helpers
+    def _make_model(self):
+        return mujoco.MjModel.from_xml_path(XML_PATH)
+
     def _tray_frame(self):
         pos = self.data.site_xpos[self.tray_site].copy()
         rot = self.data.site_xmat[self.tray_site].reshape(3, 3).copy()  # columns = tray axes in world
@@ -144,12 +148,20 @@ class TrayBalanceEnv(gym.Env):
         mujoco.mj_step(self.model, self.data, nstep=self.frame_skip)
         self._steps += 1
 
+        reward, terminated, info = self._reward(a)
+        truncated = self._steps >= self.max_steps
+        self._last_action = a
+        return self._get_obs(), float(reward), terminated, truncated, info
+
+    def _tray_drift(self):
+        tpos, _ = self._tray_frame()
+        return float(np.linalg.norm(tpos - self.home_tray_pos))
+
+    def _reward(self, a):
         bp, bv = self._ball_in_tray()
         dist = float(np.linalg.norm(bp[:2]))
         fell = bp[2] < 0.0 or bp[2] > 0.2 or abs(bp[0]) > 0.16 or abs(bp[1]) > 0.16
-        tpos, _ = self._tray_frame()
-        drift = float(np.linalg.norm(tpos - self.home_tray_pos))
-
+        drift = self._tray_drift()
         reward = (
             1.0                                     # alive
             + 1.0 * np.exp(-(dist / 0.04) ** 2)     # ball near the center
@@ -160,17 +172,14 @@ class TrayBalanceEnv(gym.Env):
         terminated = bool(fell)
         if terminated:
             reward -= 10.0
-        truncated = self._steps >= self.max_steps
-        self._last_action = a
-        info = {"ball_dist": dist, "tray_drift": drift, "fell": terminated}
-        return self._get_obs(), float(reward), terminated, truncated, info
+        return reward, terminated, {"ball_dist": dist, "tray_drift": drift, "fell": terminated}
 
     def render(self):
         if self._renderer is None:
             self._renderer = mujoco.Renderer(self.model, 480, 640)
         cam = mujoco.MjvCamera()
         cam.lookat[:] = self.home_tray_pos if self.home_tray_pos is not None else [0.4, 0, 1.0]
-        cam.distance, cam.azimuth, cam.elevation = 1.6, 135, -25
+        cam.distance, cam.azimuth, cam.elevation = self.camera
         self._renderer.update_scene(self.data, camera=cam)
         return self._renderer.render()
 
@@ -180,7 +189,11 @@ class TrayBalanceEnv(gym.Env):
             self._renderer = None
 
 
-def make_env(seed: int = 0, **kwargs):
-    def _thunk():
-        return TrayBalanceEnv(seed=seed, **kwargs)
-    return _thunk
+def pd_controller(obs):
+    """Hand-written balancer: tilt the tray against the ball (wrist pitch and roll only)."""
+    bx, by = obs[10] / 10, obs[11] / 10
+    vx, vy = obs[13], obs[14]
+    a = np.zeros(5)
+    a[3] = -(3.0 * bx + 1.5 * vx)
+    a[4] = 3.0 * by + 1.5 * vy
+    return a

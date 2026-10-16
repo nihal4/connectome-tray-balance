@@ -145,3 +145,31 @@ def matched_mlp_width(obs_dim: int, act_dim: int, target_params: int) -> int:
     # params = obs*h + h + h*h + h + h*act + act
     a, b, c = 1, obs_dim + 2 + act_dim, act_dim - target_params
     return max(16, int((-b + np.sqrt(b * b - 4 * a * c)) / (2 * a)))
+
+
+def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu"):
+    """Load a saved PPO run on any machine.
+
+    A connectome model remembers the absolute path of its wiring file from the
+    machine it was trained on (e.g. /kaggle/working/...). Here that path is
+    swapped for <run>/subset.npz, or data/<same file name> in this repo."""
+    import json
+    import os
+
+    from stable_baselines3 import PPO
+
+    cfg = json.load(open(os.path.join(run_dir, "config.json")))
+    if cfg["policy"] != "connectome":
+        return PPO.load(model_path, env=env, device=device)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates = [os.path.join(run_dir, "subset.npz"),
+                  os.path.join(root, "data", os.path.basename(cfg["subset"])),
+                  cfg["subset"]]
+    subset = next((c for c in candidates if os.path.exists(c)), None)
+    if subset is None:
+        raise FileNotFoundError(f"Wiring file not found. Tried: {candidates}. "
+                                "Run build_subset.py with the same --n as the run.")
+    kwargs = dict(subset_path=os.path.abspath(subset), k_steps=cfg.get("k_steps", 4),
+                  wiring=cfg.get("wiring", "real"), log_std_init=-0.5)
+    return PPO.load(model_path, env=env, device=device,
+                    custom_objects={"policy_class": ConnectomePolicy, "policy_kwargs": kwargs})

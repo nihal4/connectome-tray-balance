@@ -4,5 +4,6 @@ data/raw/
 data/*.npz
 runs/
 *.mp4
+!results/**/*.mp4
 .DS_Store
 .venv/

@@ -1,8 +1,14 @@
-"""Train a PPO agent on TrayBalance with a connectome-shaped or MLP policy.
+"""Train a PPO agent with a connectome-shaped or MLP policy.
+
+Environments (--env): tray, maze_fixed3, maze3, maze4, maze5 (see ctb/envs/__init__.py)
 
 Examples:
     # Mac: safe, slow, short (stops by itself after 30 min of compute)
     python scripts/train.py --policy connectome --profile mac
+
+    # Tilt-maze puzzle, one fixed maze, then random mazes
+    python scripts/train.py --env maze_fixed3 --policy connectome --profile kaggle
+    python scripts/train.py --env maze3 --policy connectome --profile kaggle
 
     # Same-size MLP baseline
     python scripts/train.py --policy mlp --profile mac
@@ -13,7 +19,7 @@ Examples:
     # Continue a stopped run
     python scripts/train.py --policy connectome --profile mac --resume
 
-Outputs go to runs/<name>/ : model.zip, vecnormalize.pkl, config.json,
+Outputs go to runs/<env>-<policy>-<wiring>-s<seed>/ : model.zip, vecnormalize.pkl, config.json,
 progress.csv (training log), evaluations.npz (eval curve).
 """
 import argparse
@@ -24,11 +30,12 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from ctb.profiles import PROFILES  # noqa: E402 (no heavy imports)
+from ctb.profiles import ENV_NAMES, PROFILES  # noqa: E402 (no heavy imports)
 
 
 def parse():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--env", choices=ENV_NAMES, default="tray")
     ap.add_argument("--policy", choices=["connectome", "mlp"], default="connectome")
     ap.add_argument("--wiring", choices=["real", "shuffled"], default="real")
     ap.add_argument("--subset", default="data/subset_flywire783_N1000.npz")
@@ -74,22 +81,22 @@ def main():
     from ctb.policies import ConnectomeCore, ConnectomePolicy, matched_mlp_width
     from ctb.safety import SafetyCallback
 
-    name = args.name or f"{args.policy}" + (f"-{args.wiring}" if args.policy == "connectome" else "") + f"-s{args.seed}"
+    name = args.name or f"{args.env}-{args.policy}" + (f"-{args.wiring}" if args.policy == "connectome" else "") + f"-s{args.seed}"
     out = os.path.join(args.runs_dir, name)
     os.makedirs(out, exist_ok=True)
     model_path, vn_path = os.path.join(out, "model.zip"), os.path.join(out, "vecnormalize.pkl")
 
     env_kw = dict(push_prob=args.push_prob)
     Vec = SubprocVecEnv if cfg["vec"] == "subproc" else DummyVecEnv
-    venv = Vec([make_env(seed=args.seed * 1000 + i, **env_kw) for i in range(cfg["n_envs"])])
+    venv = Vec([make_env(args.env, seed=args.seed * 1000 + i, **env_kw) for i in range(cfg["n_envs"])])
     venv = VecMonitor(venv)
-    eval_env = VecMonitor(DummyVecEnv([make_env(seed=10_000 + args.seed, **env_kw)]))
+    eval_env = VecMonitor(DummyVecEnv([make_env(args.env, seed=10_000 + args.seed, **env_kw)]))
 
     if args.resume and os.path.exists(model_path):
         venv = VecNormalize.load(vn_path, venv)
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
-        custom = {"policy_class": ConnectomePolicy} if args.policy == "connectome" else None
-        model = PPO.load(model_path, env=venv, device=args.device, custom_objects=custom)
+        from ctb.policies import load_ppo
+        model = load_ppo(out, model_path, env=venv, device=args.device)
         print(f"[train] resumed from {model_path} at {model.num_timesteps} steps")
         reset = False
     else:
@@ -102,7 +109,10 @@ def main():
             if not os.path.exists(args.subset):
                 raise SystemExit(f"{args.subset} not found. Run download_connectome.py and build_subset.py first.")
             policy = ConnectomePolicy
-            policy_kwargs = dict(subset_path=os.path.abspath(args.subset), k_steps=args.k_steps,
+            # keep a copy of the wiring next to the model, so the run loads on any machine
+            import shutil
+            shutil.copy(args.subset, os.path.join(out, "subset.npz"))
+            policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
                                  wiring=args.wiring, log_std_init=-0.5)
             core = ConnectomeCore(obs_dim, args.subset, args.k_steps, wiring=args.wiring)
             actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
