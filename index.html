@@ -142,10 +142,10 @@ footer p { margin-top: 0.6rem; }
 
 <section class="hero wide">
   <figure>
-    <video src="results/v4_flyrobot_tray_vision_local/flyrobot_balances_by_vision.mp4" poster="results/v4_flyrobot_tray_vision_local/poster.jpg"
+    <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_clean.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_clean.jpg"
            autoplay muted loop playsinline controls preload="metadata"
            aria-label="Robot arm keeping a red ball on a tray; a small inset shows the 16 by 16 camera image the brain receives"></video>
-    <figcaption>The fly-brain network keeping the ball on the tray for the full 10 seconds.
+    <figcaption>The fly-brain network keeping the ball on the tray for the full 10 seconds (Kaggle run).
       Top left: the 16×16 camera image it receives. It is never told where the ball is.</figcaption>
   </figure>
 </section>
@@ -266,25 +266,46 @@ footer p { margin-top: 0.6rem; }
     <li>
       <h3>Wired like a fly, seeing with a camera</h3>
       <p>Then the robot was rewired through the fly's own channels, as in the diagram above, and the
-        ball's position was taken away: the network only gets the camera image and its joints. For
-        180,000 steps it held the ball for a second or two; at 200,000 steps it suddenly kept it for
-        the full 10 seconds.</p>
+        ball's position was taken away: the network only gets the camera image and its joints. In the
+        full run (1 million steps on Kaggle, about 3 hours) it held the ball for a second or two at
+        first, then from 250,000 steps on it kept it for the full 10 seconds and stayed there.</p>
       <table>
-        <thead><tr><th>Test (8 new episodes)</th><th>Kept the ball for 10 s</th></tr></thead>
+        <thead><tr><th>Test (10 new episodes)</th><th>Kept the ball for 10 s</th><th>Mean steps (of 500)</th></tr></thead>
         <tbody>
-          <tr><td>Normal conditions</td><td class="num yes">100 %</td></tr>
-          <tr><td>Ball three times heavier</td><td class="num yes">100 %</td></tr>
-          <tr><td>Random pushes on the ball</td><td class="num yes">100 %</td></tr>
-          <tr><td>Noise added to the camera image</td><td class="num no">0 %</td></tr>
-          <tr><td>Ball removed from the camera image</td><td class="num no">0 %</td></tr>
+          <tr><td>Normal conditions</td><td class="num yes">100 %</td><td class="num">500</td></tr>
+          <tr><td>Ball three times heavier</td><td class="num yes">100 %</td><td class="num">500</td></tr>
+          <tr><td>Random pushes on the ball</td><td class="num yes">100 %</td><td class="num">500</td></tr>
+          <tr><td>Light noise on the camera image</td><td class="num no">0 %</td><td class="num">144</td></tr>
+          <tr><td>Strong noise on the camera image</td><td class="num no">0 %</td><td class="num">63</td></tr>
+          <tr><td>Ball removed from the camera image</td><td class="num no">0 %</td><td class="num">28</td></tr>
         </tbody>
       </table>
       <p>The last row matters most: without seeing the ball it fails at once, so it really is
-        steering by what comes through its eye.</p>
-      <figure style="margin-top:1.2rem">
-        <img class="plot" src="results/v4_flyrobot_tray_vision_local/curves.png" alt="Learning curve: episode length jumps from about 100 to the full 500 steps at 200k training steps" loading="lazy">
-        <figcaption>Learning curve of the camera-driven fly-brain network.</figcaption>
-      </figure>
+        steering by what comes through its eye. Its weak spot is a noisy picture, which it never saw
+        while learning.</p>
+      <div class="stack">
+        <figure>
+          <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_heavy_ball.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_heavy_ball.jpg" controls muted loop playsinline preload="metadata"
+                 aria-label="The arm balancing a dark grey ball three times heavier than in training"></video>
+          <figcaption>A ball three times heavier than in training (drawn dark grey).</figcaption>
+        </figure>
+        <figure>
+          <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_push.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_push.jpg" controls muted loop playsinline preload="metadata"
+                 aria-label="The arm recovering from random shoves on the ball; the frame flashes red at each shove"></video>
+          <figcaption>Random shoves on the ball: the frame flashes red at each one, and the brain recovers every time.</figcaption>
+        </figure>
+        <figure>
+          <img class="plot" src="results/v5_flyrobot_tray_vision_kaggle/curves.png" alt="Learning curve: episode length jumps to the full 500 steps at 250k training steps and stays there to 1 million" loading="lazy">
+          <figcaption>Learning curve of the camera-driven fly-brain network (Kaggle run).</figcaption>
+        </figure>
+      </div>
+    </li>
+
+    <li>
+      <h3>Now running: the maze, seen only through the camera</h3>
+      <p>The same fly-robot brain now has to solve the tilt maze with nothing but its eye: it must
+        see the walls, the goal and the ball in a 16×16 picture, find the way round and stop the ball
+        in the goal. Results will be added here.</p>
     </li>
   </ol>
 
@@ -315,8 +336,7 @@ python scripts/download_connectome.py     # fly wiring + cell types
 python scripts/build_flybrain.py          # eye-to-command brain, 2,500 neurons
 python scripts/train.py --env tray_vision --policy connectome \
        --subset data/flybrain_cam16_N2500.npz --profile kaggle</code></pre>
-  <p>Next on the list: the maze seen only through the camera, so the network has to see the
-    walls and the goal as well as the ball.</p>
+  <p>For the camera maze, set <code>ENV = "maze_fixed3_vision"</code> in the notebook (the current default).</p>
 
 </main>
 

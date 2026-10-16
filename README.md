@@ -103,7 +103,8 @@ scripts/plot_runs.py         learning curves
 scripts/view_env.py          live MuJoCo viewer
 scripts/build_flybrain.py    fly-robot brain: eye/body-sense inputs, command outputs, pathways
 notebooks/kaggle_train.ipynb 1,000-neuron network, ball/maze given as numbers
-notebooks/kaggle_flyrobot.ipynb  fly-robot brain only, camera tasks
+notebooks/kaggle_flyrobot.ipynb  fly-robot brain, camera tasks (train, test videos, export zip)
+tools/make_notebook_*.py     generate the two notebooks (edit there, not in the .ipynb)
 results/                     saved results (models, curves, videos) per experiment
 ```
 
@@ -150,6 +151,8 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v2, fixed maze** (`results/v2_maze_fixed3_local/`, local, 400k steps): not solved yet; it often reaches the goal but cannot stop the ball there.
 - **v3, Kaggle mazes** (`results/v3_maze_kaggle/`, 1M steps): fixed maze 30–40 % solved by 1M and rising; random mazes 0 %. Also exposed a reward hack (hovering in the goal), fixed afterwards.
 - **v4, fly-robot brain by vision** (`results/v4_flyrobot_tray_vision_local/`, local, one seed): wired from the eye to the command neurons and seeing only a 16x16 camera image, the fly brain learned to keep the ball on the tray at ~200k steps; best model 100 % on new episodes, 0 % when the ball is hidden from the camera.
+- **v5, fly-robot brain by vision, Kaggle** (`results/v5_flyrobot_tray_vision_kaggle/`, 1M steps, ~2.7 h): full 10 s from 250k steps on; 100 % clean, with a 3x heavier ball and with random pushes; 0 % with camera noise or the ball hidden. Videos of all three tests included.
+- **Now:** `maze_fixed3_vision`, the maze seen only through the camera (`kaggle_flyrobot.ipynb` default).
 
 ## Notes and limits
 

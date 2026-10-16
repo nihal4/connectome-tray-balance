@@ -10,7 +10,7 @@ Robustness tests (none of these were seen in training):
     blind          ball position/velocity hidden from the policy ("vision loss")
     heavy_ball     ball 3x heavier
     push           random pushes on the ball
-    random_mazes   (only for runs trained on maze_fixed3) unseen mazes
+    random_mazes   (only for runs trained on maze_fixed3 or maze_fixed3_vision) unseen mazes
 
 Results are merged into <run>/eval_results.json (one key per test), so running
 this again for a video does not wipe earlier robustness numbers.
@@ -131,7 +131,7 @@ def main():
     cfg = run_config(args.run)
     model = load(args.run, best=not args.last)
     tests = dict(TESTS) if args.robustness else {"clean": {}}
-    if args.robustness and cfg["env"] == "maze_fixed3":
+    if args.robustness and cfg["env"].startswith("maze_fixed3"):
         tests["random_mazes"] = {"fixed_maze": False}
 
     res_path = os.path.join(args.run, "eval_results.json")
