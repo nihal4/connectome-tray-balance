@@ -61,6 +61,7 @@ LEVELS = {
 }
 HOLE_R = 0.3          # hole radius as a fraction of the cell size
 GOAL_HOLD = 25        # the ball must rest in the goal for 25 steps (0.5 s) to count as solved
+GOAL_PULL = 10.0      # extra potential toward the goal centre inside the goal cell (x20 in reward)
 
 
 class LabyrinthEnv(TrayBalanceEnv):
@@ -201,7 +202,13 @@ class LabyrinthEnv(TrayBalanceEnv):
 
     def _potential(self, xy):
         nxt = self._next_cell(self._cell_of(xy))
-        return -(self.dist[nxt] * self.cell + float(np.linalg.norm(xy - self._cell_center(nxt))))
+        phi = -(self.dist[nxt] * self.cell + float(np.linalg.norm(xy - self._cell_center(nxt))))
+        # Extra pull toward the goal CENTRE inside the goal cell (zero at 5 cm from the centre,
+        # so it joins smoothly with the route term). Without it, pinning the ball in a corner
+        # of the goal cell scored almost as well as stopping it in the middle, and a camera-
+        # driven policy learned to do just that. Potential-based: leaving gives it back.
+        d_goal = float(np.linalg.norm(xy - self._cell_center(self.goal)))
+        return phi + GOAL_PULL * max(0.0, 0.5 * self.cell - d_goal)
 
     # ------------------------------------------------------------- gym API
     def reset(self, *, seed=None, options=None):
