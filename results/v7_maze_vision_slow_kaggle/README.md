@@ -24,4 +24,4 @@ with a heavier ball and most pushes, and really steers by the camera (fails when
 hidden). It has memorised this one maze: 0 % on new mazes. Noisy pixels, never seen in
 training, break it (same as the tray brain in v5).
 
-Files: `maze_fixed3_vision_clean.mp4` (136 steps, solved), `curves.png`, `eval_results.json`.
+Files: `maze_fixed3_vision_clean.mp4` (136 steps, solved), `maze_fixed3_vision_heavy_ball.mp4` (159 steps, solved), `curves.png`, `eval_results.json`.
