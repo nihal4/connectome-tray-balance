@@ -28,8 +28,9 @@ The brain sees the tray through a 16x16 wrist camera (this frame + the previous 
 
 **Tasks (`ENV`):**
 - `tray_vision`: keep the ball on the tray (solved: ~250k steps on Kaggle)
-- `maze_fixed3_vision`: one fixed 3x3 tilt maze, seen only through the camera  <- current
-- `maze3_vision`: a new random maze every episode
+- `maze_fixed3_vision`: one fixed 3x3 tilt maze, seen only through the camera (solved: 100 % from 1.1M steps
+  with slow motors; 0 % on unseen mazes)
+- `maze3_vision`: a new random maze every episode  <- current
 - `maze3h_vision`: random mazes with holes
 
 **Current setup (fresh run):** slow, smooth motors (`ACTION_RATE = 0.1`) + start-position
@@ -44,8 +45,8 @@ code("""
 REPO_URL = "https://github.com/nihal4/connectome-tray-balance.git"
 BRANCH = "main"
 
-ENV = "maze_fixed3_vision"   # tray_vision -> maze_fixed3_vision -> maze3_vision -> maze3h_vision
-TOTAL_STEPS = 2_000_000      # mazes need more than the tray (~5.5 h at this size)
+ENV = "maze3_vision"         # tray_vision -> maze_fixed3_vision -> maze3_vision -> maze3h_vision
+TOTAL_STEPS = 3_000_000      # random mazes need more than one fixed maze (~8 h; resume after a timeout)
 N_NEURONS = 2500             # brain size (eye 512 + body 64 + commands 64 + pathway neurons)
 ACTION_RATE = 0.1            # slow, smooth motors: max joint change per step (0 = fast motors of the old runs).
                              # Changes the robot, so a run must keep the same value (do not change it on --resume)

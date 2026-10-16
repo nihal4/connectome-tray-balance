@@ -1,0 +1,37 @@
+{
+  "clean": {
+    "success_rate": 1.0,
+    "return": 35.7,
+    "length": 132.1
+  },
+  "noise_0.1": {
+    "success_rate": 0.0,
+    "return": -0.0,
+    "length": 300.0
+  },
+  "noise_0.3": {
+    "success_rate": 0.0,
+    "return": -2.8,
+    "length": 300.0
+  },
+  "blind": {
+    "success_rate": 0.0,
+    "return": -1.9,
+    "length": 300.0
+  },
+  "heavy_ball": {
+    "success_rate": 1.0,
+    "return": 35.0,
+    "length": 141.0
+  },
+  "push": {
+    "success_rate": 0.6,
+    "return": 24.2,
+    "length": 219.7
+  },
+  "random_mazes": {
+    "success_rate": 0.0,
+    "return": -8.2,
+    "length": 300.0
+  }
+}

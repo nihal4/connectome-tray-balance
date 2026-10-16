@@ -302,16 +302,41 @@ footer p { margin-top: 0.6rem; }
     </li>
 
     <li>
-      <h3>Now running: the maze, seen only through the camera</h3>
-      <p>The same fly-robot brain now has to solve the tilt maze with nothing but its eye: it must
-        see the walls, the goal and the ball in a 16×16 picture, find the way round and stop the ball
-        in the goal.</p>
-      <p>First try (fast motors): the brain learned the route and rolled the ball to the goal in under
-        a second, but then pinned it in the corner of the goal cell instead of stopping it in the
-        middle, so no maze counted as solved. Adding practice starts near the goal and a pull towards
-        the goal centre moved the ball off the wall, but it still could not hold it still.</p>
-      <p>Next try (running now): <strong>slower, smoother motors</strong>, like servos with a speed
-        limit, so the ball moves about three times slower and can be stopped. Results will be added here.</p>
+      <h3>The maze, seen only through the camera: solved</h3>
+      <p>The same fly-robot brain then had to solve the tilt maze with nothing but its eye: see the
+        walls, the goal and the ball in a 16×16 picture, find the way round and stop the ball in the goal.</p>
+      <p>First try (fast motors): it learned the route and rolled the ball to the goal in under a
+        second, but pinned it in the corner of the goal cell instead of stopping it in the middle, so
+        no maze counted as solved, even after 2 million steps.</p>
+      <p>Second try: <strong>slower, smoother motors</strong> (like servos with a speed limit, so the
+        ball moves about three times slower) and practice starts partway along the route. Nothing in
+        the brain changed. First solve at 350,000 steps, every test maze solved from 1.1 million
+        steps, and by 2 million it finishes in about 2.6 seconds and stops the ball in the centre.</p>
+      <div class="stack">
+        <figure>
+          <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_clean.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_clean.jpg" controls muted loop playsinline preload="metadata"
+                 aria-label="The arm tilts the maze so the red ball rolls around the inner walls into the green goal and stops in its centre"></video>
+          <figcaption>Solved in 136 steps (2.7 s). Top left: the camera image the brain receives.</figcaption>
+        </figure>
+        <figure>
+          <img class="plot" src="results/v7_maze_vision_slow_kaggle/curves.png" alt="Learning curves: solved rate rises from 0 at 300k steps to 100 percent at 1.1 million and stays there from 1.65 million; episode length falls from 300 to about 130 steps" loading="lazy">
+          <figcaption>Learning curves of the camera maze run with slow motors (Kaggle, 2 million steps).</figcaption>
+        </figure>
+      </div>
+      <table>
+        <thead><tr><th>Test (10 episodes)</th><th>Solved</th><th>Mean steps (of 300)</th></tr></thead>
+        <tbody>
+          <tr><td>The trained maze</td><td class="num yes">100 %</td><td class="num">132</td></tr>
+          <tr><td>Ball three times heavier</td><td class="num yes">100 %</td><td class="num">141</td></tr>
+          <tr><td>Random pushes on the ball</td><td class="num">60 %</td><td class="num">220</td></tr>
+          <tr><td>Noise on the camera image</td><td class="num no">0 %</td><td class="num">300</td></tr>
+          <tr><td>Ball removed from the camera image</td><td class="num no">0 %</td><td class="num">300</td></tr>
+          <tr><td>Mazes it has never seen</td><td class="num no">0 %</td><td class="num">300</td></tr>
+        </tbody>
+      </table>
+      <p>It steers by what it sees (it fails when the ball is hidden), but it has memorised this one
+        maze rather than learned to read walls: new mazes defeat it. That is the next test, training
+        on a new random maze every episode.</p>
     </li>
   </ol>
 
