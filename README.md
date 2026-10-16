@@ -82,6 +82,8 @@ Reference controllers, 20 episodes each (`python scripts/check_mac.py --env maze
 
 Two shortcuts were closed while building this: without the lid, a policy learned to flick the ball over the walls; without holes, the hold rule and tight time limits, random shaking solved 40–70 % of small mazes by luck.
 
+Start-position curriculum: `--random_start 0.5` makes half of the training episodes start the ball at a random cell along the route, so the policy also practises the final turns and stopping in the goal (evaluation always uses the real start). Added after the camera maze run stalled 2 cells from the goal.
+
 Suggested curriculum: `maze_fixed3` (one puzzle) → `maze3` (generalise to new puzzles) → `maze3h` (holes) → `maze4` → `maze5`. Holes start later on purpose: in a first test, PPO with holes from the start spent its first 200k steps mostly learning to avoid them. Robustness tests apply to every environment; for `maze_fixed3` runs there is also an **unseen mazes** test.
 
 ## Repo layout
@@ -152,7 +154,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v3, Kaggle mazes** (`results/v3_maze_kaggle/`, 1M steps): fixed maze 30–40 % solved by 1M and rising; random mazes 0 %. Also exposed a reward hack (hovering in the goal), fixed afterwards.
 - **v4, fly-robot brain by vision** (`results/v4_flyrobot_tray_vision_local/`, local, one seed): wired from the eye to the command neurons and seeing only a 16x16 camera image, the fly brain learned to keep the ball on the tray at ~200k steps; best model 100 % on new episodes, 0 % when the ball is hidden from the camera.
 - **v5, fly-robot brain by vision, Kaggle** (`results/v5_flyrobot_tray_vision_kaggle/`, 1M steps, ~2.7 h): full 10 s from 250k steps on; 100 % clean, with a 3x heavier ball and with random pushes; 0 % with camera noise or the ball hidden. Videos of all three tests included.
-- **Now:** `maze_fixed3_vision`, the maze seen only through the camera (`kaggle_flyrobot.ipynb` default).
+- **Camera maze, first run** (`maze_fixed3_vision`, Kaggle, one seed): return rose from −9.5 to about +5.3 by 1.05M steps and then stayed flat; 0 % solved. The return matches the ball stopping about 2 cells from the goal, where the route turns away from the goal round a wall. Next: the same run continued with the start-position curriculum (`--random_start 0.5`).
 
 ## Notes and limits
 

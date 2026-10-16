@@ -43,6 +43,8 @@ BRANCH = "main"
 ENV = "maze_fixed3_vision"   # tray_vision -> maze_fixed3_vision -> maze3_vision -> maze3h_vision
 TOTAL_STEPS = 2_000_000      # mazes need more than the tray (~5.5 h at this size)
 N_NEURONS = 2500             # brain size (eye 512 + body 64 + commands 64 + pathway neurons)
+RANDOM_START = 0.5           # maze curriculum: share of training episodes that start the ball at a random
+                             # point on the route (evaluation always uses the real start). 0 = off
 SEED = 0
 DEVICE = "cpu"
 """)
@@ -84,7 +86,7 @@ KEEP = re.compile(r"^\\[|Eval num|Episode length|Success rate|New best")
 def train(env=ENV, extra=""):
     cmd = (f"{sys.executable} -u scripts/train.py --env {env} --policy connectome --subset {BRAIN} "
            f"--profile kaggle --total_steps {TOTAL_STEPS} --seed {SEED} --device {DEVICE} "
-           f"--runs_dir {WORK}/runs {extra}")
+           f"--random_start {RANDOM_START if ENV.startswith('maze') else 0} --runs_dir {WORK}/runs {extra}")
     p = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     for line in p.stdout:
         if KEEP.search(line):
@@ -96,7 +98,8 @@ train()
 """)
 md("""
 To continue a run (after a timeout, or for more steps): raise `TOTAL_STEPS` and run
-`train(extra="--resume")`. It continues from the last checkpoint.
+`train(extra="--resume")`. It continues from the last checkpoint, with the current
+`RANDOM_START` setting, so an existing maze run can be switched to the curriculum this way.
 
 ## 4. Results
 """)

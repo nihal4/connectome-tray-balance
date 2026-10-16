@@ -66,8 +66,14 @@ GOAL_HOLD = 25        # the ball must rest in the goal for 25 steps (0.5 s) to c
 class LabyrinthEnv(TrayBalanceEnv):
     camera = (0.75, 150, -60)
     def __init__(self, n: int = 3, fixed_maze: bool = False, maze_seed: int = 0,
-                 loop_prob: float = 0.0, n_holes: int = 0, max_steps: int = 350, **kw):
+                 loop_prob: float = 0.0, n_holes: int = 0, max_steps: int = 350,
+                 random_start: float = 0.0, **kw):
         self.n = n
+        # Curriculum: with this probability the ball starts at a random cell along the
+        # route instead of the real start, so the policy also practises the last part
+        # (getting round the final turns and stopping in the goal). Training only;
+        # evaluation always uses the real start.
+        self.random_start = random_start
         self.n_holes = n_holes
         self.cell = 2 * TRAY_HALF / n
         self.fixed_maze = fixed_maze
@@ -244,9 +250,14 @@ class LabyrinthEnv(TrayBalanceEnv):
             m.geom_pos[g][:2] = self._cell_center((r, c))
             m.geom_rgba[g][3] = 1.0 if self.holes[idx] else 0.0
 
+        ball_cell = self.start
+        if self.random_start > 0 and self.np_random.random() < self.random_start:
+            on_route = sorted(c for c in route if c != self.goal)
+            ball_cell = on_route[self.np_random.integers(len(on_route))]
+
         obs, info = super().reset()          # places the ball at the tray center
         tpos, trot = self._tray_frame()
-        sx, sy = self._cell_center(self.start) + self.np_random.uniform(-0.01, 0.01, 2)
+        sx, sy = self._cell_center(ball_cell) + self.np_random.uniform(-0.01, 0.01, 2)
         self.data.qpos[self.ball_qadr:self.ball_qadr + 3] = tpos + trot @ np.array([sx, sy, BALL_R + 0.001])
         self.data.qvel[self.ball_dadr:self.ball_dadr + 6] = 0
         mujoco.mj_forward(self.model, self.data)
@@ -254,7 +265,7 @@ class LabyrinthEnv(TrayBalanceEnv):
         self._static = self._draw_static() if self.vision else None
         self._phi = self._potential(self._ball_in_tray()[0][:2])
         self._goal_steps = 0
-        return self._get_obs(), {"maze_steps": self.dist[self.start]}
+        return self._get_obs(), {"maze_steps": self.dist[ball_cell]}
 
     def _draw_static(self):
         """Camera picture of the maze: walls 0.5, goal 0.3, holes -0.6, floor 0."""

@@ -51,6 +51,9 @@ def parse():
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--push_prob", type=float, default=0.0, help="random pushes on the ball (harder task)")
+    ap.add_argument("--random_start", type=float, default=0.0,
+                    help="maze curriculum: fraction of training episodes that start the ball at a random "
+                         "cell along the route (evaluation always uses the real start). Try 0.5.")
     # profile overrides
     for k, v in PROFILES["mac"].items():
         if isinstance(v, bool):
@@ -92,7 +95,10 @@ def main():
 
     env_kw = dict(push_prob=args.push_prob)
     Vec = SubprocVecEnv if cfg["vec"] == "subproc" else DummyVecEnv
-    venv = Vec([make_env(args.env, seed=args.seed * 1000 + i, **env_kw) for i in range(cfg["n_envs"])])
+    train_kw = dict(env_kw, random_start=args.random_start) if args.random_start > 0 else env_kw
+    if args.random_start > 0:
+        print(f"[train] curriculum: {args.random_start:.0%} of training episodes start at a random point on the route")
+    venv = Vec([make_env(args.env, seed=args.seed * 1000 + i, **train_kw) for i in range(cfg["n_envs"])])
     venv = VecMonitor(venv)
     eval_env = VecMonitor(DummyVecEnv([make_env(args.env, seed=10_000 + args.seed, **env_kw)]))
 
