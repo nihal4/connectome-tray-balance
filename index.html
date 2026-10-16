@@ -324,6 +324,11 @@ footer p { margin-top: 0.6rem; }
           <figcaption>A ball three times heavier than in training (dark grey): still solved, in 159 steps.</figcaption>
         </figure>
         <figure>
+          <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_push.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_push.jpg" controls muted loop playsinline preload="metadata"
+                 aria-label="Random shoves knock the ball around the maze, the frame flashing red at each one; the arm recovers and still brings the ball into the goal"></video>
+          <figcaption>Random shoves (the frame flashes red): knocked off course several times, it recovers and still finishes, in 244 steps. Over 10 episodes it succeeds 60 % of the time.</figcaption>
+        </figure>
+        <figure>
           <img class="plot" src="results/v7_maze_vision_slow_kaggle/curves.png" alt="Learning curves: solved rate rises from 0 at 300k steps to 100 percent at 1.1 million and stays there from 1.65 million; episode length falls from 300 to about 130 steps" loading="lazy">
           <figcaption>Learning curves of the camera maze run with slow motors (Kaggle, 2 million steps).</figcaption>
         </figure>
