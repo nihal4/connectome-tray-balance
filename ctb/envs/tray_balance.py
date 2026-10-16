@@ -41,9 +41,14 @@ class TrayBalanceEnv(gym.Env):
         ball_mass_scale: float = 1.0,
         push_prob: float = 0.0,
         push_force: float = 0.3,
+        vision: bool = False,          # replace ball state with a wrist-camera image
+        cam: int = 16,                 # camera resolution (cam x cam pixels)
         render_mode: str | None = None,
         seed: int | None = None,
     ):
+        self.vision = vision
+        self.cam = cam
+        self._prev_frame = None
         self.model = self._make_model()
         self.data = mujoco.MjData(self.model)
         self.frame_skip = frame_skip
@@ -75,6 +80,11 @@ class TrayBalanceEnv(gym.Env):
 
         self.action_space = spaces.Box(-1.0, 1.0, shape=(self.n_arm,), dtype=np.float32)
         obs_dim = 5 + 5 + 3 + 3 + 3 + 5  # qpos, qvel, ball pos/vel in tray frame, tray normal, last action
+        if vision:
+            # camera: this frame + previous frame (motion), then body sense: qpos, qvel, tray normal, last action
+            obs_dim = 2 * cam * cam + 5 + 5 + 3 + 5
+            c = (np.arange(cam) + 0.5) / cam * 0.30 - 0.15        # pixel centres across the 30 cm tray
+            self._px, self._py = np.meshgrid(c, c)                 # row = tray y, column = tray x
         self.observation_space = spaces.Box(-np.inf, np.inf, shape=(obs_dim,), dtype=np.float32)
 
         self.np_random, _ = gym.utils.seeding.np_random(seed)
@@ -97,7 +107,37 @@ class TrayBalanceEnv(gym.Env):
         bvel = self.data.qvel[self.ball_dadr:self.ball_dadr + 3]
         return trot.T @ (bpos - tpos), trot.T @ bvel
 
+    # ---------------------------------------------------------------- camera
+    def _static_image(self):
+        """Things on the tray that do not move (walls, holes, goal). Empty tray: nothing."""
+        return np.zeros((self.cam, self.cam))
+
+    def camera_frame(self):
+        """Wrist camera looking straight down at the tray: ball = bright blob, walls grey.
+        A simple synthetic image (no lighting or perspective), so it is very fast."""
+        img = self._static_image().copy()
+        if not self.ball_blind:
+            bp, _ = self._ball_in_tray()
+            r = 0.025 if not hasattr(self, "n") else 0.012
+            sigma = max(r, 0.30 / self.cam * 0.6)
+            img += np.exp(-((self._px - bp[0]) ** 2 + (self._py - bp[1]) ** 2) / (2 * sigma ** 2))
+        return np.clip(img, -1.0, 1.0)
+
+    def _vision_obs(self):
+        frame = self.camera_frame().ravel()
+        prev = frame if self._prev_frame is None else self._prev_frame
+        self._prev_frame = frame
+        q = self.data.qpos[self.arm_qadr] - HOME_QPOS
+        qd = self.data.qvel[self.arm_dadr] * 0.1
+        _, trot = self._tray_frame()
+        return np.concatenate([frame, prev, q, qd, trot[:, 2], self._last_action]).astype(np.float32)
+
     def _get_obs(self):
+        if self.vision:
+            obs = self._vision_obs()
+            if self.obs_noise > 0:
+                obs = obs + self.np_random.normal(0, self.obs_noise, obs.shape).astype(np.float32)
+            return obs
         q = self.data.qpos[self.arm_qadr] - HOME_QPOS
         qd = self.data.qvel[self.arm_dadr] * 0.1
         bp, bv = self._ball_in_tray()
@@ -135,6 +175,7 @@ class TrayBalanceEnv(gym.Env):
 
         self._last_action = np.zeros(self.n_arm)
         self._steps = 0
+        self._prev_frame = None
         return self._get_obs(), {}
 
     def step(self, action):

@@ -87,8 +87,11 @@ class LabyrinthEnv(TrayBalanceEnv):
         self.hole_geoms = np.array([m.geom(f"hole_{i}").id for i in range(n * n)])
         self.holes = np.zeros(n * n, dtype=bool)
         obs_dim = 24 + len(self.slots) + n * n + 2
+        if self.vision:
+            obs_dim = 2 * self.cam * self.cam + 18     # walls, holes and goal are in the image
         self.observation_space = spaces.Box(-np.inf, np.inf, shape=(obs_dim,), dtype=np.float32)
         self.walls = np.ones(len(self.slots), dtype=bool)
+        self._static = None
         self.start = (0, 0)
         self.goal = (n - 1, n - 1)
 
@@ -247,11 +250,42 @@ class LabyrinthEnv(TrayBalanceEnv):
         self.data.qpos[self.ball_qadr:self.ball_qadr + 3] = tpos + trot @ np.array([sx, sy, BALL_R + 0.001])
         self.data.qvel[self.ball_dadr:self.ball_dadr + 6] = 0
         mujoco.mj_forward(self.model, self.data)
+        self._prev_frame = None
+        self._static = self._draw_static() if self.vision else None
         self._phi = self._potential(self._ball_in_tray()[0][:2])
         self._goal_steps = 0
         return self._get_obs(), {"maze_steps": self.dist[self.start]}
 
+    def _draw_static(self):
+        """Camera picture of the maze: walls 0.5, goal 0.3, holes -0.6, floor 0."""
+        img = np.zeros((self.cam, self.cam))
+        half_px = 0.30 / self.cam / 2
+        h = TRAY_HALF
+        for on, (kind, r, c) in zip(self.walls, self.slots):
+            if not on:
+                continue
+            if kind == "v":
+                x = -h + (c + 1) * self.cell
+                y0, y1 = -h + r * self.cell, -h + (r + 1) * self.cell
+                m = (np.abs(self._px - x) <= WALL_T + half_px) & (self._py >= y0 - half_px) & (self._py <= y1 + half_px)
+            else:
+                y = -h + (r + 1) * self.cell
+                x0, x1 = -h + c * self.cell, -h + (c + 1) * self.cell
+                m = (np.abs(self._py - y) <= WALL_T + half_px) & (self._px >= x0 - half_px) & (self._px <= x1 + half_px)
+            img[m] = 0.5
+        for (rc, val, rad) in [(self.goal, 0.3, self.cell * 0.3)] + \
+                [(divmod(i, self.n), -0.6, self.cell * HOLE_R) for i in np.flatnonzero(self.holes)]:
+            cx, cy = self._cell_center(rc)
+            m = (self._px - cx) ** 2 + (self._py - cy) ** 2 <= (rad + half_px) ** 2
+            img[m] = val
+        return img
+
+    def _static_image(self):
+        return self._static if self._static is not None else np.zeros((self.cam, self.cam))
+
     def _get_obs(self):
+        if self.vision:
+            return super()._get_obs()
         base = super()._get_obs()
         goal = self._cell_center(self.goal) * 10.0
         return np.concatenate([base, self.walls.astype(np.float32), self.holes.astype(np.float32),
@@ -270,6 +304,7 @@ class LabyrinthEnv(TrayBalanceEnv):
         in_hole = bool(near_center and self.holes[cell[0] * self.n + cell[1]])
         fell = fell or in_hole
         in_goal = cell == self.goal and near_center and float(np.linalg.norm(bv[:2])) < 0.15
+        prev_goal_steps = self._goal_steps
         self._goal_steps = self._goal_steps + 1 if in_goal else 0
         at_goal = self._goal_steps >= GOAL_HOLD
         drift = self._tray_drift()
@@ -280,8 +315,11 @@ class LabyrinthEnv(TrayBalanceEnv):
             - 0.003 * float(np.sum(np.square(a - self._last_action)))
             - 0.5 * drift
         )
-        if in_goal:
-            reward += 0.2                       # resting in the goal
+        # Resting in the goal is rewarded as progress toward the 0.5 s hold: +0.4 per
+        # step held, and everything earned is taken back if the ball leaves. A flat
+        # per-step bonus let an MLP "farm" reward by hovering in and out of the goal
+        # without ever finishing (reward went up while success went down).
+        reward += 0.4 * (self._goal_steps - prev_goal_steps)
         if at_goal:
             reward += 10.0
         if fell:

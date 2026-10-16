@@ -6,12 +6,21 @@
     maze3h        random 3x3 mazes with holes
     maze4         random 4x4 mazes with holes
     maze5         random 5x5 mazes with holes and some loops
+    *_vision      same task, but seen through a 16x16 wrist camera (tray_vision,
+                  maze_fixed3_vision, maze3_vision, maze3h_vision)
 """
+import numpy as np
+
 from .labyrinth import LEVELS, LabyrinthEnv, planner_controller
 from .tray_balance import HOME_QPOS, TrayBalanceEnv, pd_controller
 
 ENVS = {"tray": (TrayBalanceEnv, {})}
 ENVS.update({name: (LabyrinthEnv, kw) for name, kw in LEVELS.items()})
+# Camera versions: the policy sees a 16x16 wrist-camera image (this frame + previous)
+# instead of the ball position, wall map and goal; plus its own joints.
+ENVS["tray_vision"] = (TrayBalanceEnv, {"vision": True})
+for _name in ["maze_fixed3", "maze3", "maze3h"]:
+    ENVS[_name + "_vision"] = (LabyrinthEnv, {**LEVELS[_name], "vision": True})
 
 
 def build_env(name: str = "tray", seed: int | None = None, **overrides):
@@ -29,6 +38,10 @@ def scripted_controller(env, obs):
     """Hand-written solution for any env (proves the task is solvable)."""
     if isinstance(env, LabyrinthEnv):
         return planner_controller(env, obs)
+    if getattr(env, "vision", False):         # camera obs has no ball numbers: use the true state
+        bp, bv = env._ball_in_tray()
+        obs = np.zeros(24)
+        obs[10:12], obs[13:15] = bp[:2] * 10, bv[:2]
     return pd_controller(obs)
 
 

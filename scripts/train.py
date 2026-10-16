@@ -40,7 +40,10 @@ def parse():
     ap.add_argument("--wiring", choices=["real", "shuffled"], default="real")
     ap.add_argument("--subset", default="data/subset_flywire783_N1000.npz")
     ap.add_argument("--profile", choices=list(PROFILES), default="mac")
-    ap.add_argument("--k_steps", type=int, default=4, help="recurrent iterations per control step")
+    ap.add_argument("--k_steps", type=int, default=None,
+                    help="recurrent iterations per control step (default 4; 8 for the fly-robot brain)")
+    ap.add_argument("--leak", type=float, default=None, help="neuron update rate (default 0.5; 1.0 fly-robot)")
+    ap.add_argument("--gain", type=float, default=None, help="initial connection strength (default 1.5; 3.0 fly-robot)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--name", default=None)
     ap.add_argument("--runs_dir", default="runs")
@@ -105,6 +108,17 @@ def main():
         obs_dim = venv.observation_space.shape[0]
         act_dim = venv.action_space.shape[0]
 
+        # The fly-robot brain is long (eye -> optic lobe -> central brain -> commands, 3-5
+        # hops) and very sparse, so it needs more rounds and stronger connections for the
+        # camera signal to reach the command neurons.
+        flyrobot = os.path.exists(args.subset) and "vis_idx" in np.load(args.subset).files
+        dk, dl, dg = (8, 1.0, 3.0) if flyrobot else (4, 0.5, 1.5)
+        args.k_steps = args.k_steps or dk
+        args.leak = args.leak if args.leak is not None else dl
+        args.gain = args.gain if args.gain is not None else dg
+        if flyrobot and args.policy == "connectome":
+            print(f"[train] fly-robot brain: k_steps={args.k_steps} leak={args.leak} gain={args.gain}")
+
         if args.policy == "connectome":
             if not os.path.exists(args.subset):
                 raise SystemExit(f"{args.subset} not found. Run download_connectome.py and build_subset.py first.")
@@ -113,8 +127,8 @@ def main():
             import shutil
             shutil.copy(args.subset, os.path.join(out, "subset.npz"))
             policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
-                                 wiring=args.wiring, log_std_init=-0.5)
-            core = ConnectomeCore(obs_dim, args.subset, args.k_steps, wiring=args.wiring)
+                                 leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5)
+            core = ConnectomeCore(obs_dim, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
             actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
             del core
         else:
@@ -148,6 +162,17 @@ def main():
     callbacks = [EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
                               eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
                               log_path=out, best_model_save_path=out, deterministic=True, verbose=1)]
+    # Save model + normalisation every 50k steps, so a crashed or timed-out session
+    # (Kaggle limit, laptop sleep) can continue with --resume instead of starting over.
+    from stable_baselines3.common.callbacks import EveryNTimesteps
+    from stable_baselines3.common.callbacks import BaseCallback as _Base
+
+    class _Save(_Base):
+        def _on_step(self):
+            save()
+            return True
+    callbacks.append(EveryNTimesteps(n_steps=50_000, callback=_Save()))
+
     safety = None
     if cfg["safety"]:
         safety = SafetyCallback(save, work_s=cfg["work_s"], rest_s=cfg["rest_s"],

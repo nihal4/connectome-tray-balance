@@ -2,7 +2,8 @@
 
 # Kept here (not imported from ctb.envs) so scripts can parse arguments before
 # numpy/torch load, which lets the thread limits take effect.
-ENV_NAMES = ["tray", "maze_fixed3", "maze3", "maze3h", "maze4", "maze5"]
+ENV_NAMES = ["tray", "maze_fixed3", "maze3", "maze3h", "maze4", "maze5",
+             "tray_vision", "maze_fixed3_vision", "maze3_vision", "maze3h_vision"]
 
 PROFILES = {
     # Mac M1 8 GB: small, slow, cool. Meant for checking that things learn, not final results.
@@ -15,7 +16,7 @@ PROFILES = {
     # Kaggle CPU session (4 vCPU, ~30 GB RAM). The GPU barely helps here because the
     # physics runs on CPU and the network is small, so save your GPU quota.
     "kaggle": dict(
-        n_envs=4, vec="subproc", threads=1, nice=0,
+        n_envs=4, vec="subproc", threads=4, nice=0,
         total_steps=2_000_000, n_steps=1024, batch_size=512, n_epochs=10,
         safety=False, work_s=0, rest_s=0, max_minutes=11 * 60, min_free_gb=1.0,
         eval_every=50_000, eval_episodes=10,

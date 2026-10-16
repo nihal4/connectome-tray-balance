@@ -10,6 +10,9 @@ File: Connectivity_783.parquet (~100 MB, ~15M rows)
 Columns: Presynaptic_Index, Postsynaptic_Index, Connectivity (synapse count),
          Excitatory (+1 / -1, from predicted neurotransmitter), ...
 
+Also downloads the FlyWire cell-type annotations (~32 MB) from
+https://github.com/flyconnectome/flywire_annotations (Schlegel et al. 2024).
+
 Usage:
     python scripts/download_connectome.py --out data/raw
 """
@@ -24,6 +27,10 @@ FILES = {
     "Connectivity_783.parquet": 90_000_000,   # minimum expected size in bytes
     "Completeness_783.csv": 3_000_000,
 }
+# Cell-type annotations (Schlegel et al. 2024, Nature), same v783 neuron IDs.
+# Needed for the fly-robot brain (eye, body-sense and command neurons).
+ANNOTATIONS = ("https://github.com/flyconnectome/flywire_annotations/raw/main/supplemental_files/"
+               "Supplemental_file1_neuron_annotations.tsv", "neuron_annotations.tsv", 30_000_000)
 
 
 def download(url: str, dest: str, min_size: int):
@@ -62,6 +69,8 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     for name, min_size in FILES.items():
         download(BASE + name, os.path.join(args.out, name), min_size)
+    url, name, min_size = ANNOTATIONS
+    download(url, os.path.join(args.out, name), min_size)
 
 
 if __name__ == "__main__":

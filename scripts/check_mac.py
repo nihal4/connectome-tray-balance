@@ -100,7 +100,11 @@ def main():
     from ctb.policies import ConnectomeCore
     d = np.load(args.subset)
     print(f"{OK} {args.subset}: {int(d['n'])} neurons, {len(d['pre']):,} connections, source={d['source']}")
-    core = ConnectomeCore(obs.shape[0], args.subset)
+    fly = "vis_idx" in d.files
+    core = ConnectomeCore(obs.shape[0], args.subset, *((8, 1.0, 3.0) if fly else (4, 0.5, 1.5)))
+    if fly:
+        print(f"{OK} fly-robot brain: eye {len(d['vis_idx'])} photoreceptors, body sense {len(d['asc_idx'])} ascending, "
+              f"{len(d['output_idx'])} descending (command) neurons")
     x = torch.randn(256, obs.shape[0])
     t0 = time.time()
     for _ in range(5):

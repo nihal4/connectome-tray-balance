@@ -81,6 +81,21 @@ def run_episodes(model, run, env_kw, episodes, seed=123):
             "success_rate": round(float(np.mean(succ)), 3)}
 
 
+def add_eye_view(frame, cam_img, size=144):
+    """Paste what the brain sees (the 16x16 camera image) into the top-left corner."""
+    img = np.flipud(cam_img)                         # row 0 = far side of the tray, on top
+    rgb = np.zeros(img.shape + (3,))
+    rgb[..., 0] = rgb[..., 1] = rgb[..., 2] = np.clip(img, 0, 1)      # ball/walls/goal: grey-white
+    rgb[img < 0] = (0.8, 0.1, 0.1)                                    # holes: red
+    k = size // img.shape[0]
+    big = (np.kron(rgb, np.ones((k, k, 1))) * 255).astype(np.uint8)
+    out = frame.copy()
+    out[6:6 + big.shape[0], 6:6 + big.shape[1]] = big
+    out[4:6, 4:8 + big.shape[1]] = out[6 + big.shape[0]:8 + big.shape[0], 4:8 + big.shape[1]] = 255
+    out[4:8 + big.shape[0], 4:6] = out[4:8 + big.shape[0], 6 + big.shape[1]:8 + big.shape[1]] = 255
+    return out
+
+
 def record(model, run, path, seed=7):
     import imageio.v2 as imageio
     env_name = run_config(run)["env"]
@@ -91,7 +106,10 @@ def record(model, run, path, seed=7):
     for _ in range(raw.max_steps):
         a, _ = model.predict(vn.normalize_obs(raw_obs[None]), deterministic=True)
         raw_obs, _, te, tr, info = raw.step(a[0])
-        frames.append(raw.render())
+        frame = raw.render()
+        if getattr(raw, "vision", False):
+            frame = add_eye_view(frame, raw.camera_frame())
+        frames.append(frame)
         if te or tr:
             break
     for _ in range(25):                     # hold the last frame for half a second

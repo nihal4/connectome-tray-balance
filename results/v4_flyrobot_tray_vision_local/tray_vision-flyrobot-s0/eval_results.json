@@ -1,0 +1,32 @@
+{
+  "clean": {
+    "return": 758.3,
+    "length": 500.0,
+    "success_rate": 1.0
+  },
+  "noise_0.1": {
+    "return": 64.2,
+    "length": 72.6,
+    "success_rate": 0.0
+  },
+  "noise_0.3": {
+    "return": 40.1,
+    "length": 47.0,
+    "success_rate": 0.0
+  },
+  "blind": {
+    "return": 8.3,
+    "length": 19.1,
+    "success_rate": 0.0
+  },
+  "heavy_ball": {
+    "return": 761.6,
+    "length": 500.0,
+    "success_rate": 1.0
+  },
+  "push": {
+    "return": 743.7,
+    "length": 500.0,
+    "success_rate": 1.0
+  }
+}
