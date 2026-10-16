@@ -305,7 +305,13 @@ footer p { margin-top: 0.6rem; }
       <h3>Now running: the maze, seen only through the camera</h3>
       <p>The same fly-robot brain now has to solve the tilt maze with nothing but its eye: it must
         see the walls, the goal and the ball in a 16×16 picture, find the way round and stop the ball
-        in the goal. Results will be added here.</p>
+        in the goal.</p>
+      <p>First try (fast motors): the brain learned the route and rolled the ball to the goal in under
+        a second, but then pinned it in the corner of the goal cell instead of stopping it in the
+        middle, so no maze counted as solved. Adding practice starts near the goal and a pull towards
+        the goal centre moved the ball off the wall, but it still could not hold it still.</p>
+      <p>Next try (running now): <strong>slower, smoother motors</strong>, like servos with a speed
+        limit, so the ball moves about three times slower and can be stopped. Results will be added here.</p>
     </li>
   </ol>
 

@@ -32,6 +32,10 @@ The brain sees the tray through a 16x16 wrist camera (this frame + the previous 
 - `maze3_vision`: a new random maze every episode
 - `maze3h_vision`: random mazes with holes
 
+**Current setup (fresh run):** slow, smooth motors (`ACTION_RATE = 0.1`) + start-position
+curriculum (`RANDOM_START = 0.5`). The first camera-maze run, with fast motors, rolled the ball to
+the goal but never stopped it in the centre.
+
 **Kaggle settings:** Internet ON. Accelerator: **None (CPU)**. About 2.7 h per 1M steps.
 Use **Save & Run All (Commit)** for long runs. Checkpoints are saved every 50k steps.
 """)
@@ -43,11 +47,13 @@ BRANCH = "main"
 ENV = "maze_fixed3_vision"   # tray_vision -> maze_fixed3_vision -> maze3_vision -> maze3h_vision
 TOTAL_STEPS = 2_000_000      # mazes need more than the tray (~5.5 h at this size)
 N_NEURONS = 2500             # brain size (eye 512 + body 64 + commands 64 + pathway neurons)
-ACTION_RATE = 0.0            # >0: slow, smooth motors (e.g. 0.1). Changes the robot, so use it for a NEW run
+ACTION_RATE = 0.1            # slow, smooth motors: max joint change per step (0 = fast motors of the old runs).
+                             # Changes the robot, so a run must keep the same value (do not change it on --resume)
 RANDOM_START = 0.5           # maze curriculum: share of training episodes that start the ball at a random
                              # point on the route (evaluation always uses the real start). 0 = off
 SEED = 0
 DEVICE = "cpu"
+RUN_NAME = f"{ENV}-connectome-real-s{SEED}" + ("-slow" if ACTION_RATE > 0 else "")
 """)
 code("""
 import os, subprocess, sys, glob, shutil
@@ -88,7 +94,7 @@ def train(env=ENV, extra=""):
     cmd = (f"{sys.executable} -u scripts/train.py --env {env} --policy connectome --subset {BRAIN} "
            f"--profile kaggle --total_steps {TOTAL_STEPS} --seed {SEED} --device {DEVICE} "
            f"--random_start {RANDOM_START if ENV.startswith('maze') else 0} --action_rate {ACTION_RATE} "
-           f"--runs_dir {WORK}/runs {extra}")
+           f"--runs_dir {WORK}/runs --name {RUN_NAME} {extra}")
     p = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     for line in p.stdout:
         if KEEP.search(line):
@@ -99,14 +105,17 @@ def train(env=ENV, extra=""):
 train()
 """)
 md("""
+Training prints an `Eval` block every 50k steps (deterministic run from the real start) and a
+`[progress]` line (training episodes, including the easier curriculum starts). Return ~6 means
+the ball reaches the goal but is not stopped in the centre; a solved episode scores ~+35-40.
+
 To continue a run (after a timeout, or for more steps): raise `TOTAL_STEPS` and run
-`train(extra="--resume")`. It continues from the last checkpoint, with the current
-`RANDOM_START` setting, so an existing maze run can be switched to the curriculum this way.
+`train(extra="--resume")`. It continues from the last checkpoint in `runs/{RUN_NAME}`.
 
 ## 4. Results
 """)
 code("""
-run = f"{WORK}/runs/{ENV}-connectome-real-s{SEED}"
+run = f"{WORK}/runs/{RUN_NAME}"
 !python scripts/plot_runs.py {run} --out {WORK}/curves_{ENV}.png
 from IPython.display import Image, Video, display
 display(Image(f"{WORK}/curves_{ENV}.png"))
@@ -164,6 +173,17 @@ def record_test(name, kw, seed=7):
 
 for name, kw in TESTS.items():
     display(Video(record_test(name, kw), embed=True, width=420))
+""")
+md("""
+### Maze diagnostics: from the real start, and with the ball placed 2 and 1 cells before the goal
+Shows whether the brain gets lost on the way or only fails the final stop. Runs in a separate
+process (the renderer must be set up before MuJoCo is loaded).
+""")
+code("""
+if env_name.startswith("maze"):
+    !python scripts/watch_maze.py --run {run} --before 2 1 --best --out {WORK}
+    for f in sorted(glob.glob(f"{WORK}/diag_*.mp4")):
+        print(f); display(Video(f, embed=True, width=420))
 """)
 md("## 6. Export everything (runs, videos, curves) as one zip")
 code("""

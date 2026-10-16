@@ -82,7 +82,9 @@ Reference controllers, 20 episodes each (`python scripts/check_mac.py --env maze
 
 Two shortcuts were closed while building this: without the lid, a policy learned to flick the ball over the walls; without holes, the hold rule and tight time limits, random shaking solved 40–70 % of small mazes by luck.
 
-Start-position curriculum: `--random_start 0.5` makes half of the training episodes start the ball at a random cell along the route, so the policy also practises the final turns and stopping in the goal (evaluation always uses the real start). Added after the camera maze run stalled 2 cells from the goal.
+Start-position curriculum: `--random_start 0.5` makes half of the training episodes start the ball at a random cell along the route, so the policy also practises the final turns and stopping in the goal (evaluation always uses the real start). Added after the camera maze run reached the goal but pinned the ball in the goal-cell corner instead of stopping it in the centre.
+
+Slow, smooth motors: `--action_rate 0.1` limits how much each joint target may change per step (a full swing takes 0.4 s, like a servo with a speed limit). Under hard shaking the ball's top speed drops from 2.35 to 0.71 m/s; the scripted planner still solves every maze. It changes the robot, so it is saved in the run's `config.json` and evaluation and videos use it automatically; keep the same value when resuming.
 
 Suggested curriculum: `maze_fixed3` (one puzzle) → `maze3` (generalise to new puzzles) → `maze3h` (holes) → `maze4` → `maze5`. Holes start later on purpose: in a first test, PPO with holes from the start spent its first 200k steps mostly learning to avoid them. Robustness tests apply to every environment; for `maze_fixed3` runs there is also an **unseen mazes** test.
 
@@ -103,6 +105,7 @@ scripts/train.py             PPO training of the fly-brain network (real | shuff
 scripts/evaluate.py          returns, robustness tests, video
 scripts/plot_runs.py         learning curves
 scripts/view_env.py          live MuJoCo viewer
+scripts/watch_maze.py        maze diagnostic videos (real start, and k cells before the goal)
 scripts/build_flybrain.py    fly-robot brain: eye/body-sense inputs, command outputs, pathways
 notebooks/kaggle_train.ipynb 1,000-neuron network, ball/maze given as numbers
 notebooks/kaggle_flyrobot.ipynb  fly-robot brain, camera tasks (train, test videos, export zip)
@@ -143,6 +146,8 @@ Everything is adjustable, e.g. `--threads 1 --work_s 30 --rest_s 30` for an even
 
 For each environment in `ENVS` the notebook trains the fly-brain policy (optionally the shuffled-wiring control), then runs robustness tests and saves models, curves and one video per run to `/kaggle/working`. Download `runs_export.zip` and put interesting runs under `results/`.
 
+For the fly-robot (camera) tasks use `notebooks/kaggle_flyrobot.ipynb` instead. Its settings cell picks the task (`ENV`), brain size, `ACTION_RATE` (slow motors, default 0.1) and `RANDOM_START` (curriculum, default 0.5). Runs with slow motors are named `<env>-connectome-real-s0-slow`, so they never mix with the older fast-motor runs. The notebook trains, tests, records one video per test plus maze diagnostics, and zips everything.
+
 ## Robustness tests (`scripts/evaluate.py --robustness`)
 
 Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind** (ball position and velocity hidden), heavy ball (3×), random pushes. These are the tests for later research questions, in the spirit of FLYNN (robustness to sensory loss).
@@ -155,6 +160,8 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v4, fly-robot brain by vision** (`results/v4_flyrobot_tray_vision_local/`, local, one seed): wired from the eye to the command neurons and seeing only a 16x16 camera image, the fly brain learned to keep the ball on the tray at ~200k steps; best model 100 % on new episodes, 0 % when the ball is hidden from the camera.
 - **v5, fly-robot brain by vision, Kaggle** (`results/v5_flyrobot_tray_vision_kaggle/`, 1M steps, ~2.7 h): full 10 s from 250k steps on; 100 % clean, with a 3x heavier ball and with random pushes; 0 % with camera noise or the ball hidden. Videos of all three tests included.
 - **v6, camera maze, first run** (`results/v6_maze_vision_kaggle/`, Kaggle, one seed): 0 % solved, return flat at about +5.3 from 1.05M steps. The video shows why: the brain rolls the ball through the whole maze to the goal in under a second, then pins it in the corner of the goal cell instead of stopping it in the middle. Navigation learned, final stop not. Fixes: start-position curriculum and a stronger pull to the goal centre (success rule unchanged).
+  Resumed with both fixes from 1.65M to ~2M steps: eval return rose from ~5 to 7.7–11.2 (the ball now comes off the wall towards the centre) but still 0 % solved; the arm and ball move too fast to stop the ball on the spot.
+- **v7, camera maze with slow motors** (next run): fresh run with `--action_rate 0.1 --random_start 0.5`.
 
 ## Notes and limits
 
