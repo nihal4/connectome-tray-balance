@@ -1,36 +1,29 @@
 # v1: TrayBalance on Kaggle (one seed)
 
-Trained on Kaggle CPU, 1M steps each, 4 environments, `--profile kaggle`.
-Code version: git tag `v1-tray-balance`. The environment changed after this
-(level home pose, tray on a post, arm collisions separated from the ball), so
-these models are kept as a record. They only behave as reported in the v1
-environment (`git checkout v1-tray-balance`); the v1 code also expects the wiring
-file at the original Kaggle path, so a replay is easiest in the Kaggle notebook.
-The robustness numbers below were produced that way.
+Fly-brain network: the 1,000 most connected FlyWire neurons (inputs and outputs picked by
+graph structure). Trained on Kaggle CPU, 1M steps, 4 environments, `--profile kaggle`.
+Code version: git tag `v1-tray-balance`. The environment changed after this (level home
+pose, tray on a post, arm collisions separated from the ball), so this model only behaves
+as reported in the v1 environment; a replay is easiest in the Kaggle notebook.
+
+The policy is given the ball position and speed as numbers (no camera).
 
 ## Results
 
-Both runs solved the clean task by 100k steps (first eval at 500/500).
-Robustness, mean steps survived out of 500 (connectome: 5 episodes, MLP: 10):
+Solved the clean task by 100k steps (first eval at 500/500 steps).
+Robustness, mean steps survived out of 500 (5 episodes each):
 
-| test | connectome (1000 fly neurons) | MLP (same size) |
-|---|---|---|
-| clean | 500 | 500 |
-| sensor noise 0.1 | 500 | 500 |
-| sensor noise 0.3 | 500 | 500 |
-| blind (ball hidden) | 31 | 67 |
-| heavy ball 3x | 500 | 500 |
-| random pushes | 500 | 500 |
+| test | result |
+|---|---|
+| clean | 500 |
+| sensor noise 0.1 | 500 |
+| sensor noise 0.3 | 500 |
+| blind (ball hidden) | 31 |
+| heavy ball 3x | 500 |
+| random pushes | 500 |
 
-**Reading:** with enough training both policies are equally robust, and both fail
-when the ball is hidden (expected: neither has memory). The earlier "connectome is
-more robust to noise" impression from the 100k-step test run does not hold. The task is
-too easy to separate the two architectures, which is why the maze puzzles were added.
+**Reading:** easy task, learned fast and robust except when the ball is hidden (the network
+has no memory). This is why harder tasks (mazes) and the camera version came next.
 
-## Files
-
-- `tray-*/best_model.zip`, `vecnormalize.pkl`: trained policy and observation normalisation
-- `tray-*/evaluations.npz`, `progress.csv`: eval curve and training log
-- `tray-*/eval_results.json`: numbers above
-- `tray-connectome-real-s0/subset.npz`: the 1000-neuron wiring the model was built on
-- `curves.png`, `connectome_policy.mp4`
+Files: `tray-connectome-real-s0/` (best model, normalisation, eval curve, log, wiring),
+`curves.png`, `connectome_policy.mp4`.

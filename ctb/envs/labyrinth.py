@@ -317,7 +317,7 @@ class LabyrinthEnv(TrayBalanceEnv):
         )
         # Resting in the goal is rewarded as progress toward the 0.5 s hold: +0.4 per
         # step held, and everything earned is taken back if the ball leaves. A flat
-        # per-step bonus let an MLP "farm" reward by hovering in and out of the goal
+        # per-step bonus let a policy "farm" reward by hovering in and out of the goal
         # without ever finishing (reward went up while success went down).
         reward += 0.4 * (self._goal_steps - prev_goal_steps)
         if at_goal:

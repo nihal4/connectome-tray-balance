@@ -1,33 +1,17 @@
 # v2: first maze test (`maze_fixed3`, local, one seed)
 
-A short check that the maze puzzle is learnable, run on a slow 2-core cloud
-machine (`--profile mac` settings, 2 environments, 400k steps each). Same code
-as this commit.
+A short check of the maze puzzle on a slow 2-core cloud machine (`--profile mac`
+settings, 2 environments, 400k steps). Fly-brain network: the 1,000 most connected neurons,
+given the ball position and the wall layout as numbers.
 
-| | connectome (1000 fly neurons) | MLP (same size) |
-|---|---|---|
-| solved the fixed maze | no (peak 20 % of eval episodes) | **yes, 100 % from 275k steps** |
-| steps to solve (eval) | – | ~100 (the scripted planner needs ~145) |
-
-Robustness of the MLP (5 episodes each):
-
-| test | solved |
+| | result |
 |---|---|
-| clean | 100 % |
-| sensor noise 0.1 / 0.3 | 0 % / 0 % |
-| blind (ball hidden) | 0 % |
-| heavy ball 3x | 100 % |
-| random pushes | 100 % |
-| unseen random mazes | 0 % |
+| solved the fixed maze (eval) | not yet; peak 20 % of eval episodes |
+| best model on 20 attempts | 9 reach the goal but cannot hold the ball still for 0.5 s; 11 get stuck 3 cells from the goal |
 
-**Reading:**
-- The puzzle is learnable with PPO in a few hundred thousand steps (MLP); the video
-  shows it rolling the ball around the wall to the goal, not taking a shortcut.
-- The MLP memorised this one maze: it fails every unseen maze and breaks under small
-  sensor noise. Learning `maze3` (a new maze every episode) is the real puzzle test.
-- The connectome policy was clearly slower here. One seed and 400k steps is not enough
-  to call it worse: it needs more steps and seeds on Kaggle. This is the first task
-  where the two architectures behave differently.
+**Reading:** the network learns the route partly; what it lacks is the fine control to brake
+and stop the ball in the goal. `connectome_attempts.mp4` shows one of each (left: reaches the
+goal but cannot stop, right: stuck halfway).
 
-Files: `curves.png`, `mlp_solves_fixed_maze.mp4`, and per run the best model,
-`vecnormalize.pkl`, eval curve, training log and (connectome) `subset.npz`.
+Files: `curves.png`, `connectome_attempts.mp4`, and the run folder (best model,
+`vecnormalize.pkl`, eval curve, training log, `subset.npz`).

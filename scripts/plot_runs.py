@@ -1,6 +1,6 @@
 """Plot eval curves of several runs (same environment) on one chart.
 
-    python scripts/plot_runs.py runs/maze3-connectome-real-s0 runs/maze3-mlp-s0 --out curves.png
+    python scripts/plot_runs.py runs/maze3-connectome-real-s0 runs/maze3-connectome-shuffled-s0 --out curves.png
 
 Panels: eval return, episode length, and success rate (maze runs).
 """

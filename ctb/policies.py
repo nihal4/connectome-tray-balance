@@ -18,8 +18,8 @@ ConnectomePolicy
     wiring="shuffled" keeps the same number of edges, signs and weights but
     connects them to random neurons. Useful control for "is it the wiring?".
 
-The critic (value function) is a small normal MLP in both cases: it is only
-used during training, so it does not need to be brain-shaped.
+The critic (value function) is a small standard network: it only estimates how
+good a situation is during training and is not part of the controller.
 """
 from __future__ import annotations
 
@@ -212,23 +212,6 @@ class ConnectomePolicy(ActorCriticPolicy):
 
     def _build_mlp_extractor(self):
         self.mlp_extractor = ConnectomeExtractor(self.features_dim, **self._cfg)
-
-
-def count_actor_params(policy) -> int:
-    """Trainable parameters on the action path (excludes the critic)."""
-    total = 0
-    for name, p in policy.named_parameters():
-        if "value_net" in name or "critic" in name or "mlp_extractor.value_net" in name or name == "log_std":
-            continue
-        total += p.numel()
-    return total
-
-
-def matched_mlp_width(obs_dim: int, act_dim: int, target_params: int) -> int:
-    """Width h of a 2-layer MLP actor with about the same number of parameters."""
-    # params = obs*h + h + h*h + h + h*act + act
-    a, b, c = 1, obs_dim + 2 + act_dim, act_dim - target_params
-    return max(16, int((-b + np.sqrt(b * b - 4 * a * c)) / (2 * a)))
 
 
 def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu"):

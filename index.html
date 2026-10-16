@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fly-brain robot arm</title>
+<meta name="description" content="A robot arm in MuJoCo controlled by a network wired like the fruit-fly brain (FlyWire connectome): camera into the eye, commands out of the descending neurons.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f4f6f8;
+  --ink: #17212b;
+  --muted: #586572;
+  --rule: #d6dce3;
+  --panel: #ffffff;
+  --eye: #6b4fd8;      /* photoreceptors */
+  --body: #138a7e;     /* ascending, body sense */
+  --cmd: #b8700c;      /* descending, commands */
+  --brain: #44515e;    /* optic lobe + central brain */
+  --code-bg: #e9edf1;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #121a21;
+    --ink: #e6ebf0;
+    --muted: #9aa7b3;
+    --rule: #2b3640;
+    --panel: #18222b;
+    --eye: #a592ff;
+    --body: #4cc7b9;
+    --cmd: #e7a640;
+    --brain: #93a2b0;
+    --code-bg: #1d2832;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Literata", Georgia, serif;
+  font-size: 1.0625rem;
+  line-height: 1.68;
+}
+a { color: inherit; text-decoration-color: var(--eye); text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+a:hover { text-decoration-color: var(--cmd); }
+a:focus-visible, video:focus-visible { outline: 3px solid var(--eye); outline-offset: 3px; border-radius: 3px; }
+
+.wrap { max-width: 44rem; margin: 0 auto; padding: 0 1.25rem; }
+.wide { max-width: 62rem; margin: 0 auto; padding: 0 1.25rem; }
+
+h1, h2, h3 {
+  font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  font-stretch: 80%;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+h1 { font-size: clamp(2.3rem, 6.2vw, 4.1rem); font-weight: 800; max-width: 15ch; }
+h2 { font-size: clamp(1.6rem, 3.4vw, 2.1rem); font-weight: 750; margin-top: 4.5rem; }
+h3 { font-size: 1.2rem; font-weight: 700; font-stretch: 90%; margin-top: 2.2rem; }
+p { margin: 1rem 0 0; }
+.lede { font-size: 1.22rem; line-height: 1.6; color: var(--muted); max-width: 36rem; margin-top: 1.4rem; }
+
+header.top { padding-top: 3.5rem; }
+.byline { font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.95rem; color: var(--muted); margin-top: 1.5rem; }
+.byline a { margin-right: 1.1rem; }
+
+/* hero video */
+.hero { margin-top: 2.5rem; }
+figure { margin: 0; }
+video, .plot { display: block; width: 100%; height: auto; border-radius: 6px; background: #000; }
+.plot { background: #fff; border: 1px solid var(--rule); }
+figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 0.6rem; line-height: 1.5; max-width: 44rem; }
+
+/* coloured neuron classes used in text */
+.eye  { color: var(--eye);  font-weight: 600; }
+.bod  { color: var(--body); font-weight: 600; }
+.cmd  { color: var(--cmd);  font-weight: 600; }
+
+/* pathway diagram */
+.pathway { margin-top: 2rem; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1.2rem 1rem 1rem; }
+.pathway { overflow-x: auto; }
+.pathway svg { width: 100%; min-width: 560px; height: auto; display: block; }
+.pathway text { font-family: "Archivo", sans-serif; font-stretch: 85%; fill: var(--ink); }
+.pathway .small { fill: var(--muted); font-size: 12px; }
+
+/* tables */
+table { width: 100%; border-collapse: collapse; margin-top: 1.2rem; font-size: 0.95rem; }
+th, td { text-align: left; padding: 0.55rem 0.6rem 0.55rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: "Archivo", sans-serif; font-stretch: 90%; font-weight: 650; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.yes { color: var(--body); font-weight: 600; }
+.no  { color: var(--cmd);  font-weight: 600; }
+
+/* experiment log: a real sequence, so it is numbered */
+ol.log { list-style: none; padding: 0; margin: 2rem 0 0; counter-reset: run; }
+ol.log > li { counter-increment: run; position: relative; padding-left: 3.2rem; margin-top: 3rem; }
+ol.log > li::before {
+  content: counter(run);
+  position: absolute; left: 0; top: -0.15rem;
+  font-family: "Archivo", sans-serif; font-weight: 800; font-stretch: 75%;
+  font-size: 2.2rem; line-height: 1; color: var(--muted); opacity: 0.45;
+}
+.stack { margin-top: 1.2rem; display: grid; gap: 1.4rem; }
+@media (max-width: 640px) {
+  ol.log > li { padding-left: 0; }
+  ol.log > li::before { position: static; display: block; margin-bottom: 0.4rem; }
+}
+
+pre {
+  background: var(--code-bg); border-radius: 6px; padding: 1rem 1.1rem; overflow-x: auto;
+  font-size: 0.85rem; line-height: 1.55; margin-top: 1.2rem;
+}
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+p code, li code, td code { background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 3px; }
+
+footer { margin-top: 5rem; padding: 2rem 0 3rem; border-top: 1px solid var(--rule); font-size: 0.9rem; color: var(--muted); }
+footer p { margin-top: 0.6rem; }
+
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<header class="top wrap">
+  <h1>A robot arm run by the wiring of a fly's brain</h1>
+  <p class="lede">The arm sees the tray through a camera wired into a fruit fly's
+    <span class="eye">eye neurons</span>, feels its joints through the fly's
+    <span class="bod">body-sense neurons</span>, and moves through the fly's
+    <span class="cmd">command neurons</span>. Everything in between is the real
+    connection map of the fly brain.</p>
+  <p class="byline">
+    <a href="https://github.com/nihal4/connectome-tray-balance">Code on GitHub</a>
+    <a href="#run-it">Run it yourself</a>
+    <span>by S. M. Nihal Ahmed</span>
+  </p>
+</header>
+
+<section class="hero wide">
+  <figure>
+    <video src="results/v4_flyrobot_tray_vision_local/flyrobot_balances_by_vision.mp4" poster="results/v4_flyrobot_tray_vision_local/poster.jpg"
+           autoplay muted loop playsinline controls preload="metadata"
+           aria-label="Robot arm keeping a red ball on a tray; a small inset shows the 16 by 16 camera image the brain receives"></video>
+    <figcaption>The fly-brain network keeping the ball on the tray for the full 10 seconds.
+      Top left: the 16×16 camera image it receives. It is never told where the ball is.</figcaption>
+  </figure>
+</section>
+
+<main class="wrap">
+
+  <h2>How the robot is wired</h2>
+  <p>The fly brain has been mapped neuron by neuron: about 139,000 neurons and 15 million
+    connections (<a href="https://codex.flywire.ai">FlyWire</a>). For this robot I take
+    2,500 of them that lie on the real pathways from the eye to the brain's command neurons,
+    keep who connects to whom and whether each connection excites or inhibits, and train only
+    the connection strengths with reinforcement learning.</p>
+
+  <div class="pathway" role="img" aria-label="Diagram: camera feeds 512 photoreceptors, then optic lobe, visual projection and central brain neurons, then 64 descending neurons that drive the arm. Joint sensors feed 64 ascending neurons, which also reach the descending neurons.">
+    <svg viewBox="0 0 740 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+      <!-- robot side -->
+      <text x="8" y="70" font-size="14" font-weight="600">Camera</text>
+      <text x="8" y="88" class="small">16×16 image</text>
+      <text x="8" y="178" font-size="14" font-weight="600">Joints</text>
+      <text x="8" y="196" class="small">angles, tilt</text>
+      <text x="660" y="125" font-size="14" font-weight="600">Arm</text>
+      <text x="660" y="143" class="small">5 motors</text>
+
+      <!-- eye -->
+      <rect x="130" y="45" width="120" height="56" rx="6" fill="none" stroke="var(--eye)" stroke-width="2.5"/>
+      <text x="190" y="70" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--eye)">Eye</text>
+      <text x="190" y="88" class="small" text-anchor="middle">512 photoreceptors</text>
+
+      <!-- brain -->
+      <rect x="285" y="25" width="200" height="160" rx="10" fill="none" stroke="var(--brain)" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="385" y="56" font-size="13" font-weight="600" text-anchor="middle">Optic lobe</text>
+      <text x="385" y="90" font-size="13" font-weight="600" text-anchor="middle">Visual projection</text>
+      <text x="385" y="124" font-size="13" font-weight="600" text-anchor="middle">Central brain</text>
+      <text x="385" y="164" class="small" text-anchor="middle">~1,900 pathway neurons</text>
+      <path d="M385 62 V75 M385 96 V109" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <!-- body sense -->
+      <rect x="130" y="155" width="120" height="56" rx="6" fill="none" stroke="var(--body)" stroke-width="2.5"/>
+      <text x="190" y="180" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--body)">Body sense</text>
+      <text x="190" y="198" class="small" text-anchor="middle">64 ascending</text>
+
+      <!-- commands -->
+      <rect x="525" y="100" width="115" height="56" rx="6" fill="none" stroke="var(--cmd)" stroke-width="2.5"/>
+      <text x="582" y="125" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--cmd)">Commands</text>
+      <text x="582" y="143" class="small" text-anchor="middle">64 descending</text>
+
+      <!-- arrows -->
+      <path d="M100 74 H126" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+      <path d="M100 183 H126" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+      <path d="M250 73 H281" stroke="var(--eye)" stroke-width="2" marker-end="url(#ah)"/>
+      <path d="M250 196 C 320 236, 520 236, 575 160" fill="none" stroke="var(--body)" stroke-width="2" marker-end="url(#ah)"/>
+      <path d="M445 128 H521" fill="none" stroke="var(--brain)" stroke-width="2" marker-end="url(#ah)"/>
+      <path d="M640 128 H656" stroke="var(--cmd)" stroke-width="2" marker-end="url(#ah)"/>
+      <text x="385" y="254" class="small" text-anchor="middle">every path from eye to commands is 3 to 5 synapses long</text>
+    </svg>
+  </div>
+
+  <p>Each camera pixel drives exactly one <span class="eye">photoreceptor</span>
+    (R8 cells get the current frame, R7 cells the previous one, so motion is visible).
+    The arm's joint readings go into <span class="bod">ascending neurons</span>, the channel
+    that normally carries body sensation up to the fly's brain. The arm is driven from
+    <span class="cmd">descending neurons</span>, the brain's outgoing commands. A small learned
+    layer translates those commands into the arm's five motors.</p>
+
+  <h2>What happened, run by run</h2>
+  <p>A record of the experiments so far, including the ones that went badly. All are single
+    runs, so read the numbers as first results, not a benchmark.</p>
+
+  <ol class="log">
+    <li>
+      <h3>Balancing a ball, given the ball's position as numbers</h3>
+      <p>The first network used the 1,000 most connected fly neurons with inputs and outputs
+        picked by me, not by biology. It learned to keep a rolling ball on a flat tray in about
+        100,000 steps and stayed robust to noise, pushes and a heavier ball. It only failed when
+        the ball was hidden from it. An easy start, so the tasks got harder.</p>
+      <div class="stack">
+        <figure>
+          <video src="results/v1_tray_balance/connectome_policy.mp4" poster="results/v1_tray_balance/poster.jpg" controls muted loop playsinline preload="metadata"
+                 aria-label="Robot arm balancing a ball on a flat tray"></video>
+          <figcaption>Fly-wired network balancing the ball.</figcaption>
+        </figure>
+        <figure>
+          <img class="plot" src="results/v1_tray_balance/curves.png" alt="Learning curve: the network reaches the full 500 steps by 100k training steps" loading="lazy">
+          <figcaption>Learning curve: the full 10 seconds from about 100,000 steps.</figcaption>
+        </figure>
+      </div>
+    </li>
+
+    <li>
+      <h3>A tilt-maze puzzle</h3>
+      <p>Like the wooden labyrinth toy: roll the ball around the walls to the green goal and
+        stop it there. The network gets the wall layout but not the route. Along the way it found
+        two shortcuts I had to close: flicking the ball over the walls (now there is a glass lid)
+        and hovering in and out of the goal to collect reward (now the reward for resting is taken
+        back if the ball leaves).</p>
+      <div class="stack">
+        <figure>
+          <video src="results/previews/maze4_scripted_solver.mp4" poster="results/previews/maze4.png" controls muted loop playsinline preload="metadata"
+                 aria-label="A scripted controller rolling the ball through a 4 by 4 maze with holes"></video>
+          <figcaption>A scripted controller that knows the route, showing the puzzle (4×4 maze with holes).</figcaption>
+        </figure>
+        <figure>
+          <video src="results/v2_maze_fixed3_local/connectome_attempts.mp4" poster="results/v2_maze_fixed3_local/poster.jpg" controls muted loop playsinline preload="metadata"
+                 aria-label="Two attempts side by side: one reaches the goal but cannot stop, one gets stuck halfway"></video>
+          <figcaption>The fly-wired network's attempts: left, it reaches the goal but cannot hold the ball still; right, it gets stuck halfway.</figcaption>
+        </figure>
+      </div>
+      <p>On one fixed maze the fly-wired network learns slowly: its first solves appear after a few
+        hundred thousand steps and it reached 30 to 40 % by a million steps, still rising. It has not
+        learned to solve new, random mazes yet.</p>
+    </li>
+
+    <li>
+      <h3>Wired like a fly, seeing with a camera</h3>
+      <p>Then the robot was rewired through the fly's own channels, as in the diagram above, and the
+        ball's position was taken away: the network only gets the camera image and its joints. For
+        180,000 steps it held the ball for a second or two; at 200,000 steps it suddenly kept it for
+        the full 10 seconds.</p>
+      <table>
+        <thead><tr><th>Test (8 new episodes)</th><th>Kept the ball for 10 s</th></tr></thead>
+        <tbody>
+          <tr><td>Normal conditions</td><td class="num yes">100 %</td></tr>
+          <tr><td>Ball three times heavier</td><td class="num yes">100 %</td></tr>
+          <tr><td>Random pushes on the ball</td><td class="num yes">100 %</td></tr>
+          <tr><td>Noise added to the camera image</td><td class="num no">0 %</td></tr>
+          <tr><td>Ball removed from the camera image</td><td class="num no">0 %</td></tr>
+        </tbody>
+      </table>
+      <p>The last row matters most: without seeing the ball it fails at once, so it really is
+        steering by what comes through its eye.</p>
+      <figure style="margin-top:1.2rem">
+        <img class="plot" src="results/v4_flyrobot_tray_vision_local/curves.png" alt="Learning curve: episode length jumps from about 100 to the full 500 steps at 200k training steps" loading="lazy">
+        <figcaption>Learning curve of the camera-driven fly-brain network.</figcaption>
+      </figure>
+    </li>
+  </ol>
+
+  <h2>What is biological here, and what is not</h2>
+  <table>
+    <thead><tr><th>Part</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Which neurons are used (eye, body sense, commands)</td><td class="yes">Real fly cell types</td></tr>
+      <tr><td>Who connects to whom, excitatory or inhibitory</td><td class="yes">Real wiring</td></tr>
+      <tr><td>Route from eye through optic lobe and central brain to commands</td><td class="yes">Real pathways</td></tr>
+      <tr><td>Connection strengths</td><td class="no">Start from real synapse counts, then retrained</td></tr>
+      <tr><td>Neurons</td><td class="no">Simple rate units, not spiking cells</td></tr>
+      <tr><td>The eye's input</td><td class="no">A 16×16 grey image, not light on a compound eye</td></tr>
+      <tr><td>Learning</td><td class="no">Reinforcement learning (PPO), not how a fly learns</td></tr>
+    </tbody>
+  </table>
+  <p>So this is not a simulated fly mind. It uses the fly brain's circuit layout as the design
+    of a robot controller, and asks how well that design can learn tasks a fly never does.</p>
+
+  <h2 id="run-it">Run it yourself</h2>
+  <p>Everything runs on a laptop (with a safe low-power mode for an 8 GB Mac) or on a free
+    Kaggle notebook (<code>notebooks/kaggle_flyrobot.ipynb</code>).</p>
+<pre><code>git clone https://github.com/nihal4/connectome-tray-balance
+cd connectome-tray-balance
+pip install -r requirements.txt
+
+python scripts/download_connectome.py     # fly wiring + cell types
+python scripts/build_flybrain.py          # eye-to-command brain, 2,500 neurons
+python scripts/train.py --env tray_vision --policy connectome \
+       --subset data/flybrain_cam16_N2500.npz --profile kaggle</code></pre>
+  <p>Next on the list: the maze seen only through the camera, so the network has to see the
+    walls and the goal as well as the ball.</p>
+
+</main>
+
+<footer class="wrap">
+  <p>Data: FlyWire connectome v783 (Dorkenwald et al. 2024; Schlegel et al. 2024, <em>Nature</em>),
+    processed edge list from Shiu et al. 2024 (<em>Nature</em>), cell types from
+    <a href="https://github.com/flyconnectome/flywire_annotations">flywire_annotations</a>.
+    Simulation: MuJoCo. Training: Stable-Baselines3 PPO.</p>
+  <p>Related work: FLYNN (Wang &amp; Chen 2026), FlyGM (2026), Lappalainen et al. 2024.</p>
+  <p>Exploratory project by S. M. Nihal Ahmed.
+    <a href="https://github.com/nihal4/connectome-tray-balance">Source code and full results</a>.</p>
+</footer>
+
+</body>
+</html>

@@ -1,6 +1,7 @@
-"""Train a PPO agent with a connectome-shaped or MLP policy.
+"""Train a fly-brain (connectome-wired) controller with PPO.
 
-Environments (--env): tray, maze_fixed3, maze3, maze4, maze5 (see ctb/envs/__init__.py)
+Environments (--env): tray, maze_fixed3, maze3, maze3h, maze4, maze5 and the camera
+versions *_vision (see ctb/envs/__init__.py)
 
 Examples:
     # Mac: safe, slow, short (stops by itself after 30 min of compute)
@@ -10,8 +11,8 @@ Examples:
     python scripts/train.py --env maze_fixed3 --policy connectome --profile kaggle
     python scripts/train.py --env maze3 --policy connectome --profile kaggle
 
-    # Same-size MLP baseline
-    python scripts/train.py --policy mlp --profile mac
+    # Fly-robot brain (camera into the eye, commands out of descending neurons)
+    python scripts/train.py --env tray_vision --subset data/flybrain_cam16_N2500.npz --profile kaggle
 
     # Shuffled-wiring control (same edges/weights, random connections)
     python scripts/train.py --policy connectome --wiring shuffled --profile kaggle
@@ -36,7 +37,7 @@ from ctb.profiles import ENV_NAMES, PROFILES  # noqa: E402 (no heavy imports)
 def parse():
     ap = argparse.ArgumentParser()
     ap.add_argument("--env", choices=ENV_NAMES, default="tray")
-    ap.add_argument("--policy", choices=["connectome", "mlp"], default="connectome")
+    ap.add_argument("--policy", choices=["connectome"], default="connectome")  # kept for older commands
     ap.add_argument("--wiring", choices=["real", "shuffled"], default="real")
     ap.add_argument("--subset", default="data/subset_flywire783_N1000.npz")
     ap.add_argument("--profile", choices=list(PROFILES), default="mac")
@@ -81,7 +82,7 @@ def main():
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor, VecNormalize
 
     from ctb.envs import make_env
-    from ctb.policies import ConnectomeCore, ConnectomePolicy, matched_mlp_width
+    from ctb.policies import ConnectomeCore, ConnectomePolicy
     from ctb.safety import SafetyCallback
 
     name = args.name or f"{args.env}-{args.policy}" + (f"-{args.wiring}" if args.policy == "connectome" else "") + f"-s{args.seed}"
@@ -116,30 +117,20 @@ def main():
         args.k_steps = args.k_steps or dk
         args.leak = args.leak if args.leak is not None else dl
         args.gain = args.gain if args.gain is not None else dg
-        if flyrobot and args.policy == "connectome":
+        if flyrobot:
             print(f"[train] fly-robot brain: k_steps={args.k_steps} leak={args.leak} gain={args.gain}")
 
-        if args.policy == "connectome":
-            if not os.path.exists(args.subset):
-                raise SystemExit(f"{args.subset} not found. Run download_connectome.py and build_subset.py first.")
-            policy = ConnectomePolicy
-            # keep a copy of the wiring next to the model, so the run loads on any machine
-            import shutil
-            shutil.copy(args.subset, os.path.join(out, "subset.npz"))
-            policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
-                                 leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5)
-            core = ConnectomeCore(obs_dim, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
-            actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
-            del core
-        else:
-            # same number of actor parameters as the connectome policy
-            core = ConnectomeCore(obs_dim, args.subset, args.k_steps) if os.path.exists(args.subset) else None
-            target = (sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim) if core else 56_000
-            h = matched_mlp_width(obs_dim, act_dim, target)
-            policy = "MlpPolicy"
-            policy_kwargs = dict(net_arch=dict(pi=[h, h], vf=[64, 64]), activation_fn=torch.nn.Tanh,
-                                 log_std_init=-0.5)
-            actor_params = obs_dim * h + h + h * h + h + h * act_dim + act_dim
+        if not os.path.exists(args.subset):
+            raise SystemExit(f"{args.subset} not found. Run download_connectome.py and build_subset.py / build_flybrain.py first.")
+        policy = ConnectomePolicy
+        # keep a copy of the wiring next to the model, so the run loads on any machine
+        import shutil
+        shutil.copy(args.subset, os.path.join(out, "subset.npz"))
+        policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
+                             leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5)
+        core = ConnectomeCore(obs_dim, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
+        actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
+        del core
 
         model = PPO(
             policy, venv, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
