@@ -51,6 +51,9 @@ def parse():
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--push_prob", type=float, default=0.0, help="random pushes on the ball (harder task)")
+    ap.add_argument("--action_rate", type=float, default=0.0,
+                    help="slow, smooth motors: max change of each joint target per step (action units, "
+                         "range -1..1). 0 = off. 0.1 means a full swing takes 20 steps (0.4 s).")
     ap.add_argument("--random_start", type=float, default=0.0,
                     help="maze curriculum: fraction of training episodes that start the ball at a random "
                          "cell along the route (evaluation always uses the real start). Try 0.5.")
@@ -94,6 +97,9 @@ def main():
     model_path, vn_path = os.path.join(out, "model.zip"), os.path.join(out, "vecnormalize.pkl")
 
     env_kw = dict(push_prob=args.push_prob)
+    if args.action_rate > 0:      # robot property: applies to training and evaluation
+        env_kw["action_rate"] = args.action_rate
+        print(f"[train] slow motors: joint targets change by at most {args.action_rate} per step")
     Vec = SubprocVecEnv if cfg["vec"] == "subproc" else DummyVecEnv
     train_kw = dict(env_kw, random_start=args.random_start) if args.random_start > 0 else env_kw
     if args.random_start > 0:

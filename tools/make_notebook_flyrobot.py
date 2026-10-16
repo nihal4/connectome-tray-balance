@@ -43,6 +43,7 @@ BRANCH = "main"
 ENV = "maze_fixed3_vision"   # tray_vision -> maze_fixed3_vision -> maze3_vision -> maze3h_vision
 TOTAL_STEPS = 2_000_000      # mazes need more than the tray (~5.5 h at this size)
 N_NEURONS = 2500             # brain size (eye 512 + body 64 + commands 64 + pathway neurons)
+ACTION_RATE = 0.0            # >0: slow, smooth motors (e.g. 0.1). Changes the robot, so use it for a NEW run
 RANDOM_START = 0.5           # maze curriculum: share of training episodes that start the ball at a random
                              # point on the route (evaluation always uses the real start). 0 = off
 SEED = 0
@@ -86,7 +87,8 @@ KEEP = re.compile(r"^\\[|Eval num|Episode length|Success rate|New best")
 def train(env=ENV, extra=""):
     cmd = (f"{sys.executable} -u scripts/train.py --env {env} --policy connectome --subset {BRAIN} "
            f"--profile kaggle --total_steps {TOTAL_STEPS} --seed {SEED} --device {DEVICE} "
-           f"--random_start {RANDOM_START if ENV.startswith('maze') else 0} --runs_dir {WORK}/runs {extra}")
+           f"--random_start {RANDOM_START if ENV.startswith('maze') else 0} --action_rate {ACTION_RATE} "
+           f"--runs_dir {WORK}/runs {extra}")
     p = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     for line in p.stdout:
         if KEEP.search(line):
@@ -123,7 +125,7 @@ Heavy ball: drawn dark grey. Pushes: the frame turns red on each shove.
 code("""
 import numpy as np, imageio.v2 as imageio
 os.environ["MUJOCO_GL"] = "egl"
-from scripts.evaluate import load, make_norm, run_config, add_eye_view
+from scripts.evaluate import load, make_norm, run_config, add_eye_view, run_env_kw
 from ctb.envs import build_env
 
 env_name = run_config(run)["env"]
@@ -135,7 +137,7 @@ model = load(run)
 vn = make_norm(run, {})          # same input normalisation as in training
 
 def record_test(name, kw, seed=7):
-    env = build_env(env_name, seed, render_mode="rgb_array", **kw)
+    env = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run), **kw)
     if name == "heavy_ball":
         env.model.geom_rgba[env.model.geom("ball").id] = (0.25, 0.25, 0.25, 1)
     obs, _ = env.reset(seed=seed)

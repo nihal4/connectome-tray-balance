@@ -21,7 +21,7 @@ import numpy as np  # noqa: E402
 
 from ctb.envs import build_env  # noqa: E402
 from ctb.envs.labyrinth import BALL_R  # noqa: E402
-from scripts.evaluate import add_eye_view, load, make_norm, run_config  # noqa: E402
+from scripts.evaluate import add_eye_view, load, make_norm, run_config, run_env_kw  # noqa: E402
 
 
 def route_cells(env):
@@ -42,8 +42,8 @@ def place_ball(env, cell):
     return env._get_obs()
 
 
-def watch(model, vn, env_name, before, out_dir, seed):
-    env = build_env(env_name, seed, render_mode="rgb_array")
+def watch(model, vn, env_name, before, out_dir, seed, robot_kw=None):
+    env = build_env(env_name, seed, render_mode="rgb_array", **(robot_kw or {}))
     obs, _ = env.reset(seed=seed)
     label = "real_start"
     if before is not None:
@@ -82,7 +82,7 @@ def main():
     out_dir = args.out or os.path.dirname(os.path.abspath(args.run.rstrip("/")))
     os.makedirs(out_dir, exist_ok=True)
     for k in [None] + list(args.before):
-        watch(model, vn, env_name, k, out_dir, args.seed)
+        watch(model, vn, env_name, k, out_dir, args.seed, run_env_kw(args.run))
 
 
 if __name__ == "__main__":

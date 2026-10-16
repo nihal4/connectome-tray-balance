@@ -41,11 +41,14 @@ class TrayBalanceEnv(gym.Env):
         ball_mass_scale: float = 1.0,
         push_prob: float = 0.0,
         push_force: float = 0.3,
+        action_rate: float = 0.0,      # >0: motors are speed-limited, the joint target moves at
+                                       # most this much (in action units, range -1..1) per step
         vision: bool = False,          # replace ball state with a wrist-camera image
         cam: int = 16,                 # camera resolution (cam x cam pixels)
         render_mode: str | None = None,
         seed: int | None = None,
     ):
+        self.action_rate = action_rate
         self.vision = vision
         self.cam = cam
         self._prev_frame = None
@@ -180,6 +183,8 @@ class TrayBalanceEnv(gym.Env):
 
     def step(self, action):
         a = np.clip(np.asarray(action, dtype=np.float64), -1, 1)
+        if self.action_rate > 0:      # slow, smooth motors: limit the change per step
+            a = self._last_action + np.clip(a - self._last_action, -self.action_rate, self.action_rate)
         self.data.ctrl[:] = HOME_QPOS + self.action_scale * a
         self.data.xfrc_applied[self.ball_body] = 0
         if self.push_prob > 0 and self.np_random.random() < self.push_prob:

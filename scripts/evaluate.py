@@ -55,8 +55,15 @@ def load(run, best=True):
     return load_ppo(run, path)
 
 
+def run_env_kw(run):
+    """Robot settings a run was trained with (so evaluation uses the same robot)."""
+    cfg = run_config(run)
+    return {"action_rate": cfg["action_rate"]} if cfg.get("action_rate") else {}
+
+
 def make_norm(run, env_kw, seed=0):
     env_name = run_config(run)["env"]
+    env_kw = {**run_env_kw(run), **env_kw}
     venv = DummyVecEnv([lambda: build_env(env_name, seed, **env_kw)])
     vn = VecNormalize.load(os.path.join(run, "vecnormalize.pkl"), venv)
     vn.training = False
@@ -99,7 +106,7 @@ def add_eye_view(frame, cam_img, size=144):
 def record(model, run, path, seed=7):
     import imageio.v2 as imageio
     env_name = run_config(run)["env"]
-    raw = build_env(env_name, seed, render_mode="rgb_array")
+    raw = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
     vn = make_norm(run, {})
     raw_obs, _ = raw.reset(seed=seed)
     frames = []
