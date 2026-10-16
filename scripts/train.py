@@ -170,6 +170,21 @@ def main():
             return True
     callbacks.append(EveryNTimesteps(n_steps=50_000, callback=_Save()))
 
+    # One compact line per 50k steps about the TRAINING episodes (noisy policy, and with
+    # --random_start including the easier starts). Shows progress before the eval does.
+    class _Progress(_Base):
+        def _on_step(self):
+            m = self.model
+            rews = [e["r"] for e in m.ep_info_buffer]
+            succ = list(m.ep_success_buffer)
+            line = f"[progress] {m.num_timesteps:,} steps | training episodes: return {np.mean(rews):.2f}" if rews else \
+                   f"[progress] {m.num_timesteps:,} steps"
+            if succ:
+                line += f" | solved {100 * np.mean(succ):.0f}%"
+            print(line, flush=True)
+            return True
+    callbacks.append(EveryNTimesteps(n_steps=50_000, callback=_Progress()))
+
     safety = None
     if cfg["safety"]:
         safety = SafetyCallback(save, work_s=cfg["work_s"], rest_s=cfg["rest_s"],
