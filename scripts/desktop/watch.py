@@ -1,8 +1,8 @@
 """Progress videos + dashboard for the training PC (runs as the flybrain-watch service).
 
 Every minute: for each run in ~/flybrain/runs, when training has passed another 100k steps,
-fly one test episode with the newest checkpoint (always the same room / maze, so the videos
-can be compared) and save runs/<run>/progress/step_<N>k.mp4. Then rewrite ~/flybrain/index.html
+run the newest checkpoint on 3 test mazes / rooms (always the same three, so the videos can
+be compared, but different from each other) and save runs/<run>/progress/step_<N>k.mp4. Then rewrite ~/flybrain/index.html
 (learning curves, latest numbers, CPU temperature, all progress videos), which the
 flybrain-web service shows at http://<pc>:8080.
 
@@ -47,11 +47,48 @@ def make_video(run, step_k, py):
     os.makedirs(os.path.join(run, "progress"), exist_ok=True)
     out = os.path.join(run, "progress", f"step_{step_k:05d}k.mp4")
     code = ("import sys; sys.path.insert(0, %r)\n"
-            "from scripts.evaluate import load, record\n"
-            "record(load(%r, best=False), %r, %r, seed=7)\n") % (ROOT_REPO, run, run, out)
+            "from scripts.desktop.watch import record_tests\n"
+            "record_tests(%r, %r)\n") % (ROOT_REPO, run, out)
     subprocess.run([py, "-c", code], cwd=ROOT_REPO, timeout=900, capture_output=True,
                    env=dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl")))
     return out if os.path.exists(out) else None
+
+
+TEST_SEEDS = (7, 8, 9)      # the same three test rooms / mazes in every video, so videos compare
+
+
+def record_tests(run, out):
+    """One video: the newest checkpoint on 3 different test mazes (rooms), back to back,
+    with a short dark gap between them. Episodes that are solved end early."""
+    import imageio.v2 as imageio
+    from ctb.envs import build_env
+    from scripts.evaluate import add_eye_view, load, make_norm, run_config, run_env_kw
+    model = load(run, best=False)
+    env_name = run_config(run)["env"]
+    vn = make_norm(run, {})
+    frames, results = [], []
+    for seed in TEST_SEEDS:
+        env = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
+        obs, _ = env.reset(seed=seed)
+        info = {}
+        for _ in range(env.max_steps):
+            a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
+            obs, _, te, tr, info = env.step(a[0])
+            f = env.render()
+            if getattr(env, "vision", False):
+                f = add_eye_view(f, env.camera_frame())
+            frames.append(f)
+            if te or tr:
+                break
+        ok = bool(info.get("is_success", False))
+        results.append(ok)
+        mark = frames[-1].copy()                   # last frame: green border = solved, red = not
+        mark[:10] = mark[-10:] = mark[:, :10] = mark[:, -10:] = (40, 180, 60) if ok else (200, 50, 50)
+        frames += [mark] * 25 + [mark // 4] * 8
+        env.close()
+    fps = 25 if env_name.startswith("drone") else 50
+    imageio.mimsave(out, frames, fps=fps)
+    print(f"{out}: solved {sum(results)}/{len(results)}")
 
 
 def write_dashboard(root, runs):
@@ -85,7 +122,7 @@ figure{{margin:0;width:340px}}video{{width:100%}}figcaption{{font-size:13px;colo
 section{{background:#fff;padding:12px;margin:12px 0;border:1px solid #e5e5e5;border-radius:8px}}</style>
 <h1>Fly-brain training PC</h1>
 <p>Updated {time.strftime('%Y-%m-%d %H:%M')} &middot; CPU {'%.0f &deg;C' % t if t else 'n/a'} &middot; refreshes every 2 min.
-Progress videos: newest checkpoint, same test room each time, newest first.</p>
+Progress videos: newest checkpoint on the same 3 test mazes/rooms each time (border at the end of each: green = solved, red = not), newest first.</p>
 {''.join(rows) or '<p>No runs yet.</p>'}"""
     tmp = os.path.join(root, "index.html.tmp")
     open(tmp, "w").write(page)
