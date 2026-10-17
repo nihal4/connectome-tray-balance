@@ -55,6 +55,9 @@ def make_video(run, step_k, py):
 
 
 TEST_SEEDS = (7, 8, 9)      # the same three test rooms / mazes in every video, so videos compare
+# Panda: three blocks spread across the table (left-near, centre, right-far), so the clips
+# visibly show different positions: seed 1 = (0.39, +0.20), 24 = (0.52, 0.00), 4 = (0.64, -0.18)
+TEST_SEEDS_BY_ENV = {"panda_reach": (1, 24, 4)}
 
 
 def record_tests(run, out):
@@ -67,7 +70,7 @@ def record_tests(run, out):
     env_name = run_config(run)["env"]
     vn = make_norm(run, {})
     frames, results = [], []
-    for seed in TEST_SEEDS:
+    for seed in TEST_SEEDS_BY_ENV.get(env_name, TEST_SEEDS):
         env = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
         obs, _ = env.reset(seed=seed)
         info = {}
