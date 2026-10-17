@@ -140,6 +140,57 @@ python scripts/check_mac.py --env drone_reach --subset data/flybrain_eye160_N400
 python scripts/train.py --env drone_reach --subset data/flybrain_eye160_N4000.npz --profile kaggle --random_start 0.5
 ```
 
+## Fly-brain Panda: a real robot arm with a gripper (`panda_reach`)
+
+The current main robot (`ctb/envs/panda.py`). A Franka Emika Panda arm with its two-finger
+gripper (model from MuJoCo Menagerie, Apache-2.0; `python scripts/download_panda.py`), set up
+the way the standard manipulation benchmarks do it (Fetch, robosuite, ManiSkill):
+
+| | design |
+|---|---|
+| brain commands (descending neurons) | `[dx, dy, dz, grip]` 25 times a second: move the gripper up to 2 cm, open/close. Inverse kinematics + the arm's servos do the joints, like a nerve cord turning descending commands into leg movements |
+| body sense (ascending neurons) | gripper position and velocity, gripper opening, last command |
+| right eye | compound eye (160 facets) on a "head" beside the table, looking at the workspace: finds the block |
+| left eye | compound eye (160 facets) on the wrist, looking past the fingers: lines the gripper up |
+| brain | the same 4,000-neuron fly-brain network as the drone (`flybrain_eye160_N4000.npz`) |
+| task `reach` | bring the gripper to the yellow 5 cm block (new place every episode, up to 2 blue decoys) and hold still in the pre-grasp pose, 1.5 cm above it |
+| episode | 60 steps (2.4 s), no early end |
+| reward (ManiSkill style, per step, max 1) | reach `1 - tanh(5 d)`; within 3 cm also `1 - tanh(10 speed)`; success (within 3 cm, slower than 5 cm/s) = maximum. Bounded, nothing to farm |
+
+Why two eyes: a fly-like eye has ~11 deg facets; seen from beside the table, a 5 cm block is a
+faint dot inside one facet, and an eye-only detector placed it with a median error of ~5 cm
+(the task needs 3 cm). Robot labs pair an overview camera with a wrist camera for the same
+reason. With the left eye on the wrist, the block fills many facets up close.
+
+Checks (40 episodes each):
+
+| pilot | solved |
+|---|---|
+| hand-written, knows where the block is | 100 % |
+| hand-written, sees ONLY the two eye images (+ own hand position) | 100 % (also with decoys) |
+| same, block invisible | 0 % |
+| do nothing / random | 0 % / 0 % |
+
+Two problems found and fixed while building it: the hand lagged behind its commands (fixed
+with a target point the hand follows, as in Fetch), and in a first version the eye sat behind
+the robot, where the arm blocked its view of the table.
+
+Planned ladder: reach (pre-grasp) -> push a block onto a goal -> colour sorting by pushing ->
+pick and place with the gripper.
+
+**How others connect fly brains to bodies** (checked before building):
+- NeuroMechFly v2 (Wang-Chen et al. 2024, *Nature Methods*): the brain-level controller sends a
+  two-number descending signal into leg pattern generators; the eye model bins a camera image
+  into ~721 ommatidia. Layered control, as here.
+- FlyGM (arXiv 2602.17997): whole-brain FlyWire graph with fixed signed synapse counts; observations
+  enter through afferent neurons, actions are read from efferent neurons; neuron state carries
+  over time (memory); imitation of an expert first, then PPO.
+- FLYNN (arXiv 2607.00025): connectome-derived network for vision-based navigation, robust to
+  vision loss.
+- FlyCNS (arXiv 2609.28816): connectome statistics used only as a prior on brain-body
+  communication.
+- No published fly-brain controller for a robot arm was found.
+
 ## Environments (`--env`)
 
 | name | task | obs | time limit | holes |
@@ -182,11 +233,13 @@ ctb/envs/tray_arm.xml        MuJoCo model (arm, tray, ball)
 ctb/envs/tray_balance.py     TrayBalance env (+ robustness knobs, PD controller)
 ctb/envs/labyrinth.py        tilt-maze puzzle env (maze generator, scripted planner)
 ctb/envs/drone.py            fly-brain drone: quadcopter, stabiliser, compound eye, reach task
+ctb/envs/panda.py            fly-brain Panda: arm + gripper, hand-space control, head + wrist compound eyes
 ctb/envs/__init__.py         registry: build_env("maze3"), make_env(...)
 ctb/policies.py              connectome policy for Stable-Baselines3 PPO
 ctb/safety.py                thread limits, duty cycle, thermal / RAM / battery guards
 ctb/profiles.py              presets: mac, kaggle, smoke
 scripts/download_connectome.py
+scripts/download_panda.py    Panda model from MuJoCo Menagerie
 scripts/build_subset.py      pick N neurons + input/output neurons
 scripts/check_mac.py         one-minute health check
 scripts/train.py             PPO training of the fly-brain network (real | shuffled wiring)

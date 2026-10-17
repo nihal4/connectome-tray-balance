@@ -350,7 +350,7 @@ footer p { margin-top: 0.6rem; }
     </li>
 
     <li>
-      <h3>Next: a drone with a fly's compound eyes</h3>
+      <h3>A drone with a fly's compound eyes (on hold)</h3>
       <p>A fly's brain evolved to steer flight, so the next robot is a small quadcopter. It sees
         through two compound eyes of 160 facets each, covering almost every direction, each facet
         a blurry spot as in a real fly. Every facet feeds its own three photoreceptors in the fly
@@ -365,7 +365,23 @@ footer p { margin-top: 0.6rem; }
         finds and reaches the ball in 83 % of rooms, so the eye carries enough information; with
         the ball made invisible it never succeeds, and hovering or random flying solve none. A first
         version painted the floor green: the yellow ball was camouflaged against it, much as a
-        flower can be in grass, so the room is now grey. Results will be added here.</p>
+        flower can be in grass, so the room is now grey. First run (600k steps): it learned to stay
+        in the air and sometimes reach the ball from close by, but rarely from far away. Paused for now.</p>
+    </li>
+
+    <li>
+      <h3>Now: a real robot arm with a gripper (Franka Panda)</h3>
+      <p>The home-made arm learned slowly partly because the brain had to command each joint, so every
+        random exploration move shook the whole arm. Robot-learning benchmarks (Fetch, robosuite,
+        ManiSkill) let the policy move the hand instead and leave the joints to a controller. The new
+        setup does the same, with a Franka Panda arm and its two-finger gripper: the fly brain's
+        command neurons say "move the hand this way, open or close", much as a fly's descending neurons
+        drive leg circuits in the nerve cord.</p>
+      <p>It sees with two compound eyes: one on a head beside the table to find things, one on the
+        wrist to line up a grasp. A single fly-like eye is too coarse to aim within 3 cm from across
+        the table. First task: bring the gripper to a yellow block that appears somewhere new each time,
+        with blue decoys around. A pilot that sees only the two eye images manages it every time;
+        with the block invisible it never does. Results will be added here.</p>
     </li>
   </ol>
 

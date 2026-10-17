@@ -7,3 +7,4 @@ runs/
 !results/**/*.mp4
 .DS_Store
 .venv/
+data/menagerie/

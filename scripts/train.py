@@ -97,11 +97,11 @@ def main():
     model_path, vn_path = os.path.join(out, "model.zip"), os.path.join(out, "vecnormalize.pkl")
 
     env_kw = dict(push_prob=args.push_prob)
-    if args.env.startswith("drone"):
+    if args.env.startswith(("drone", "panda")):
         import numpy as np
         brain = np.load(args.subset) if os.path.exists(args.subset) else None
         if brain is None or "facets" not in brain.files:
-            raise SystemExit("drone envs need a compound-eye brain: "
+            raise SystemExit("drone/panda envs need a compound-eye brain: "
                              "python scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5")
         env_kw["n_facets"] = int(brain["facets"])     # eye size must match the brain's eye
     if args.action_rate > 0:      # robot property: applies to training and evaluation

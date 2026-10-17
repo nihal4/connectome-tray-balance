@@ -57,6 +57,16 @@ TESTS_DRONE = {
 }
 
 
+# Panda (two compound eyes). Training has eye noise, light changes and up to 2 decoys.
+TESTS_PANDA = {
+    "clean": {},
+    "no_decoys": {"max_distractors": 0},
+    "eye_noise_x3": {"eye_noise": 0.03},
+    "dim_or_bright_x2": {"light_jitter": 0.4},
+    "target_hidden": {"target_visible": False},
+}
+
+
 def run_config(run):
     cfg = json.load(open(os.path.join(run, "config.json")))
     cfg.setdefault("env", "tray")          # runs from before the maze update
@@ -73,7 +83,7 @@ def run_env_kw(run):
     """Robot settings a run was trained with (so evaluation uses the same robot)."""
     cfg = run_config(run)
     kw = {"action_rate": cfg["action_rate"]} if cfg.get("action_rate") else {}
-    if cfg["env"].startswith("drone"):
+    if cfg["env"].startswith(("drone", "panda")):
         import numpy as np
         brain = os.path.join(run, "subset.npz")
         if os.path.exists(brain):
@@ -141,7 +151,7 @@ def record(model, run, path, seed=7):
             break
     for _ in range(25):                     # hold the last frame for half a second
         frames.append(frames[-1])
-    imageio.mimsave(path, frames, fps=50)
+    imageio.mimsave(path, frames, fps=raw.metadata.get("render_fps", 50))
     raw.close()
     print(f"[video] {len(frames)} frames -> {path} (solved={info.get('is_success', 'n/a')})")
 
@@ -157,7 +167,8 @@ def main():
 
     cfg = run_config(args.run)
     model = load(args.run, best=not args.last)
-    tests = dict(TESTS_DRONE if cfg["env"].startswith("drone") else TESTS) if args.robustness else {"clean": {}}
+    named = TESTS_DRONE if cfg["env"].startswith("drone") else TESTS_PANDA if cfg["env"].startswith("panda") else TESTS
+    tests = dict(named) if args.robustness else {"clean": {}}
     if args.robustness and cfg["env"].startswith("maze_fixed3"):
         tests["random_mazes"] = {"fixed_maze": False}
 

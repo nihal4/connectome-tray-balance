@@ -67,7 +67,7 @@ def main():
     section(f"Environment: {args.env}")
     from ctb.envs import build_env, scripted_controller
     kw = {}
-    if args.env.startswith("drone") and os.path.exists(args.subset):
+    if args.env.startswith(("drone", "panda")) and os.path.exists(args.subset):
         kw["n_facets"] = int(np.load(args.subset)["facets"])      # eye must match the brain
     env = build_env(args.env, seed=0, **kw)
     obs, _ = env.reset()

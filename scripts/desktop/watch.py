@@ -86,7 +86,7 @@ def record_tests(run, out):
         mark[:10] = mark[-10:] = mark[:, :10] = mark[:, -10:] = (40, 180, 60) if ok else (200, 50, 50)
         frames += [mark] * 25 + [mark // 4] * 8
         env.close()
-    fps = 25 if env_name.startswith("drone") else 50
+    fps = env.metadata.get("render_fps", 50)
     imageio.mimsave(out, frames, fps=fps)
     print(f"{out}: solved {sum(results)}/{len(results)}")
 

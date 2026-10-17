@@ -31,6 +31,7 @@ echo "== python environment (CPU PyTorch: smaller, no GPU needed)"
 echo "== connectome + brains"
 cd "$REPO"
 "$PY" scripts/download_connectome.py --out data/raw
+"$PY" scripts/download_panda.py
 [ -f data/flybrain_eye160_N4000.npz ] || "$PY" scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5 >/dev/null
 [ -f data/flybrain_cam16_N2500.npz ] || "$PY" scripts/build_flybrain.py >/dev/null
 [ -f data/subset_flywire783_N1000.npz ] || "$PY" scripts/build_subset.py --n 1000 >/dev/null
