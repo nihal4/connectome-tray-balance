@@ -136,7 +136,7 @@ class FlyPandaEnv(gym.Env):
 
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
-                 target_visible=True, random_start=0.0, cmd_smooth=1.0, **_):
+                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, **_):
         assert task in ("reach",), task
         if not os.path.exists(PANDA_XML):
             raise FileNotFoundError(f"{PANDA_XML} not found. Run: python scripts/download_panda.py")
@@ -187,6 +187,7 @@ class FlyPandaEnv(gym.Env):
         self.observation_space = spaces.Box(-np.inf, np.inf, (2 * self.n_vis + 13,), np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (4,), np.float32)
         self.random_start = random_start
+        self.edge_bias = edge_bias          # training only: share of blocks put near the table edges / corners
         # hand commands are averaged over the last few steps (like a real arm controller):
         # 1.0 = no smoothing, 0.3 = each step moves 30 % towards the new command
         self.cmd_smooth = cmd_smooth
@@ -324,6 +325,15 @@ class FlyPandaEnv(gym.Env):
         self._light = 1 + self.rng.uniform(-self.light_jitter, self.light_jitter)
         self._tile = self.rng.uniform(0.06, 0.14)
         target = self.rng.uniform(BLOCK_LO, BLOCK_HI)
+        if self.edge_bias > 0 and self.rng.random() < self.edge_bias:
+            # practise the weak spots: a 7 cm band along one edge, and half the time a corner
+            band = 0.07
+            axes = [self.rng.integers(2)]
+            if self.rng.random() < 0.5:
+                axes = [0, 1]
+            for ax in axes:
+                target[ax] = (BLOCK_HI[ax] - self.rng.uniform(0, band)) if self.rng.random() < 0.5 \
+                    else (BLOCK_LO[ax] + self.rng.uniform(0, band))
         self._place(self.block_q, target)
         n_d = self.rng.integers(0, self.max_dist + 1) if self.max_dist > 0 else 0
         placed = [target]

@@ -57,6 +57,14 @@ def parse():
     ap.add_argument("--random_start", type=float, default=0.0,
                     help="maze curriculum: fraction of training episodes that start the ball at a random "
                          "cell along the route (evaluation always uses the real start). Try 0.5.")
+    ap.add_argument("--init_from", default=None,
+                    help="fine-tune: start a NEW run from another run's best brain (run folder, or a run name "
+                         "inside --runs_dir). Only used when this run has no checkpoint yet.")
+    ap.add_argument("--lr", type=float, default=None, help="learning rate (default 3e-4; fine-tuning: 1e-4)")
+    ap.add_argument("--std", type=float, default=None,
+                    help="fine-tune: reset the exploration noise (action std) of the loaded brain, e.g. 0.25")
+    ap.add_argument("--edge_bias", type=float, default=0.0,
+                    help="panda: share of TRAINING episodes with the block near the table edges / corners")
     # profile overrides
     for k, v in PROFILES["mac"].items():
         if isinstance(v, bool):
@@ -115,14 +123,46 @@ def main():
         for var in ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
                     "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"]:
             os.environ[var] = "1"
-    train_kw = dict(env_kw, random_start=args.random_start) if args.random_start > 0 else env_kw
+    train_kw = dict(env_kw, random_start=args.random_start) if args.random_start > 0 else dict(env_kw)
+    if args.edge_bias > 0:                  # training only; evaluation keeps uniform block positions
+        train_kw["edge_bias"] = args.edge_bias
+        print(f"[train] {args.edge_bias:.0%} of training blocks placed near the table edges / corners")
     if args.random_start > 0:
         print(f"[train] curriculum: {args.random_start:.0%} of training episodes start near the goal / at a random point on the route")
     venv = Vec([make_env(args.env, seed=args.seed * 1000 + i, **train_kw) for i in range(cfg["n_envs"])])
     venv = VecMonitor(venv)
     eval_env = VecMonitor(DummyVecEnv([make_env(args.env, seed=10_000 + args.seed, **env_kw)]))
 
-    if args.resume and os.path.exists(model_path):
+    lr = args.lr or 3e-4
+    init = None
+    if args.init_from and not os.path.exists(model_path):
+        init = args.init_from if os.path.isdir(args.init_from) else os.path.join(args.runs_dir, args.init_from)
+        if not os.path.exists(os.path.join(init, "best_model.zip")):
+            raise SystemExit(f"--init_from: no best_model.zip in {init}")
+
+    if init:
+        # fine-tune: copy the parent's brain wiring + settings, load its BEST brain, fresh step count
+        import shutil
+        from ctb.policies import load_ppo
+        shutil.copy(os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
+        parent = json.load(open(os.path.join(init, "config.json")))
+        parent.update(name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
+                      random_start=args.random_start, eval_episodes=cfg["eval_episodes"])
+        with open(os.path.join(out, "config.json"), "w") as f:
+            json.dump(parent, f, indent=2)
+        norm = VecNormalize.load(os.path.join(init, "vecnormalize.pkl"), venv)
+        model = load_ppo(out, os.path.join(init, "best_model.zip"), env=norm, device=args.device,
+                         custom={"learning_rate": lr, "lr_schedule": (lambda _: lr)})
+        if args.std:
+            with torch.no_grad():
+                model.policy.log_std.fill_(float(np.log(args.std)))
+        venv = norm
+        eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
+        print(f"[train] fine-tuning from {init}/best_model.zip (was at {model.num_timesteps:,} steps): "
+              f"lr={lr}" + (f", action std reset to {args.std}" if args.std else ""))
+        model.num_timesteps = 0
+        reset = True                       # this run counts its own steps from 0
+    elif args.resume and os.path.exists(model_path):
         from ctb.policies import load_ppo
         try:
             norm = VecNormalize.load(vn_path, venv)
@@ -168,7 +208,7 @@ def main():
         model = PPO(
             policy, venv, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
             n_steps=cfg["n_steps"], batch_size=cfg["batch_size"], n_epochs=cfg["n_epochs"],
-            learning_rate=3e-4, gamma=0.99, gae_lambda=0.95, clip_range=0.2,
+            learning_rate=lr, gamma=0.99, gae_lambda=0.95, clip_range=0.2,
             ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0,
         )
         reset = True

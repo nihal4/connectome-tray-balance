@@ -224,7 +224,7 @@ class ConnectomePolicy(ActorCriticPolicy):
         self.mlp_extractor = ConnectomeExtractor(self.features_dim, **self._cfg)
 
 
-def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu"):
+def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu", custom=None):
     """Load a saved PPO run on any machine.
 
     A connectome model remembers the absolute path of its wiring file from the
@@ -251,4 +251,4 @@ def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu"):
                   gain=cfg.get("gain") if cfg.get("gain") is not None else 1.5,
                   wiring=cfg.get("wiring", "real"), log_std_init=-0.5)
     return PPO.load(model_path, env=env, device=device,
-                    custom_objects={"policy_class": ConnectomePolicy, "policy_kwargs": kwargs})
+                    custom_objects={"policy_class": ConnectomePolicy, "policy_kwargs": kwargs, **(custom or {})})
