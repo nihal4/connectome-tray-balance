@@ -24,7 +24,7 @@ PROFILES = {
     # Always-on Linux desktop (e.g. i3-8100, 4 cores, 12 GB): full speed, no time limit,
     # but stops/cools down on low RAM or a very hot CPU. Runs for days with --resume.
     "desktop": dict(
-        n_envs=4, vec="subproc", threads=4, nice=5,
+        n_envs=4, vec="subproc", threads=3, nice=10,     # 3 threads: leave room for the system
         total_steps=2_000_000, n_steps=1024, batch_size=512, n_epochs=10,
         safety=True, work_s=0, rest_s=0, max_minutes=0, min_free_gb=1.0,
         eval_every=50_000, eval_episodes=10,

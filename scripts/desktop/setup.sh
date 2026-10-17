@@ -15,6 +15,7 @@ REPO="$ROOT/repo"
 PY="$ROOT/.venv/bin/python"
 
 echo "== system packages (asks for your password once)"
+# (safe to run again: everything already done is skipped; re-running also updates the services)
 sudo apt-get update -qq
 sudo apt-get install -y -qq git python3-venv python3-dev libegl1 libgl1 libosmesa6 ffmpeg tmux lm-sensors zip >/dev/null
 
@@ -41,6 +42,9 @@ echo "== quick check"
 "$PY" scripts/check_mac.py --env drone_reach --subset data/flybrain_eye160_N4000.npz | tail -12
 
 echo "== services"
+# memory limits for training: leave ~3 GB for Ubuntu itself
+TOTAL_MB=$(free -m | awk '/Mem/{print $2}')
+MEM_MAX="$(( TOTAL_MB - 3000 ))M"; MEM_HIGH="$(( TOTAL_MB - 3800 ))M"
 mkdir -p "$HOME/.config/systemd/user" "$HOME/.local/bin"
 ln -sf "$REPO/scripts/desktop/fly" "$HOME/.local/bin/fly"
 chmod +x "$REPO/scripts/desktop/fly" "$REPO/scripts/desktop/run_job.sh"
@@ -52,7 +56,13 @@ After=network-online.target
 ExecStart=$REPO/scripts/desktop/run_job.sh
 Restart=on-failure
 RestartSec=60
-Nice=5
+Nice=10
+# hard limits: if training ever uses too much, Linux stops only the training (it then
+# restarts and resumes) instead of the whole PC freezing while swapping to disk
+MemoryHigh=$MEM_HIGH
+MemoryMax=$MEM_MAX
+MemorySwapMax=0
+CPUWeight=50
 [Install]
 WantedBy=default.target
 UNIT
@@ -64,6 +74,9 @@ ExecStart=$PY $REPO/scripts/desktop/watch.py --root $ROOT
 Restart=always
 RestartSec=60
 Nice=19
+MemoryMax=1500M
+MemorySwapMax=0
+CPUWeight=10
 Environment=MUJOCO_GL=egl
 [Install]
 WantedBy=default.target
