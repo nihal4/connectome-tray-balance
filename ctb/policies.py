@@ -131,12 +131,19 @@ class ConnectomeCore(nn.Module):
             self.register_buffer("vis_idx", torch.as_tensor(d["vis_idx"], dtype=torch.long))
             self.register_buffer("asc_idx", torch.as_tensor(d["asc_idx"], dtype=torch.long))
             self.n_vis = len(self.vis_idx)
-            if obs_dim < self.n_vis:
+            # compound eye (drone): each photoreceptor gets the light it sees now AND how
+            # much that just changed (real photoreceptors respond strongly to change)
+            self.vis_dyn = "vis_dyn" in d.files and bool(d["vis_dyn"])
+            n_eye = self.n_vis * (2 if self.vis_dyn else 1)
+            if obs_dim < n_eye:
                 raise ValueError(f"fly-robot brain needs a camera env: obs has {obs_dim} values, "
                                  f"the eye has {self.n_vis} photoreceptors (use a *_vision env)")
             self.pix_gain = nn.Parameter(torch.ones(self.n_vis))
             self.pix_bias = nn.Parameter(torch.zeros(self.n_vis))
-            self.w_body = nn.Linear(obs_dim - self.n_vis, len(self.asc_idx))
+            if self.vis_dyn:
+                self.pix_gain_change = nn.Parameter(torch.ones(self.n_vis))
+            self.n_eye = n_eye
+            self.w_body = nn.Linear(obs_dim - n_eye, len(self.asc_idx))
         else:
             self.w_in = nn.Linear(obs_dim, len(self.input_idx))
 
@@ -163,8 +170,11 @@ class ConnectomeCore(nn.Module):
         w = self.edge_weights() if self.use_csr else None
         u = obs.new_zeros(b, self.n)
         if self.flyrobot:
-            u[:, self.vis_idx] = obs[:, :self.n_vis] * self.pix_gain + self.pix_bias
-            u[:, self.asc_idx] = self.w_body(obs[:, self.n_vis:])
+            x = obs[:, :self.n_vis] * self.pix_gain + self.pix_bias
+            if self.vis_dyn:
+                x = x + obs[:, self.n_vis:self.n_eye] * self.pix_gain_change
+            u[:, self.vis_idx] = x
+            u[:, self.asc_idx] = self.w_body(obs[:, self.n_eye:])
         else:
             u[:, self.input_idx] = self.w_in(obs)
         h = obs.new_zeros(b, self.n)

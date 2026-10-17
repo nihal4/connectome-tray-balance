@@ -8,10 +8,12 @@
     maze5         random 5x5 mazes with holes and some loops
     *_vision      same task, but seen through a 16x16 wrist camera (tray_vision,
                   maze_fixed3_vision, maze3_vision, maze3h_vision)
+    drone_reach   fly-brain drone with a compound eye: find a target ball and hover on it
 """
 import numpy as np
 
 from .labyrinth import LEVELS, LabyrinthEnv, planner_controller
+from .drone import FlyDroneEnv, drone_controller
 from .tray_balance import HOME_QPOS, TrayBalanceEnv, pd_controller
 
 ENVS = {"tray": (TrayBalanceEnv, {})}
@@ -21,6 +23,7 @@ ENVS.update({name: (LabyrinthEnv, kw) for name, kw in LEVELS.items()})
 ENVS["tray_vision"] = (TrayBalanceEnv, {"vision": True})
 for _name in ["maze_fixed3", "maze3", "maze3h"]:
     ENVS[_name + "_vision"] = (LabyrinthEnv, {**LEVELS[_name], "vision": True})
+ENVS["drone_reach"] = (FlyDroneEnv, {"task": "reach"})
 
 
 def build_env(name: str = "tray", seed: int | None = None, **overrides):
@@ -36,6 +39,8 @@ def make_env(name: str = "tray", seed: int = 0, **overrides):
 
 def scripted_controller(env, obs):
     """Hand-written solution for any env (proves the task is solvable)."""
+    if isinstance(env, FlyDroneEnv):
+        return drone_controller(env, obs)
     if isinstance(env, LabyrinthEnv):
         return planner_controller(env, obs)
     if getattr(env, "vision", False):         # camera obs has no ball numbers: use the true state
@@ -45,4 +50,4 @@ def scripted_controller(env, obs):
     return pd_controller(obs)
 
 
-__all__ = ["scripted_controller", "pd_controller", "ENVS", "build_env", "make_env", "TrayBalanceEnv", "LabyrinthEnv", "planner_controller", "HOME_QPOS"]
+__all__ = ["scripted_controller", "pd_controller", "ENVS", "build_env", "make_env", "TrayBalanceEnv", "LabyrinthEnv", "planner_controller", "HOME_QPOS", "FlyDroneEnv", "drone_controller"]

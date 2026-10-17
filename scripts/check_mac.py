@@ -10,6 +10,7 @@ Checks, in order:
 Usage:
     python scripts/check_mac.py
     python scripts/check_mac.py --env maze3
+    python scripts/check_mac.py --env drone_reach --subset data/flybrain_eye160_N4000.npz
     python scripts/check_mac.py --subset data/subset_synthetic_N300.npz   # before downloading
 """
 import argparse
@@ -65,7 +66,10 @@ def main():
 
     section(f"Environment: {args.env}")
     from ctb.envs import build_env, scripted_controller
-    env = build_env(args.env, seed=0)
+    kw = {}
+    if args.env.startswith("drone") and os.path.exists(args.subset):
+        kw["n_facets"] = int(np.load(args.subset)["facets"])      # eye must match the brain
+    env = build_env(args.env, seed=0, **kw)
     obs, _ = env.reset()
     t0, n = time.time(), 0
     while n < 2000:
@@ -77,7 +81,7 @@ def main():
     print(f"{OK} obs dim {obs.shape[0]}, action dim {env.action_space.shape[0]}, {sps:.0f} env steps/s (1 core)")
 
     section("Task is solvable (hand-written controller vs doing nothing)")
-    for name, ctrl in [("do nothing", lambda e, o: np.zeros(5)), ("scripted", scripted_controller)]:
+    for name, ctrl in [("do nothing", lambda e, o: np.zeros(e.action_space.shape)), ("scripted", scripted_controller)]:
         lens, wins = [], []
         for ep in range(5):
             obs, _ = env.reset(seed=ep)

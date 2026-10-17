@@ -53,6 +53,86 @@ Settings that differ automatically for this brain: 8 recurrent rounds (signals n
 no leak, stronger initial connections (otherwise the camera signal fades before reaching the
 command neurons), and a sparse matrix (0.5 % of neuron pairs are connected).
 
+## Fly-brain drone: compound eye, fly wiring, flight commands
+
+The third robot (`ctb/envs/drone.py`, notebook `notebooks/kaggle_drone.ipynb`). A fly's brain
+evolved to steer flight, so here its command neurons steer a small quadcopter.
+
+| drone | fly brain (FlyWire cell types) | count |
+|---|---|---|
+| compound eye, brightness per facet | R1-6 photoreceptors, both eyes | 2 x 160 |
+| compound eye, ultraviolet per facet | R7 photoreceptors | 2 x 160 |
+| compound eye, green per facet | R8 photoreceptors | 2 x 160 |
+| airspeed, tilt, rotation, last command | ascending neurons | 64 |
+| flight commands: forward, sideways, up, turn | descending neurons (32 per side) | 64 |
+| in between | pathway neurons: optic lobe, visual projection (incl. LC/LPLC), central brain | ~2,900 |
+
+**Eye.** Two eyes of 160 facets each cover almost all directions (from 15 deg across the
+midline to 165 deg behind, 75 deg below to 80 deg above the horizon, about 11 deg between facets,
+as in a fly the image is very wide and very blurry). The room is ray traced (7 rays per facet,
+0.5 ms per step, no graphics card needed); balls are blended into every facet through the
+facet's blur profile, so a far ball is a faint smudge and grows as the drone gets closer. Each
+photoreceptor gets the light it sees and how much that just changed (real photoreceptors
+respond strongly to change; this is what motion and looming detection build on).
+Facets are matched to photoreceptors by position on the eye (approximate retinotopy from neuron
+coordinates, optimal assignment), only photoreceptors that have a route to the chosen command
+neurons are used, and the pathway growth keeps a route for every facet: all 960 photoreceptors
+and all 64 body-sense inputs reach the commands in 3-5 synapses.
+
+**Stabiliser = halteres.** A fly's balance reflexes run outside the brain (halteres, nerve
+cord), and FlyWire maps the brain only. So a simple controller keeps the drone level and holds
+the velocity and turn rate the brain asks for; the brain decides where to fly.
+
+**Speeds, chosen to keep flying smooth:** max 1 m/s horizontal, 0.5 m/s vertical, 86 deg/s
+turning; commanded velocity changes by at most 2 m/s^2 (0 to full speed in 0.5 s), tilt at most
+25 deg. Brain runs at 25 Hz, stabiliser at 500 Hz.
+
+**Task `drone_reach`.** 8 x 8 m grey room (low-contrast checker floor, striped walls, so the
+eye can sense its own motion), open sky. A yellow ball (25 cm radius) appears 1.5-4 m away, anywhere in the room; the drone starts at a random place
+and heading. Solved: drone centre within 30 cm of the ball, slower than 0.5 m/s, for 0.4 s.
+12 s limit.
+
+| reward term | value | why |
+|---|---|---|
+| getting closer | +10 per m (potential) | flying back and forth earns nothing |
+| hovering on the ball | +0.5 per step (potential) | leaving gives it back, so no farming |
+| solved | +20 | |
+| time | -0.01 per step | |
+| jerky commands | -0.02 x change^2 | smooth flying |
+| crash (floor, wall, above 3 m, flipped) | -10, episode ends | crashing is always worse than hovering |
+
+**Colours (what each photoreceptor type sees).** The yellow ball is bright in R1-6 and R8 and
+almost black in R7 (UV); the grey room reflects UV and green alike; the sky is UV-rich; decoys are
+UV-violet. In a first version the floor was green and the ball yellow-green: the two had nearly
+the same colour ratio, so a far ball against the floor was camouflaged. A detector on the eye
+image picked the ball only 44 % of the time at 3-4 m; with the grey room 76 % from a single look.
+
+**Built-in robustness (training conditions):** a new layout every episode, light wind and gusts
+in random directions, drone mass +-4 %, eye noise (0.01 per photoreceptor), light level +-20 %,
+floor pattern size, and up to two blue-violet decoy balls (as bright as the target, other colour).
+Tests (`evaluate.py --robustness`): no wind, strong wind, 3x eye noise, three decoys, heavier
+drone, and the ball made invisible (must fail).
+
+**Checks before training** (60 rooms each):
+
+| pilot | solved | crashed | return |
+|---|---|---|---|
+| hand-written, knows where the ball is | 100 % | 0 % | 52 |
+| hand-written, sees ONLY the eye image (`EyeOnlyPilot`) | 83 % | 10 % | 40 |
+| same, strong wind | 68 % | 13 % | 33 |
+| same, ball invisible | 0 % | 25 % | -8 |
+| hover in place | 0 % | 22 % | -8 |
+| random flying | 0 % | 27 % | -23 |
+
+The eye-only pilot shows the compound eye carries enough information; the invisible-ball row
+shows the task cannot be solved without seeing the ball.
+
+```bash
+python scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5   # -> data/flybrain_eye160_N4000.npz
+python scripts/check_mac.py --env drone_reach --subset data/flybrain_eye160_N4000.npz
+python scripts/train.py --env drone_reach --subset data/flybrain_eye160_N4000.npz --profile kaggle --random_start 0.3
+```
+
 ## Environments (`--env`)
 
 | name | task | obs | time limit | holes |
@@ -94,6 +174,7 @@ Suggested curriculum: `maze_fixed3` (one puzzle) → `maze3` (generalise to new 
 ctb/envs/tray_arm.xml        MuJoCo model (arm, tray, ball)
 ctb/envs/tray_balance.py     TrayBalance env (+ robustness knobs, PD controller)
 ctb/envs/labyrinth.py        tilt-maze puzzle env (maze generator, scripted planner)
+ctb/envs/drone.py            fly-brain drone: quadcopter, stabiliser, compound eye, reach task
 ctb/envs/__init__.py         registry: build_env("maze3"), make_env(...)
 ctb/policies.py              connectome policy for Stable-Baselines3 PPO
 ctb/safety.py                thread limits, duty cycle, thermal / RAM / battery guards
@@ -107,9 +188,11 @@ scripts/plot_runs.py         learning curves
 scripts/view_env.py          live MuJoCo viewer
 scripts/watch_maze.py        maze diagnostic videos (real start, and k cells before the goal)
 scripts/build_flybrain.py    fly-robot brain: eye/body-sense inputs, command outputs, pathways
+                             (--eye compound: the drone's two compound eyes)
 notebooks/kaggle_train.ipynb 1,000-neuron network, ball/maze given as numbers
 notebooks/kaggle_flyrobot.ipynb  fly-robot brain, camera tasks (train, test videos, export zip)
-tools/make_notebook_*.py     generate the two notebooks (edit there, not in the .ipynb)
+notebooks/kaggle_drone.ipynb fly-brain drone with compound eyes
+tools/make_notebook_*.py     generate the notebooks (edit there, not in the .ipynb)
 results/                     saved results (models, curves, videos) per experiment
 ```
 

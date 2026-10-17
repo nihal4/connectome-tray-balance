@@ -97,13 +97,20 @@ def main():
     model_path, vn_path = os.path.join(out, "model.zip"), os.path.join(out, "vecnormalize.pkl")
 
     env_kw = dict(push_prob=args.push_prob)
+    if args.env.startswith("drone"):
+        import numpy as np
+        brain = np.load(args.subset) if os.path.exists(args.subset) else None
+        if brain is None or "facets" not in brain.files:
+            raise SystemExit("drone envs need a compound-eye brain: "
+                             "python scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5")
+        env_kw["n_facets"] = int(brain["facets"])     # eye size must match the brain's eye
     if args.action_rate > 0:      # robot property: applies to training and evaluation
         env_kw["action_rate"] = args.action_rate
         print(f"[train] slow motors: joint targets change by at most {args.action_rate} per step")
     Vec = SubprocVecEnv if cfg["vec"] == "subproc" else DummyVecEnv
     train_kw = dict(env_kw, random_start=args.random_start) if args.random_start > 0 else env_kw
     if args.random_start > 0:
-        print(f"[train] curriculum: {args.random_start:.0%} of training episodes start at a random point on the route")
+        print(f"[train] curriculum: {args.random_start:.0%} of training episodes start near the goal / at a random point on the route")
     venv = Vec([make_env(args.env, seed=args.seed * 1000 + i, **train_kw) for i in range(cfg["n_envs"])])
     venv = VecMonitor(venv)
     eval_env = VecMonitor(DummyVecEnv([make_env(args.env, seed=10_000 + args.seed, **env_kw)]))

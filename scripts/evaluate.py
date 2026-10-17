@@ -5,7 +5,8 @@ Examples:
     python scripts/evaluate.py --run runs/maze3-connectome-real-s0 --robustness
     python scripts/evaluate.py --run runs/maze3-connectome-real-s0 --episodes 1 --video maze.mp4
 
-Robustness tests (none of these were seen in training):
+Robustness tests (none of these were seen in training; drone runs have their own set,
+see TESTS_DRONE):
     noise_0.1/0.3  Gaussian noise on every sensor
     blind          ball position/velocity hidden from the policy ("vision loss")
     heavy_ball     ball 3x heavier
@@ -43,6 +44,19 @@ TESTS = {
 }
 
 
+# Drone (compound eye). Training already has light wind, gusts, eye noise and up to 2
+# distractor balls, so "clean" means training conditions.
+TESTS_DRONE = {
+    "clean": {},
+    "no_wind": {"wind": 0.0, "gusts": 0.0},
+    "strong_wind": {"wind": 1.0, "gusts": 0.4},
+    "eye_noise_x3": {"eye_noise": 0.03},
+    "3_distractors": {"max_distractors": 3},
+    "heavier_drone": {"mass_jitter": 0.12},
+    "target_hidden": {"target_visible": False},
+}
+
+
 def run_config(run):
     cfg = json.load(open(os.path.join(run, "config.json")))
     cfg.setdefault("env", "tray")          # runs from before the maze update
@@ -58,7 +72,13 @@ def load(run, best=True):
 def run_env_kw(run):
     """Robot settings a run was trained with (so evaluation uses the same robot)."""
     cfg = run_config(run)
-    return {"action_rate": cfg["action_rate"]} if cfg.get("action_rate") else {}
+    kw = {"action_rate": cfg["action_rate"]} if cfg.get("action_rate") else {}
+    if cfg["env"].startswith("drone"):
+        import numpy as np
+        brain = os.path.join(run, "subset.npz")
+        if os.path.exists(brain):
+            kw["n_facets"] = int(np.load(brain)["facets"])
+    return kw
 
 
 def make_norm(run, env_kw, seed=0):
@@ -137,7 +157,7 @@ def main():
 
     cfg = run_config(args.run)
     model = load(args.run, best=not args.last)
-    tests = dict(TESTS) if args.robustness else {"clean": {}}
+    tests = dict(TESTS_DRONE if cfg["env"].startswith("drone") else TESTS) if args.robustness else {"clean": {}}
     if args.robustness and cfg["env"].startswith("maze_fixed3"):
         tests["random_mazes"] = {"fixed_maze": False}
 

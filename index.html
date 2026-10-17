@@ -348,6 +348,25 @@ footer p { margin-top: 0.6rem; }
         maze rather than learned to read walls: new mazes defeat it. That is the next test, training
         on a new random maze every episode.</p>
     </li>
+
+    <li>
+      <h3>Next: a drone with a fly's compound eyes</h3>
+      <p>A fly's brain evolved to steer flight, so the next robot is a small quadcopter. It sees
+        through two compound eyes of 160 facets each, covering almost every direction, each facet
+        a blurry spot as in a real fly. Every facet feeds its own three photoreceptors in the fly
+        wiring: R1–6 (brightness, the input to motion and looming detection), R7 (ultraviolet) and
+        R8 (green). A simple stabiliser keeps the drone level, the job a fly's halteres do outside
+        the brain. The fly-brain network (4,000 neurons) decides where to fly.</p>
+      <p>First task: a yellow ball appears somewhere new in a room each time; find it by eye, fly
+        to it and hover on it. Training already includes wind, gusts, a noisy eye, a slightly
+        different drone each time and blue decoy balls, so there is nothing to memorise and no
+        perfect world to get used to.</p>
+      <p>Checked before training: a hand-written pilot that sees only what the compound eye sees
+        finds and reaches the ball in 83 % of rooms, so the eye carries enough information; with
+        the ball made invisible it never succeeds, and hovering or random flying solve none. A first
+        version painted the floor green: the yellow ball was camouflaged against it, much as a
+        flower can be in grass, so the room is now grey. Results will be added here.</p>
+    </li>
   </ol>
 
   <h2>What is biological here, and what is not</h2>
@@ -359,7 +378,8 @@ footer p { margin-top: 0.6rem; }
       <tr><td>Route from eye through optic lobe and central brain to commands</td><td class="yes">Real pathways</td></tr>
       <tr><td>Connection strengths</td><td class="no">Start from real synapse counts, then retrained</td></tr>
       <tr><td>Neurons</td><td class="no">Simple rate units, not spiking cells</td></tr>
-      <tr><td>The eye's input</td><td class="no">A 16×16 grey image, not light on a compound eye</td></tr>
+      <tr><td>The eye's input</td><td class="no">Arm: a 16×16 grey image. Drone: a fly-like compound eye with real photoreceptor types, but 160 instead of ~800 facets per eye and 25 instead of ~200 images per second</td></tr>
+      <tr><td>Balance</td><td class="no">Drone: a simple stabiliser stands in for the halteres and nerve cord, which the brain map does not include</td></tr>
       <tr><td>Learning</td><td class="no">Reinforcement learning (PPO), not how a fly learns</td></tr>
     </tbody>
   </table>
