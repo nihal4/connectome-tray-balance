@@ -302,10 +302,11 @@ bash ~/flybrain/repo/scripts/desktop/setup.sh
 ```
 
 It installs CPU PyTorch + MuJoCo in `~/flybrain/.venv`, downloads the connectome, builds the
-brains, runs the check, and sets up three services: training (started only with `fly start`,
-never at boot), (`--profile desktop`: full speed, no time limit, cools down above 90 C, stops on low
-RAM), plus two that start at boot: a watcher that records a progress video of the newest checkpoint every 100k steps, and a
-dashboard at `http://<pc>:8080` (curves, latest numbers, CPU temperature, videos).
+brains, runs the check, and sets up three services:
+- training, started only with `fly start` and never at boot (`--profile desktop`: full speed, no
+  time limit, memory and CPU limits so it cannot freeze the PC, cools down above 90 C);
+- a watcher that records a progress video of the newest checkpoint every 100k steps (starts at boot);
+- a dashboard at `http://<pc>:8080` with curves, latest numbers, CPU temperature and videos (starts at boot).
 
 Control it over SSH with `fly`: `fly job maze3_vision 3000000`, `fly start`, `fly status`,
 `fly log`, `fly eval`, `fly stop`, `fly update`.
