@@ -108,6 +108,13 @@ def main():
         env_kw["action_rate"] = args.action_rate
         print(f"[train] slow motors: joint targets change by at most {args.action_rate} per step")
     Vec = SubprocVecEnv if cfg["vec"] == "subproc" else DummyVecEnv
+    if cfg["vec"] == "subproc":
+        # Each simulation process: ONE maths thread. Its matrices are tiny (arm IK, eye), and
+        # several idle-spinning BLAS threads per process only compete for the CPU. The main
+        # process already set its own thread count above, so this only affects the children.
+        for var in ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                    "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"]:
+            os.environ[var] = "1"
     train_kw = dict(env_kw, random_start=args.random_start) if args.random_start > 0 else env_kw
     if args.random_start > 0:
         print(f"[train] curriculum: {args.random_start:.0%} of training episodes start near the goal / at a random point on the route")
