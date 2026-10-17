@@ -202,9 +202,20 @@ def main():
         os.fsync(dfd)
         os.close(dfd)
 
-    callbacks = [EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
-                              eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
-                              log_path=out, best_model_save_path=out, deterministic=True, verbose=1)]
+    eval_cb = EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
+                           eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
+                           log_path=out, best_model_save_path=out, deterministic=True, verbose=1)
+    ev_file = os.path.join(out, "evaluations.npz")
+    if not reset and os.path.exists(ev_file):
+        # resumed run: keep the earlier evaluation history (otherwise the file restarts empty)
+        old = np.load(ev_file)
+        keep = old["timesteps"] <= model.num_timesteps
+        eval_cb.evaluations_timesteps = list(old["timesteps"][keep])
+        eval_cb.evaluations_results = [list(r) for r in old["results"][keep]]
+        eval_cb.evaluations_length = [list(r) for r in old["ep_lengths"][keep]]
+        if "successes" in old.files and len(old["successes"]):
+            eval_cb.evaluations_successes = [list(r) for r in old["successes"][keep]]
+    callbacks = [eval_cb]
     # Save model + normalisation every 50k steps, so a crashed or timed-out session
     # (Kaggle limit, laptop sleep) can continue with --resume instead of starting over.
     from stable_baselines3.common.callbacks import EveryNTimesteps

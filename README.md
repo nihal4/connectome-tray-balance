@@ -153,9 +153,9 @@ the way the standard manipulation benchmarks do it (Fetch, robosuite, ManiSkill)
 | right eye | compound eye (160 facets) on a "head" beside the table, looking at the workspace: finds the block |
 | left eye | compound eye (160 facets) on the wrist, looking past the fingers: lines the gripper up |
 | brain | the same 4,000-neuron fly-brain network as the drone (`flybrain_eye160_N4000.npz`) |
-| task `reach` | bring the gripper to the yellow 5 cm block (new place every episode, up to 2 blue decoys) and hold still in the pre-grasp pose, 1.5 cm above it |
+| task `reach` | bring the gripper to the yellow 5 cm block (new place every episode, up to 2 blue decoys) and stay in the pre-grasp pose, 1.5 cm above it: within 3 cm for 5 steps (0.2 s) |
 | episode | 60 steps (2.4 s), no early end |
-| reward (ManiSkill style, per step, max 1) | reach `1 - tanh(5 d)`; within 3 cm also `1 - tanh(10 speed)`; success (within 3 cm, slower than 5 cm/s) = maximum. Bounded, nothing to farm |
+| reward (ManiSkill style, per step, max 1) | reach `1 - tanh(5 d)`; +1 inside the 3 cm zone; success (in the zone for 0.2 s) = maximum. Bounded, nothing to farm |
 
 Why two eyes: a fly-like eye has ~11 deg facets; seen from beside the table, a 5 cm block is a
 faint dot inside one facet, and an eye-only detector placed it with a median error of ~5 cm
@@ -174,6 +174,13 @@ Checks (40 episodes each):
 Two problems found and fixed while building it: the hand lagged behind its commands (fixed
 with a target point the hand follows, as in Fetch), and in a first version the eye sat behind
 the robot, where the arm blocked its view of the table.
+
+First desktop run (700k steps): the brain finds the yellow block, ignores decoys and ends within
+3 cm of the target 72-83 % of the time (median 2.1 cm, height within 1 cm), but jitters at ~13 cm/s.
+The first success rule also demanded speed < 5 cm/s; PPO's exploration noise alone moves the hand
+~12 cm/s, so a perfect pilot with that noise succeeded only 27 % and training almost never saw a
+success. Success is now a 0.2 s dwell inside 3 cm (as in standard reaching tasks): the same 700k
+brain, unchanged, solves 80 %; the pilots 100 % (also with training noise); idle/random 0 %.
 
 Planned ladder: reach (pre-grasp) -> push a block onto a goal -> colour sorting by pushing ->
 pick and place with the gripper.

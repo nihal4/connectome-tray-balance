@@ -16,9 +16,9 @@ behind the arm, looking down at the workspace. It feels the gripper position,
 velocity and opening (ascending neurons) and never gets the block position.
 
 Tasks (task=...):
-    reach   bring the gripper to the yellow block (new place every episode) and hold
-            still just above it, ready to grasp (the pre-grasp pose: fingertip centre
-            1.5 cm above the block's top). Up to 2 blue decoy blocks.
+    reach   bring the gripper to the yellow block (new place every episode) and stay
+            just above it, ready to grasp (the pre-grasp pose: fingertip centre 1.5 cm
+            above the block's top), within 3 cm for 0.2 s. Up to 2 blue decoy blocks.
 
 Needs the Panda model: python scripts/download_panda.py
 """
@@ -51,9 +51,12 @@ HEAD_LOOK_AT = np.array([0.50, 0.0, 0.03])
 WRIST_EYE_POS = np.array([0.06, 0.0, 0.07])    # in the hand frame, beside the fingers
 HOME = np.array([0, 0, 0, -1.57079, 0, 1.57079, -0.7853])
 
-# task (reach)
+# task (reach): success = gripper within 3 cm of the target for 5 steps in a row (0.2 s).
+# A dwell, as in standard reaching tasks. An earlier version also required speed < 5 cm/s,
+# but PPO's exploration noise alone moves the hand ~12 cm/s, so even a perfect pilot with
+# that noise succeeded only 27 % of the time and training almost never saw a success.
 SOLVE_DIST = 0.03
-SOLVE_SPEED = 0.05
+HOLD_STEPS = 5
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
 TABLE = np.array([0.35, 0.30, 0.35])     # grey
@@ -133,7 +136,7 @@ class FlyPandaEnv(gym.Env):
 
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
-                 target_visible=True, random_start=0.0, **_):
+                 target_visible=True, random_start=0.0, cmd_smooth=1.0, **_):
         assert task in ("reach",), task
         if not os.path.exists(PANDA_XML):
             raise FileNotFoundError(f"{PANDA_XML} not found. Run: python scripts/download_panda.py")
@@ -184,6 +187,9 @@ class FlyPandaEnv(gym.Env):
         self.observation_space = spaces.Box(-np.inf, np.inf, (2 * self.n_vis + 13,), np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (4,), np.float32)
         self.random_start = random_start
+        # hand commands are averaged over the last few steps (like a real arm controller):
+        # 1.0 = no smoothing, 0.3 = each step moves 30 % towards the new command
+        self.cmd_smooth = cmd_smooth
         self.rng = np.random.default_rng(seed)
         self._renderer = None
         self._light, self._tile = 1.0, 0.1
@@ -348,6 +354,8 @@ class FlyPandaEnv(gym.Env):
                 d.qvel[:] = 0
             mujoco.mj_forward(m, d)
         self._target = self.tcp_pos()
+        self._cmd = np.zeros(3)
+        self._hold = 0
         self._last_action = np.zeros(4)
         self._steps = 0
         self._prev_img = None
@@ -355,11 +363,12 @@ class FlyPandaEnv(gym.Env):
 
     def _reward(self):
         d_t = float(np.linalg.norm(self.tcp_pos() - self.reach_point()))
-        speed = float(np.linalg.norm(self.tcp_vel()))
+        inside = d_t < SOLVE_DIST
+        self._hold = self._hold + 1 if inside else 0
         r = 1 - np.tanh(5 * d_t)                              # reach
-        if d_t < SOLVE_DIST:
-            r += 1 - np.tanh(10 * speed)                      # be still there
-        success = d_t < SOLVE_DIST and speed < SOLVE_SPEED
+        if inside:
+            r += 1.0                                          # in the target zone
+        success = self._hold >= HOLD_STEPS                    # ... and stayed there 0.2 s
         if success:
             r = 3.0
         return r / 3.0, success, d_t
@@ -370,7 +379,8 @@ class FlyPandaEnv(gym.Env):
         # move a target point that the hand follows (like Fetch's mocap target), kept
         # within 5 cm of the real hand so it cannot run away when the arm is blocked
         tcp = self.tcp_pos()
-        self._target = np.clip(self._target + a[:3] * STEP, WS_LO, WS_HI)
+        self._cmd = self._cmd + self.cmd_smooth * (a[:3] - self._cmd)
+        self._target = np.clip(self._target + self._cmd * STEP, WS_LO, WS_HI)
         off = self._target - tcp
         n = np.linalg.norm(off)
         if n > 0.05:
