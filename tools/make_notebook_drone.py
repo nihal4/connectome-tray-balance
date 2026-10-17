@@ -33,7 +33,8 @@ position and heading random too). Find it with the eyes, fly to it and hover on 
 The brain is never told where the ball is. Training already includes light wind and gusts,
 eye noise, a slightly different drone weight each episode and up to two blue decoy balls.
 
-**Kaggle settings:** Internet ON. Accelerator: **None (CPU)**. About 1.5-2 h per 1M steps.
+**Kaggle settings:** Internet ON. Accelerator: **None (CPU)**. Roughly 2 h per 1M steps (estimate).
+Expect slow starts: in a local test the first solved evaluation room came at ~200k steps.
 Use **Save & Run All (Commit)**. Checkpoints are saved every 50k steps.
 """)
 code("""
@@ -45,7 +46,7 @@ ENV = "drone_reach"
 TOTAL_STEPS = 2_000_000
 N_NEURONS = 4000             # brain size (eye 960 + body 64 + commands 64 + pathway neurons)
 FACETS = 160                 # facets per eye
-RANDOM_START = 0.3           # share of training episodes that start near the ball (evaluation never does)
+RANDOM_START = 0.5           # share of training episodes that start near the ball (evaluation never does)
 SEED = 0
 DEVICE = "cpu"
 RUN_NAME = f"{ENV}-connectome-real-s{SEED}"

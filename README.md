@@ -98,8 +98,11 @@ and heading. Solved: drone centre within 30 cm of the ball, slower than 0.5 m/s,
 | hovering on the ball | +0.5 per step (potential) | leaving gives it back, so no farming |
 | solved | +20 | |
 | time | -0.01 per step | |
-| jerky commands | -0.02 x change^2 | smooth flying |
 | crash (floor, wall, above 3 m, flipped) | -10, episode ends | crashing is always worse than hovering |
+
+No penalty on jerky commands: the stabiliser already limits acceleration, and in a first test such
+a penalty mostly punished PPO's exploration noise (about -13 per episode), drowning out the
+"get closer" signal; training return stayed at random-flying level for 100k steps.
 
 **Colours (what each photoreceptor type sees).** The yellow ball is bright in R1-6 and R8 and
 almost black in R7 (UV); the grey room reflects UV and green alike; the sky is UV-rich; decoys are
@@ -127,10 +130,14 @@ drone, and the ball made invisible (must fail).
 The eye-only pilot shows the compound eye carries enough information; the invisible-ball row
 shows the task cannot be solved without seeing the ball.
 
+**Local learning check** (2-core machine, same settings as the notebook): training return rose
+from -14 to about -3 and training episodes solved from 3 % to 11 % by 150k steps; the first
+evaluation room (real start, unseen layout) was solved at 200k steps. Early, but learning.
+
 ```bash
 python scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5   # -> data/flybrain_eye160_N4000.npz
 python scripts/check_mac.py --env drone_reach --subset data/flybrain_eye160_N4000.npz
-python scripts/train.py --env drone_reach --subset data/flybrain_eye160_N4000.npz --profile kaggle --random_start 0.3
+python scripts/train.py --env drone_reach --subset data/flybrain_eye160_N4000.npz --profile kaggle --random_start 0.5
 ```
 
 ## Environments (`--env`)
@@ -246,6 +253,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
   Resumed with both fixes from 1.65M to ~2M steps: eval return rose from ~5 to 7.7–11.2 (the ball now comes off the wall towards the centre) but still 0 % solved; the arm and ball move too fast to stop the ball on the spot.
 - **v7, camera maze solved with slow motors** (`results/v7_maze_vision_slow_kaggle/`, Kaggle, 2M steps, one seed): fresh run with `--action_rate 0.1 --random_start 0.5`, brain unchanged. First solve at 350k, 100 % from 1.1M, 100 % on every eval from 1.65M; solves in ~130 steps and stops the ball in the goal centre. Robustness: heavy ball 100 %, pushes 60 %, camera noise 0 %, ball hidden 0 %, **unseen mazes 0 %** (memorised this maze).
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
+- **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 
 ## Notes and limits
 

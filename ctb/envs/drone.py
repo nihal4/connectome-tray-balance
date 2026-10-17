@@ -21,7 +21,7 @@ Reward (checked against shortcuts, see docs in README):
     +10 per metre closer to the target   (potential: going back and forth earns nothing)
     +0.5 per hold step on the target     (potential: leaving gives it back)
     +20 when solved (0.4 s on the target, slow)
-    -0.01 per step (time), -0.02 * |change of command|^2 (smooth flying)
+    -0.01 per step (time)
     -10 and episode ends: crash (floor, wall, too high, flipped)
 """
 from __future__ import annotations
@@ -59,7 +59,8 @@ HOLD_POT = 0.5
 SUCCESS = 20.0
 CRASH = -10.0
 TIME_COST = 0.01
-JERK_COST = 0.02
+JERK_COST = 0.0          # not needed: the stabiliser already limits acceleration,
+                         # and a penalty here mostly punishes PPO's exploration noise
 
 # spectral look of surfaces as (R1-6 brightness, R7 ultraviolet, R8 green)
 SKY = np.array([0.85, 1.0, 0.55])        # sky is bright and UV-rich (flies use this)
