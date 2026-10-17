@@ -176,14 +176,24 @@ def main():
         """Power-cut safe: write to temporary files, keep the previous checkpoint as .bak,
         then swap the new files in (a rename is atomic, so a checkpoint is never half-written)."""
         import shutil
+
+        def flush(path):                      # force the file onto the disk (survives a freeze)
+            with open(path, "rb+") as fh:
+                os.fsync(fh.fileno())
         tmp_model, tmp_vn = os.path.join(out, "model_tmp.zip"), vn_path + ".tmp"
         model.save(tmp_model)
         venv.save(tmp_vn)
+        flush(tmp_model)
+        flush(tmp_vn)
         for f in (model_path, vn_path):
-            if os.path.exists(f):
+            if os.path.exists(f) and os.path.getsize(f) > 0:      # never back up an empty file
                 shutil.copy2(f, f + ".bak")
+                flush(f + ".bak")
         os.replace(tmp_model, model_path)
         os.replace(tmp_vn, vn_path)
+        dfd = os.open(out, os.O_RDONLY)       # make the renames themselves durable
+        os.fsync(dfd)
+        os.close(dfd)
 
     callbacks = [EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
                               eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
