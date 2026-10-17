@@ -5,7 +5,7 @@
 #
 # Creates ~/flybrain/{repo,.venv,runs,logs}, installs CPU PyTorch + MuJoCo, downloads the
 # connectome, builds the brains, checks everything, and installs:
-#   flybrain-train   training service (resumes after reboot / power cut)
+#   flybrain-train   training service (started only by 'fly start'; never at boot)
 #   flybrain-watch   progress videos every 100k steps + dashboard page
 #   flybrain-web     dashboard at http://<this-pc>:8080
 #   fly              command to control it all (fly help)
@@ -94,13 +94,13 @@ UNIT
 sudo loginctl enable-linger "$USER"          # user services start at boot, without logging in
 systemctl --user daemon-reload
 systemctl --user enable --now flybrain-watch flybrain-web
-systemctl --user enable flybrain-train       # starts at boot from now on; 'fly start' starts it now
+systemctl --user disable flybrain-train 2>/dev/null || true   # never start training at boot; use 'fly start'
 if sudo ufw status 2>/dev/null | grep -q "Status: active"; then sudo ufw allow 8080/tcp >/dev/null; fi
 
 IP=$(hostname -I | awk '{print $1}')
 echo
 echo "Done. Open a new terminal (or run: source ~/.profile), then:"
 echo "   fly job       # show what will be trained"
-echo "   fly start     # start (it also starts by itself after every reboot)"
+echo "   fly start     # start training (after a reboot, run fly start again: it resumes from the last checkpoint)"
 echo "   fly status    # progress"
 echo "Dashboard: http://$IP:8080"

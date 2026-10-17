@@ -47,7 +47,7 @@ case "${1:-help}" in
   *) cat <<HELP
 fly job                       show the current job
 fly job ENV [STEPS] ["EXTRA"] set the job, e.g.  fly job maze3_vision 3000000
-fly start | stop | restart    control training (it also resumes by itself after a reboot)
+fly start | stop | restart    control training (after a reboot: fly start resumes from the last checkpoint)
 fly status                    latest progress, eval, speed, CPU temperature
 fly log [N]                   follow the training log (Ctrl+C to leave; training continues)
 fly eval [EPISODES]           robustness tests on the best model

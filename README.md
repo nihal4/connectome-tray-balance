@@ -302,9 +302,9 @@ bash ~/flybrain/repo/scripts/desktop/setup.sh
 ```
 
 It installs CPU PyTorch + MuJoCo in `~/flybrain/.venv`, downloads the connectome, builds the
-brains, runs the check, and sets up three services that start at boot (no login needed):
-training (`--profile desktop`: full speed, no time limit, cools down above 90 C, stops on low
-RAM), a watcher that records a progress video of the newest checkpoint every 100k steps, and a
+brains, runs the check, and sets up three services: training (started only with `fly start`,
+never at boot), (`--profile desktop`: full speed, no time limit, cools down above 90 C, stops on low
+RAM), plus two that start at boot: a watcher that records a progress video of the newest checkpoint every 100k steps, and a
 dashboard at `http://<pc>:8080` (curves, latest numbers, CPU temperature, videos).
 
 Control it over SSH with `fly`: `fly job maze3_vision 3000000`, `fly start`, `fly status`,
@@ -312,8 +312,7 @@ Control it over SSH with `fly`: `fly job maze3_vision 3000000`, `fly start`, `fl
 
 Power cuts: checkpoints every 50k steps are written to a temporary file and swapped in, with
 the previous one kept as `.bak` (used automatically if the newest is unreadable). After a reboot
-the service resumes on its own; set "Restore on AC power loss: Power On" in the BIOS so the PC
-also switches itself back on.
+or power cut, `fly start` resumes from the last checkpoint (training never starts by itself).
 
 ## Robustness tests (`scripts/evaluate.py --robustness`)
 
