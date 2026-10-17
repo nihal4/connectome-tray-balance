@@ -91,10 +91,27 @@ def record_tests(run, out):
     print(f"{out}: solved {sum(results)}/{len(results)}")
 
 
+def current_job(root):
+    """Run name from ~/flybrain/job.env (the run the training service works on)."""
+    try:
+        for line in open(os.path.join(root, "job.env")):
+            if line.startswith("NAME="):
+                return line.strip().split("=", 1)[1]
+    except OSError:
+        pass
+    return None
+
+
 def write_dashboard(root, runs):
     t = cpu_temp_c()
+    active = current_job(root)
+    # the run being trained first, then the others, most recently updated first
+    def last_update(r):
+        f = os.path.join(r, "progress.csv")
+        return os.path.getmtime(f) if os.path.exists(f) else 0
+    runs = sorted(runs, key=lambda r: (os.path.basename(r) != active, -last_update(r)))
     rows = []
-    for run in runs:
+    for i, run in enumerate(runs):
         name = os.path.basename(run)
         ev = last_eval(run) or {}
         curve = os.path.join(run, "curves.png")
@@ -112,14 +129,21 @@ def write_dashboard(root, runs):
         v = "".join(f'<figure><video src="{rel(p)}" controls muted preload="none"></video>'
                     f'<figcaption>{os.path.basename(p)[5:-4]}</figcaption></figure>' for p in vids[:12])
         img = f'<img src="{rel(curve)}?t={int(time.time())}">' if os.path.exists(curve) else ""
-        rows.append(f"<section><h2>{html.escape(name)}</h2><p>{num or 'no evaluation yet'}</p>{img}"
+        badge = ("<span class='now'>training now</span>" if name == active
+                 else "<span class='old'>paused / finished</span>")
+        if i == 1 or (i == 0 and name != active):
+            rows.append("<h2 class='earlier'>Earlier runs</h2>")
+        rows.append(f"<section><h2>{html.escape(name)} {badge}</h2><p>{num or 'no evaluation yet (first one at 50k steps)'}</p>{img}"
                     f"<div class='v'>{v or '<p>first progress video after 100k steps</p>'}</div></section>")
     page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="120"><title>Fly-brain training</title>
 <style>body{{font:15px system-ui;margin:16px;max-width:1100px;background:#fafafa;color:#222}}
 img{{max-width:100%;border:1px solid #ddd}}.v{{display:flex;flex-wrap:wrap;gap:10px}}
 figure{{margin:0;width:340px}}video{{width:100%}}figcaption{{font-size:13px;color:#555}}
-section{{background:#fff;padding:12px;margin:12px 0;border:1px solid #e5e5e5;border-radius:8px}}</style>
+section{{background:#fff;padding:12px;margin:12px 0;border:1px solid #e5e5e5;border-radius:8px}}
+.now{{background:#1f8a3b;color:#fff;font-size:13px;padding:2px 8px;border-radius:10px;vertical-align:middle}}
+.old{{background:#ddd;color:#444;font-size:13px;padding:2px 8px;border-radius:10px;vertical-align:middle}}
+h2.earlier{{margin-top:28px;color:#666;font-size:18px}}</style>
 <h1>Fly-brain training PC</h1>
 <p>Updated {time.strftime('%Y-%m-%d %H:%M')} &middot; CPU {'%.0f &deg;C' % t if t else 'n/a'} &middot; refreshes every 2 min.
 Progress videos: newest checkpoint on the same 3 test mazes/rooms each time (border at the end of each: green = solved, red = not), newest first.</p>
