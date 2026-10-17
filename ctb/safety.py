@@ -11,7 +11,8 @@ What it does:
        - stops after a wall-clock time limit
      Training is always saved before stopping, so you can --resume.
 
-Nothing here is needed on Kaggle; it is switched off by the 'kaggle' profile.
+Nothing here is needed on Kaggle; it is switched off by the 'kaggle' profile. The 'desktop'
+profile keeps the RAM and CPU-temperature guards but no duty cycle and no time limit.
 """
 from __future__ import annotations
 
@@ -74,17 +75,29 @@ def mac_thermal_status() -> dict:
     return out
 
 
+def cpu_temp_c():
+    """Hottest CPU sensor in deg C on Linux (None if not available)."""
+    try:
+        temps = psutil.sensors_temperatures()
+    except Exception:
+        return None
+    vals = [t.current for name in ("coretemp", "k10temp", "cpu_thermal", "acpitz")
+            for t in temps.get(name, []) if t.current]
+    return max(vals) if vals else None
+
+
 class SafetyCallback(BaseCallback):
     def __init__(self, save_fn, work_s=45, rest_s=15, max_minutes=None, min_free_gb=1.0,
-                 min_battery=30, check_every_s=10, cooldown_s=120, verbose=1):
+                 min_battery=30, check_every_s=10, cooldown_s=120, max_temp_c=90, verbose=1):
         super().__init__(verbose)
         self.save_fn = save_fn
         self.work_s, self.rest_s = work_s, rest_s
-        self.max_s = None if max_minutes is None else max_minutes * 60
+        self.max_s = None if not max_minutes else max_minutes * 60      # 0 or None: no limit
         self.min_free_gb = min_free_gb
         self.min_battery = min_battery
         self.check_every_s = check_every_s
         self.cooldown_s = cooldown_s
+        self.max_temp_c = max_temp_c
         self._t_start = self._t_work = self._t_check = None
         self.rest_total = 0.0
         self.stop_reason = None
@@ -121,6 +134,12 @@ class SafetyCallback(BaseCallback):
         batt = battery_status()
         if batt is not None and not batt.power_plugged and batt.percent < self.min_battery:
             return self._stop(f"on battery at {batt.percent:.0f}%")
+
+        t = cpu_temp_c()                       # desktop / Linux: cool down if very hot
+        if t is not None and t >= self.max_temp_c:
+            self._sleep(60, f"CPU at {t:.0f} C")
+            self._t_work = time.time()
+            return True
 
         th = mac_thermal_status()
         if th["warning"] > 0 or th["cpu_limit"] < 100:

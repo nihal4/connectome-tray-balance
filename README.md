@@ -193,6 +193,7 @@ scripts/train.py             PPO training of the fly-brain network (real | shuff
 scripts/evaluate.py          returns, robustness tests, video
 scripts/plot_runs.py         learning curves
 scripts/view_env.py          live MuJoCo viewer
+scripts/desktop/             always-on Ubuntu PC: setup.sh, fly command, auto-resume service, progress videos + dashboard
 scripts/watch_maze.py        maze diagnostic videos (real start, and k cells before the goal)
 scripts/build_flybrain.py    fly-robot brain: eye/body-sense inputs, command outputs, pathways
                              (--eye compound: the drone's two compound eyes)
@@ -237,6 +238,29 @@ Everything is adjustable, e.g. `--threads 1 --work_s 30 --rest_s 30` for an even
 For each environment in `ENVS` the notebook trains the fly-brain policy (optionally the shuffled-wiring control), then runs robustness tests and saves models, curves and one video per run to `/kaggle/working`. Download `runs_export.zip` and put interesting runs under `results/`.
 
 For the fly-robot (camera) tasks use `notebooks/kaggle_flyrobot.ipynb` instead. Its settings cell picks the task (`ENV`), brain size, `ACTION_RATE` (slow motors, default 0.1) and `RANDOM_START` (curriculum, default 0.5). Runs with slow motors are named `<env>-connectome-real-s0-slow`, so they never mix with the older fast-motor runs. The notebook trains, tests, records one video per test plus maze diagnostics, and zips everything.
+
+## On an always-on Ubuntu PC (`scripts/desktop/`)
+
+For runs of days or weeks (tested target: Ubuntu 24.04, i3-8100, 12 GB). One-time setup:
+
+```bash
+git clone https://github.com/nihal4/connectome-tray-balance ~/flybrain/repo
+bash ~/flybrain/repo/scripts/desktop/setup.sh
+```
+
+It installs CPU PyTorch + MuJoCo in `~/flybrain/.venv`, downloads the connectome, builds the
+brains, runs the check, and sets up three services that start at boot (no login needed):
+training (`--profile desktop`: full speed, no time limit, cools down above 90 C, stops on low
+RAM), a watcher that records a progress video of the newest checkpoint every 100k steps, and a
+dashboard at `http://<pc>:8080` (curves, latest numbers, CPU temperature, videos).
+
+Control it over SSH with `fly`: `fly job maze3_vision 3000000`, `fly start`, `fly status`,
+`fly log`, `fly eval`, `fly stop`, `fly update`.
+
+Power cuts: checkpoints every 50k steps are written to a temporary file and swapped in, with
+the previous one kept as `.bak` (used automatically if the newest is unreadable). After a reboot
+the service resumes on its own; set "Restore on AC power loss: Power On" in the BIOS so the PC
+also switches itself back on.
 
 ## Robustness tests (`scripts/evaluate.py --robustness`)
 

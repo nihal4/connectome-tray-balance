@@ -9,3 +9,4 @@ psutil
 imageio
 imageio-ffmpeg
 matplotlib
+scipy

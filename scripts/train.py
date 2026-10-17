@@ -116,11 +116,18 @@ def main():
     eval_env = VecMonitor(DummyVecEnv([make_env(args.env, seed=10_000 + args.seed, **env_kw)]))
 
     if args.resume and os.path.exists(model_path):
-        venv = VecNormalize.load(vn_path, venv)
-        eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
         from ctb.policies import load_ppo
-        model = load_ppo(out, model_path, env=venv, device=args.device)
-        print(f"[train] resumed from {model_path} at {model.num_timesteps} steps")
+        try:
+            norm = VecNormalize.load(vn_path, venv)
+            model = load_ppo(out, model_path, env=norm, device=args.device)
+        except Exception as e:                       # e.g. power cut during a save
+            print(f"[train] latest checkpoint unreadable ({e}); using the previous one (.bak)")
+            norm = VecNormalize.load(vn_path + ".bak", venv)
+            model = load_ppo(out, model_path + ".bak", env=norm, device=args.device)
+            model_path_used = model_path + ".bak"
+        venv = norm
+        eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
+        print(f"[train] resumed from {locals().get('model_path_used', model_path)} at {model.num_timesteps} steps")
         reset = False
     else:
         venv = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
@@ -166,8 +173,17 @@ def main():
     model.set_logger(configure(out, ["stdout", "csv"]))
 
     def save():
-        model.save(model_path)
-        venv.save(vn_path)
+        """Power-cut safe: write to temporary files, keep the previous checkpoint as .bak,
+        then swap the new files in (a rename is atomic, so a checkpoint is never half-written)."""
+        import shutil
+        tmp_model, tmp_vn = os.path.join(out, "model_tmp.zip"), vn_path + ".tmp"
+        model.save(tmp_model)
+        venv.save(tmp_vn)
+        for f in (model_path, vn_path):
+            if os.path.exists(f):
+                shutil.copy2(f, f + ".bak")
+        os.replace(tmp_model, model_path)
+        os.replace(tmp_vn, vn_path)
 
     callbacks = [EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
                               eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
