@@ -16,7 +16,7 @@ PY="$ROOT/.venv/bin/python"
 
 echo "== system packages (asks for your password once)"
 sudo apt-get update -qq
-sudo apt-get install -y -qq git python3-venv python3-dev libegl1 libgl1 libosmesa6 ffmpeg tmux lm-sensors >/dev/null
+sudo apt-get install -y -qq git python3-venv python3-dev libegl1 libgl1 libosmesa6 ffmpeg tmux lm-sensors zip >/dev/null
 
 echo "== code"
 mkdir -p "$ROOT/runs" "$ROOT/logs"
