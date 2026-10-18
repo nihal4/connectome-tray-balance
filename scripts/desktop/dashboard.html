@@ -193,9 +193,9 @@ function gallery(el, run) {
   el._key = key;
   if (!run.videos.length) { el.innerHTML = '<p class="muted">First progress video after 100k steps.</p>'; return; }
   el.innerHTML = '<div class="gallery">' + run.videos.slice(0, 12).map((v, i) => {
-    const step = (v.match(/step_0*(\d+)k/) || [])[1];
+    const step = (v.match(/(?:step|showcase)_0*(\d+)k/) || [])[1];
     return `<figure><video src="${esc(v)}#t=2" controls muted playsinline preload="${i < 4 ? "metadata" : "none"}"></video>
-      <figcaption><span>${step ? fmtSteps(+step * 1000) + " steps" : esc(v)}</span>${i === 0 ? '<span class="new">newest</span>' : ""}</figcaption></figure>`;
+      <figcaption><span>${/showcase_/.test(v) ? "successes (best brain)" + (step ? " · " + fmtSteps(+step * 1000) : "") : step ? fmtSteps(+step * 1000) + " steps" : esc(v)}</span>${i === 0 ? '<span class="new">newest</span>' : ""}</figcaption></figure>`;
   }).join("") + "</div>";
 }
 

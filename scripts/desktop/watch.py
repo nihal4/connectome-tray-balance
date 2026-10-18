@@ -62,17 +62,17 @@ TEST_SEEDS = (7, 8, 9)      # the same three test rooms / mazes in every video, 
 TEST_SEEDS_BY_ENV = {"panda_reach": (1, 24, 4), "panda_lift": (1, 24, 4)}
 
 
-def record_tests(run, out):
-    """One video: the newest checkpoint on 3 different test mazes (rooms), back to back,
+def record_tests(run, out, seeds=None, best=False):
+    """One video: a brain (newest checkpoint, or the best one) on test layouts, back to back,
     with a short dark gap between them. Episodes that are solved end early."""
     import imageio.v2 as imageio
     from ctb.envs import build_env
     from scripts.evaluate import add_eye_view, load, make_norm, run_config, run_env_kw
-    model = load(run, best=False)
+    model = load(run, best=best)
     env_name = run_config(run)["env"]
     vn = make_norm(run, {})
     frames, results = [], []
-    for seed in TEST_SEEDS_BY_ENV.get(env_name, TEST_SEEDS):
+    for seed in (seeds or TEST_SEEDS_BY_ENV.get(env_name, TEST_SEEDS)):
         env = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
         obs, _ = env.reset(seed=seed)
         info = {}
@@ -261,7 +261,7 @@ class Dashboard:
                 except Exception:
                     pass
         ev = self.cache[run][1]
-        vids = sorted(glob.glob(os.path.join(run, "progress", "*.mp4")), reverse=True)
+        vids = sorted(glob.glob(os.path.join(run, "progress", "*.mp4")), key=os.path.getmtime, reverse=True)
         log = os.path.join(self.root, "logs", name + ".log")
         train = {"t": [], "r": [], "s": []}
         if os.path.exists(log):
