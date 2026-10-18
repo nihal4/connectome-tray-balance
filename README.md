@@ -222,8 +222,10 @@ training, the evaluation chart, the videos and `fly eval`.
 
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
-Pure PPO from the fly eyes learned to find, grasp and partly lift, but never completed a lift in
-1.6M steps (it carried the block sideways at low height). Vision-based robot policies are usually
+Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
+by 1.6M steps it had not completed a lift (it carried the block sideways at low height), but kept
+going: at 2.2M it completed the full lift-and-hold alone in 6 % of evaluation episodes (training
+return 42.8, 6 % of practice episodes). Slow, but discovered from reward alone. Vision-based robot policies are usually
 trained teacher -> student instead (Genesis manipulation example; asymmetric actor-critic, Pinto et
 al. 2017; FlyGM used imitation first, then PPO):
 
@@ -245,7 +247,7 @@ al. 2017; FlyGM used imitation first, then PPO):
 
 Checks before the desktop run: the fly brain can fit the teacher (validation error = training
 error, still falling after 20 passes); a pure imitation student (30k teacher steps) grasped in
-40 % and completed the lift alone in 1 of 30 episodes, the first ever; a 3-round DAgger test went
+40 % and completed the lift alone in 1 of 30 episodes; a 3-round DAgger test went
 0 % -> 7 % -> 7 % solved alone. A first attempt failed for a known reason: too little training
 per round (sideways errors larger than the teacher's own spread).
 
