@@ -59,6 +59,7 @@ With the block invisible it fails: it steers by what its eyes see.
 * Practice where it fails: putting more training blocks at the edges raised the table-wide
   rate from 73 % to 94 %.
 
-Files: `curves_main_run.png`, `curves_finetune.png`, `eval_results_finetune.json`,
+Files: `main_1300k_three_solved.mp4` (main run, original three test layouts, all reached),
+`main_1500k_corner_miss.mp4` (spread-out layouts: the near-left corner missed), `curves_main_run.png`, `curves_finetune.png`, `eval_results_finetune.json`,
 `finetune_200k_all_three_solved.mp4` (three spread-out test layouts, all solved),
 `finetune_1000k_latest_brain.mp4` (latest brain, layout 1 missed; the best brain solves it).
