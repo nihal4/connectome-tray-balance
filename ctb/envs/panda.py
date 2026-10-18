@@ -19,6 +19,9 @@ Tasks (task=...):
     reach   bring the gripper to the yellow block (new place every episode) and stay
             just above it, ready to grasp (the pre-grasp pose: fingertip centre 1.5 cm
             above the block's top), within 3 cm for 0.2 s. Up to 2 blue decoy blocks.
+    lift    grasp the yellow block between the two fingers and lift it 8 cm off the table,
+            holding it there for 0.2 s (100 steps = 4 s). Same eyes, decoys and body sense,
+            plus TOUCH: the brain feels whether each finger presses on something.
 
 Needs the Panda model: python scripts/download_panda.py
 """
@@ -57,6 +60,11 @@ HOME = np.array([0, 0, 0, -1.57079, 0, 1.57079, -0.7853])
 # that noise succeeded only 27 % of the time and training almost never saw a success.
 SOLVE_DIST = 0.03
 HOLD_STEPS = 5
+# task (lift), ManiSkill PickCube-style staged reward: reach the block (1 - tanh(5 d)),
+# +1 while it is held between both fingers, +2 x lift progress while held, success = 5.
+# Lift only counts while held, so pushing or flicking the block earns nothing extra.
+LIFT_GOAL = 0.08             # raise the block's centre this far (m) ...
+LIFT_HOLD = 5                # ... while held, for 5 steps (0.2 s)
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
 TABLE = np.array([0.35, 0.30, 0.35])     # grey
@@ -137,7 +145,9 @@ class FlyPandaEnv(gym.Env):
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, **_):
-        assert task in ("reach",), task
+        assert task in ("reach", "lift"), task
+        if task == "lift" and max_steps == 60:
+            max_steps = 100                      # reach + descend + close + lift needs ~3 s
         if not os.path.exists(PANDA_XML):
             raise FileNotFoundError(f"{PANDA_XML} not found. Run: python scripts/download_panda.py")
         self.task, self.max_steps, self.render_mode = task, max_steps, render_mode
@@ -160,6 +170,9 @@ class FlyPandaEnv(gym.Env):
         self.arm_dof = np.arange(7)
         self.jnt_lo, self.jnt_hi = m.jnt_range[:7, 0], m.jnt_range[:7, 1]
         self.finger_q = [m.jnt_qposadr[m.joint("finger_joint1").id], m.jnt_qposadr[m.joint("finger_joint2").id]]
+        # finger collision pads (touch sense, grasp check)
+        self.finger_geoms = [{g for g in range(m.ngeom) if m.geom_bodyid[g] == m.body(f).id and m.geom_contype[g]}
+                             for f in ("left_finger", "right_finger")]
 
         # compound eye (same as the drone): rays see the table and the robot (collision
         # shapes, group 3); blocks are blended in through each facet's blur profile
@@ -265,6 +278,28 @@ class FlyPandaEnv(gym.Env):
         """Pre-grasp point: just above the block, where a grasp would start."""
         return self.block_pos() + np.array([0, 0, BLOCK_H + 0.015])
 
+    def finger_touch(self):
+        """(left touching anything, right touching anything, both fingers on the block)."""
+        d = self.data
+        touch, on_block = [False, False], [False, False]
+        for i in range(d.ncon):
+            c = d.contact[i]
+            for k, fg in enumerate(self.finger_geoms):
+                if c.geom1 in fg or c.geom2 in fg:
+                    other = c.geom2 if c.geom1 in fg else c.geom1
+                    if other in fg or other in self.finger_geoms[1 - k]:
+                        continue
+                    touch[k] = True
+                    if other == self.block_geom:
+                        on_block[k] = True
+        return touch[0], touch[1], on_block[0] and on_block[1]
+
+    def is_grasped(self):
+        return self.finger_touch()[2] and self.gripper_width() > 0.01
+
+    def lift_height(self):
+        return float(self.block_pos()[2] - self._block_z0)
+
     def gripper_width(self):
         return float(self.data.qpos[self.finger_q[0]] + self.data.qpos[self.finger_q[1]])
 
@@ -308,8 +343,15 @@ class FlyPandaEnv(gym.Env):
             p = p + self.rng.normal(0, self.body_noise, 3)
             v = v + self.rng.normal(0, 2 * self.body_noise, 3)
         body = np.concatenate([(p - 0.5 * (WS_LO + WS_HI)) * 4, v * 2, [self.gripper_width() * 25 - 1],
-                               [float(self._grip_ctrl > 127)], [0.0], self._last_action])
+                               [float(self._grip_ctrl > 127)], [self._touch_obs()], self._last_action])
         return np.concatenate([img, d_img, body]).astype(np.float32)
+
+    def _touch_obs(self):
+        """Touch: 0 none, 0.5 one finger, 1 both fingers press on something (reach: unused, 0)."""
+        if self.task == "reach":
+            return 0.0
+        l, r, _ = self.finger_touch()
+        return 0.5 * (l + r)
 
     # ------------------------------------------------------------------ gym API
     def _place(self, qadr, xy):
@@ -363,6 +405,7 @@ class FlyPandaEnv(gym.Env):
                 d.qpos[qa:qa + 3] = [0, 0, -5]
                 d.qvel[:] = 0
             mujoco.mj_forward(m, d)
+        self._block_z0 = float(self.block_pos()[2])
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
         self._hold = 0
@@ -372,6 +415,8 @@ class FlyPandaEnv(gym.Env):
         return self._get_obs(), {}
 
     def _reward(self):
+        if self.task == "lift":
+            return self._reward_lift()
         d_t = float(np.linalg.norm(self.tcp_pos() - self.reach_point()))
         inside = d_t < SOLVE_DIST
         self._hold = self._hold + 1 if inside else 0
@@ -382,6 +427,20 @@ class FlyPandaEnv(gym.Env):
         if success:
             r = 3.0
         return r / 3.0, success, d_t
+
+    def _reward_lift(self):
+        d_t = float(np.linalg.norm(self.tcp_pos() - self.block_pos()))   # TCP to block centre
+        held = self.is_grasped()
+        lift = self.lift_height()
+        r = 1 - np.tanh(5 * d_t)                                      # reach the block
+        if held:
+            r += 1.0 + 2.0 * float(np.clip(lift / LIFT_GOAL, 0, 1))   # grasp, then lift
+        up = held and lift >= LIFT_GOAL
+        self._hold = self._hold + 1 if up else 0
+        success = self._hold >= LIFT_HOLD
+        if success:
+            r = 5.0
+        return r / 5.0, success, d_t
 
     def step(self, action):
         a = np.clip(np.asarray(action, dtype=np.float64), -1, 1)
@@ -405,6 +464,8 @@ class FlyPandaEnv(gym.Env):
         r, success, d_t = self._reward()
         truncated = self._steps >= self.max_steps
         info = {"is_success": success, "dist": d_t}
+        if self.task == "lift":
+            info.update(grasped=self.is_grasped(), lift=self.lift_height())
         return self._get_obs(), float(r), False, truncated, info
 
     # ------------------------------------------------------------------ rendering
@@ -446,8 +507,29 @@ class FlyPandaEnv(gym.Env):
 
 def panda_controller(env, obs=None):
     """Hand-written solution using the TRUE block position (the brain never gets it)."""
+    if env.task == "lift":
+        return _lift_controller(env)
     err = env.reach_point() - env.tcp_pos()
     a = np.zeros(4)
     a[:3] = np.clip(err / STEP * 0.5, -1, 1)
     a[3] = 1.0
+    return a
+
+
+def _lift_controller(env):
+    """Scripted grasp: over the block (open) -> down to it -> close -> lift."""
+    tcp, blk = env.tcp_pos(), env.block_pos()
+    a = np.zeros(4)
+    xy_err = np.linalg.norm((blk - tcp)[:2])
+    closing = env._grip_ctrl < 200 or (xy_err < 0.01 and abs(tcp[2] - blk[2]) < 0.012)
+    if not closing:
+        goal = blk + np.array([0, 0, 0.0 if xy_err < 0.008 else 0.08])
+        a[3] = 1.0
+    else:
+        a[3] = -1.0
+        goal = blk.copy()
+        if env._grip_ctrl <= 0 and env.finger_touch()[2]:
+            goal = np.array([blk[0], blk[1], env._block_z0 + LIFT_GOAL + 0.03])
+            goal = goal - (blk - tcp)                  # move the hand, keep the hold offset
+    a[:3] = np.clip((goal - tcp) / STEP * 0.5, -1, 1)
     return a

@@ -11,6 +11,7 @@
     drone_reach   fly-brain drone with a compound eye: find a target ball and hover on it
     panda_reach   Franka Panda arm + gripper, hand-space control, two compound eyes (head + wrist):
                   bring the gripper to the yellow block (pre-grasp pose) and hold still
+    panda_lift    same robot + touch: grasp the yellow block and lift it 8 cm
 """
 import numpy as np
 
@@ -28,6 +29,7 @@ for _name in ["maze_fixed3", "maze3", "maze3h"]:
     ENVS[_name + "_vision"] = (LabyrinthEnv, {**LEVELS[_name], "vision": True})
 ENVS["drone_reach"] = (FlyDroneEnv, {"task": "reach"})
 ENVS["panda_reach"] = (FlyPandaEnv, {"task": "reach"})
+ENVS["panda_lift"] = (FlyPandaEnv, {"task": "lift"})
 
 
 def build_env(name: str = "tray", seed: int | None = None, **overrides):

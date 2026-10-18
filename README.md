@@ -140,7 +140,7 @@ python scripts/check_mac.py --env drone_reach --subset data/flybrain_eye160_N400
 python scripts/train.py --env drone_reach --subset data/flybrain_eye160_N4000.npz --profile kaggle --random_start 0.5
 ```
 
-## Fly-brain Panda: a real robot arm with a gripper (`panda_reach`)
+## Fly-brain Panda: a real robot arm with a gripper (`panda_reach`, `panda_lift`)
 
 The current main robot (`ctb/envs/panda.py`). A Franka Emika Panda arm with its two-finger
 gripper (model from MuJoCo Menagerie, Apache-2.0; `python scripts/download_panda.py`), set up
@@ -182,8 +182,39 @@ The first success rule also demanded speed < 5 cm/s; PPO's exploration noise alo
 success. Success is now a 0.2 s dwell inside 3 cm (as in standard reaching tasks): the same 700k
 brain, unchanged, solves 80 %; the pilots 100 % (also with training noise); idle/random 0 %.
 
-Planned ladder: reach (pre-grasp) -> push a block onto a goal -> colour sorting by pushing ->
-pick and place with the gripper.
+**Result (v8, `results/v8_panda_reach/`):** main run peaked at 90 % (1.3M steps) and then
+declined; a fine-tune from that best brain (lower learning rate, more practice blocks near the
+table edges) reached 94 % across a 5 x 5 grid of block positions (was 73 %), 90 % clean, 75 %
+with 3x eye noise, 70 % with light 2x dimmer/brighter, 5 % with the block invisible. Remaining
+weak spot: the extreme corner tips of the table.
+
+### Task `panda_lift`: grasp the block and lift it
+
+Same robot, eyes and brain, plus **touch**: the body stream gets "each finger presses on
+something" (0 / 0.5 / 1), like a fly's mechanosensors. Grasp the yellow block between both
+fingers and lift it 8 cm, held for 0.2 s. 100 steps (4 s). ManiSkill PickCube-style reward per
+step (max 1): reach `1 - tanh(5 d)` to the block centre; +1 while held between both fingers;
++2 x lift progress while held (lifting only counts while held, so pushing or flicking earns
+nothing); success = maximum.
+
+Checks (40 episodes each):
+
+| behaviour | return | solved |
+|---|---|---|
+| random / do nothing | 2 | 0 % |
+| hover above the block (what the reach brain does) | 13 | 0 % |
+| touch the block with a closed gripper | 15 | 0 % |
+| grasp but never lift | 31 | 0 % |
+| scripted pilot + PPO-like noise (0.3) | 52 | 90 % |
+| scripted pilot | 66 | 95 % |
+
+Training starts from the reach brain (`--init_from`; same inputs and outputs), which scores 14.5
+on lift at step 0, the "hover above" level.
+
+Planned ladder: reach -> grasp and lift -> pick and place into a bin -> sort by colour into
+3 bins -> add the fly's smell pathway (antennal lobe, mushroom body) and sort fruits by smell
+-> colour + smell, conflicting cues -> taste by touch -> ripe vs rotten -> formalin-treated vs
+natural fruit (assumed fly response; no published fly data on formaldehyde).
 
 **How others connect fly brains to bodies** (checked before building):
 - NeuroMechFly v2 (Wang-Chen et al. 2024, *Nature Methods*): the brain-level controller sends a

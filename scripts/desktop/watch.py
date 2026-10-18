@@ -57,7 +57,7 @@ def make_video(run, step_k, py):
 TEST_SEEDS = (7, 8, 9)      # the same three test rooms / mazes in every video, so videos compare
 # Panda: three blocks spread across the table (left-near, centre, right-far), so the clips
 # visibly show different positions: seed 1 = (0.39, +0.20), 24 = (0.52, 0.00), 4 = (0.64, -0.18)
-TEST_SEEDS_BY_ENV = {"panda_reach": (1, 24, 4)}
+TEST_SEEDS_BY_ENV = {"panda_reach": (1, 24, 4), "panda_lift": (1, 24, 4)}
 
 
 def record_tests(run, out):

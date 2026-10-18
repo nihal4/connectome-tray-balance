@@ -146,11 +146,17 @@ def main():
         from ctb.policies import load_ppo
         shutil.copy(os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
         parent = json.load(open(os.path.join(init, "config.json")))
-        parent.update(name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
+        parent.update(env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
                       random_start=args.random_start, eval_episodes=cfg["eval_episodes"])
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)
         norm = VecNormalize.load(os.path.join(init, "vecnormalize.pkl"), venv)
+        # inputs that never changed in the parent task (e.g. touch, unused in reach) have
+        # ~zero variance there; reset them so the new signal is not blown up to the clip limit
+        flat = norm.obs_rms.var < 1e-6
+        if flat.any():
+            norm.obs_rms.mean[flat], norm.obs_rms.var[flat] = 0.0, 1.0
+            print(f"[train] reset normalisation of {int(flat.sum())} input(s) unused in the parent task")
         model = load_ppo(out, os.path.join(init, "best_model.zip"), env=norm, device=args.device,
                          custom={"learning_rate": lr, "lr_schedule": (lambda _: lr)})
         if args.std:
