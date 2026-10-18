@@ -197,7 +197,7 @@ step (max 1): reach `1 - tanh(5 d)` to the block centre; +1 while held between b
 +2 x lift progress while held (lifting only counts while held, so pushing or flicking earns
 nothing); success = maximum.
 
-Checks (40 episodes each):
+Checks (40 episodes each; solved = lifted and held at the end of the episode, as in training, the evaluation chart, the videos and `fly eval`):
 
 | behaviour | return | solved |
 |---|---|---|
@@ -205,8 +205,8 @@ Checks (40 episodes each):
 | hover above the block (what the reach brain does) | 13 | 0 % |
 | touch the block with a closed gripper | 15 | 0 % |
 | grasp but never lift | 31 | 0 % |
-| scripted pilot + PPO-like noise (0.3) | 52 | 90 % |
-| scripted pilot | 66 | 95 % |
+| scripted pilot + PPO-like noise (0.3) | 52 | 78 % |
+| scripted pilot | 66 | 92 % |
 
 Training starts from the reach brain (`--init_from`; same inputs and outputs), which scores 14.5
 on lift at step 0, the "hover above" level.

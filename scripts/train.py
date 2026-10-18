@@ -66,6 +66,11 @@ def parse():
     ap.add_argument("--grasp_start", type=float, default=0.0,
                     help="panda_lift: share of TRAINING episodes that start with the gripper around the block "
                          "(half open, half already holding it)")
+    ap.add_argument("--set_std", type=float, default=None,
+                    help="resumed run: reset the exploration noise (action std) to this value, ONCE "
+                         "(remembered in the run folder, so a later restart does not reset it again)")
+    ap.add_argument("--set_lr", type=float, default=None,
+                    help="resumed run: change the learning rate from now on (e.g. 1e-4)")
     ap.add_argument("--edge_bias", type=float, default=0.0,
                     help="panda: share of TRAINING episodes with the block near the table edges / corners")
     # profile overrides
@@ -188,6 +193,20 @@ def main():
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
         print(f"[train] resumed from {locals().get('model_path_used', model_path)} at {model.num_timesteps} steps")
         reset = False
+        if args.set_lr:
+            from stable_baselines3.common.utils import get_schedule_fn
+            model.learning_rate = args.set_lr
+            model.lr_schedule = get_schedule_fn(args.set_lr)
+            print(f"[train] learning rate set to {args.set_lr}")
+        if args.set_std:
+            mark = os.path.join(out, f"std_reset_{args.set_std:g}.done")
+            if os.path.exists(mark):
+                print(f"[train] action std reset to {args.set_std:g} was already done earlier; keeping the learned value")
+            else:
+                with torch.no_grad():
+                    model.policy.log_std.fill_(float(np.log(args.set_std)))
+                open(mark, "w").write(str(model.num_timesteps))
+                print(f"[train] action std reset to {args.set_std:g} (once) at {model.num_timesteps:,} steps")
     else:
         venv = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
