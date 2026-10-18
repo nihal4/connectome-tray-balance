@@ -258,9 +258,18 @@ def main():
                            eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
                            log_path=out, best_model_save_path=out, deterministic=True, verbose=1)
     ev_file = os.path.join(out, "evaluations.npz")
+    old = None
     if not reset and os.path.exists(ev_file):
+        try:
+            old = np.load(ev_file)
+            if old["results"].ndim != 2 or old["results"].shape[1] != cfg["eval_episodes"]:
+                print("[train] evaluation history used a different number of episodes; starting it fresh")
+                old = None
+        except Exception as e:                       # unreadable (e.g. power cut during a save)
+            print(f"[train] evaluation history unreadable ({e}); starting it fresh")
+            old = None
+    if old is not None:
         # resumed run: keep the earlier evaluation history (otherwise the file restarts empty)
-        old = np.load(ev_file)
         keep = old["timesteps"] <= model.num_timesteps
         eval_cb.evaluations_timesteps = list(old["timesteps"][keep])
         eval_cb.evaluations_results = [list(r) for r in old["results"][keep]]
