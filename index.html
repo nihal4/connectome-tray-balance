@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fly-brain robot arm</title>
-<meta name="description" content="A robot arm in MuJoCo controlled by a network wired like the fruit-fly brain (FlyWire connectome): camera into the eye, commands out of the descending neurons.">
+<title>Fly-brain robots</title>
+<meta name="description" content="Robots in MuJoCo controlled by networks wired like the fruit-fly brain (FlyWire connectome): eyes into the fly's photoreceptors, commands out of its descending neurons. Tray, maze, drone and a Franka Panda arm.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
@@ -20,6 +20,10 @@
   --cmd: #b8700c;      /* descending, commands */
   --brain: #44515e;    /* optic lobe + central brain */
   --code-bg: #e9edf1;
+  --done: #138a7e;
+  --part: #b8700c;
+  --hold: #7a8794;
+  --now: #6b4fd8;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -33,10 +37,14 @@
     --cmd: #e7a640;
     --brain: #93a2b0;
     --code-bg: #1d2832;
+    --done: #4cc7b9;
+    --part: #e7a640;
+    --hold: #8d99a5;
+    --now: #a592ff;
   }
 }
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 body {
   margin: 0;
   background: var(--paper);
@@ -47,10 +55,10 @@ body {
 }
 a { color: inherit; text-decoration-color: var(--eye); text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
 a:hover { text-decoration-color: var(--cmd); }
-a:focus-visible, video:focus-visible { outline: 3px solid var(--eye); outline-offset: 3px; border-radius: 3px; }
+a:focus-visible, video:focus-visible, summary:focus-visible { outline: 3px solid var(--eye); outline-offset: 3px; border-radius: 3px; }
 
-.wrap { max-width: 44rem; margin: 0 auto; padding: 0 1.25rem; }
-.wide { max-width: 62rem; margin: 0 auto; padding: 0 1.25rem; }
+.wrap { max-width: 62rem; margin: 0 auto; padding: 0 1rem; }
+.prose > p, .prose > ul, .prose > ol, .narrow { max-width: 44rem; }
 
 h1, h2, h3 {
   font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
@@ -59,145 +67,196 @@ h1, h2, h3 {
   letter-spacing: -0.01em;
   margin: 0;
 }
-h1 { font-size: clamp(2.3rem, 6.2vw, 4.1rem); font-weight: 800; max-width: 15ch; }
-h2 { font-size: clamp(1.6rem, 3.4vw, 2.1rem); font-weight: 750; margin-top: 4.5rem; }
-h3 { font-size: 1.2rem; font-weight: 700; font-stretch: 90%; margin-top: 2.2rem; }
-p { margin: 1rem 0 0; }
-.lede { font-size: 1.22rem; line-height: 1.6; color: var(--muted); max-width: 36rem; margin-top: 1.4rem; }
+h1 { font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 800; max-width: 16ch; }
+h2 { font-size: clamp(1.5rem, 3.2vw, 2rem); font-weight: 750; margin-top: 4rem; }
+h3 { font-size: 1.25rem; font-weight: 700; font-stretch: 90%; }
+p { margin: 0.9rem 0 0; }
+.lede { font-size: 1.18rem; line-height: 1.6; color: var(--muted); max-width: 40rem; margin-top: 1.3rem; }
 
-header.top { padding-top: 3.5rem; }
-.byline { font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.95rem; color: var(--muted); margin-top: 1.5rem; }
+header.top { padding-top: 3.2rem; }
+.byline { font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.95rem; color: var(--muted); margin-top: 1.3rem; }
 .byline a { margin-right: 1.1rem; }
-
-/* hero video */
-.hero { margin-top: 2.5rem; }
-figure { margin: 0; }
-video, .plot { display: block; width: 100%; height: auto; border-radius: 6px; background: #000; }
-.plot { background: #fff; border: 1px solid var(--rule); }
-figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 0.6rem; line-height: 1.5; max-width: 44rem; }
 
 /* coloured neuron classes used in text */
 .eye  { color: var(--eye);  font-weight: 600; }
 .bod  { color: var(--body); font-weight: 600; }
 .cmd  { color: var(--cmd);  font-weight: 600; }
 
-/* pathway diagram */
-.pathway { margin-top: 2rem; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1.2rem 1rem 1rem; }
-.pathway { overflow-x: auto; }
-.pathway svg { width: 100%; min-width: 560px; height: auto; display: block; }
-.pathway text { font-family: "Archivo", sans-serif; font-stretch: 85%; fill: var(--ink); }
-.pathway .small { fill: var(--muted); font-size: 12px; }
+/* task index */
+.index { list-style: none; padding: 0; margin: 2rem 0 0; display: grid; gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14.5rem), 1fr)); }
+.index a { display: flex; gap: 0.6rem; align-items: baseline; text-decoration: none; padding: 0.55rem 0.75rem;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; height: 100%;
+  font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.95rem; line-height: 1.3; }
+.index a:hover { border-color: var(--muted); }
+.index .n { font-weight: 800; color: var(--muted); min-width: 1.1rem; }
+.index .t { flex: 1; font-weight: 600; }
+
+/* status tags: always icon + word, never colour alone */
+.tag { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap;
+  font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.78rem; font-weight: 700;
+  letter-spacing: 0.02em; text-transform: uppercase; }
+.tag::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: currentColor; }
+.tag.done { color: var(--done); }
+.tag.part { color: var(--part); }
+.tag.hold { color: var(--hold); }
+.tag.hold::before { background: none; border: 2px solid currentColor; width: 0.45rem; height: 0.45rem; }
+.tag.now  { color: var(--now); }
+.tag.next { color: var(--muted); }
+.tag.next::before { background: none; border: 2px dashed currentColor; width: 0.45rem; height: 0.45rem; }
+
+/* one section per task */
+section.task { margin-top: 3.2rem; padding-top: 1.6rem; border-top: 1px solid var(--rule); }
+.task-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.9rem; }
+.task-head .num { font-family: "Archivo", sans-serif; font-weight: 800; font-stretch: 75%; font-size: 1.9rem;
+  line-height: 1; color: var(--muted); opacity: 0.55; }
+.task-head h3 { flex: 0 1 auto; }
+.facts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.9rem; padding: 0; list-style: none; }
+.facts li { font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.85rem; background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 999px; padding: 0.15rem 0.7rem; }
+.facts b { font-variant-numeric: tabular-nums; }
+
+/* gallery */
+.gallery { display: grid; gap: 0.8rem; margin-top: 1.1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); }
+.gallery figure { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden;
+  display: flex; flex-direction: column; }
+.gallery .w2 { grid-column: span 2; }
+@media (max-width: 560px) {
+  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+  .gallery figcaption { font-size: 0.76rem; padding: 0.4rem 0.5rem 0.5rem; }
+}
+.gallery video { display: block; width: 100%; aspect-ratio: 4 / 3; background: #000; object-fit: contain; }
+.gallery .w2 video { aspect-ratio: 8 / 3; }
+.gallery a.plot { display: flex; align-items: center; flex: 1; background: #fff; }
+.gallery a.plot img { width: 100%; height: auto; display: block; }
+.gallery figcaption { font-size: 0.82rem; line-height: 1.45; color: var(--muted); padding: 0.5rem 0.65rem 0.65rem; }
+.gallery figcaption b { color: var(--ink); font-weight: 600; }
+
+/* details */
+details { margin-top: 1rem; max-width: 44rem; }
+summary { cursor: pointer; font-family: "Archivo", sans-serif; font-stretch: 90%; font-weight: 650; font-size: 0.95rem; color: var(--muted); }
+summary:hover { color: var(--ink); }
+details[open] summary { margin-bottom: 0.3rem; }
 
 /* tables */
-table { width: 100%; border-collapse: collapse; margin-top: 1.2rem; font-size: 0.95rem; }
-th, td { text-align: left; padding: 0.55rem 0.6rem 0.55rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.45rem 0.6rem 0.45rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
 th { font-family: "Archivo", sans-serif; font-stretch: 90%; font-weight: 650; }
 td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .yes { color: var(--body); font-weight: 600; }
 .no  { color: var(--cmd);  font-weight: 600; }
 
-/* experiment log: a real sequence, so it is numbered */
-ol.log { list-style: none; padding: 0; margin: 2rem 0 0; counter-reset: run; }
-ol.log > li { counter-increment: run; position: relative; padding-left: 3.2rem; margin-top: 3rem; }
-ol.log > li::before {
-  content: counter(run);
-  position: absolute; left: 0; top: -0.15rem;
-  font-family: "Archivo", sans-serif; font-weight: 800; font-stretch: 75%;
-  font-size: 2.2rem; line-height: 1; color: var(--muted); opacity: 0.45;
-}
-.stack { margin-top: 1.2rem; display: grid; gap: 1.4rem; }
-@media (max-width: 640px) {
-  ol.log > li { padding-left: 0; }
-  ol.log > li::before { position: static; display: block; margin-bottom: 0.4rem; }
-}
+/* success map (sequential: one hue, light to dark, number in every cell) */
+.maps { display: flex; flex-wrap: wrap; gap: 1.2rem 2rem; margin-top: 1.1rem; padding: 1rem; background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 8px; }
+.map h4 { margin: 0 0 0.5rem; font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.95rem; font-weight: 650; }
+.map h4 span { color: var(--muted); font-weight: 500; }
+.grid5 { display: grid; grid-template-columns: auto repeat(5, 2.3rem); gap: 2px; align-items: center;
+  font-family: "Archivo", sans-serif; font-stretch: 90%; font-size: 0.78rem; }
+.grid5 .lab { color: var(--muted); padding-right: 0.4rem; text-align: right; }
+.grid5 .col { color: var(--muted); text-align: center; font-size: 0.72rem; }
+.c { height: 2.3rem; display: grid; place-items: center; border-radius: 4px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--ink); background: color-mix(in oklab, var(--body) var(--p), var(--panel)); }
+.c.hi { color: var(--panel); }
+@media (prefers-color-scheme: dark) { .c.v5 { color: var(--panel); } }
+.v1 { --p: 14%; } .v2 { --p: 26%; } .v3 { --p: 40%; } .v4 { --p: 55%; } .v5 { --p: 72%; } .v6 { --p: 90%; }
+.maps .key { flex-basis: 100%; font-size: 0.82rem; color: var(--muted); margin: 0; }
 
-pre {
-  background: var(--code-bg); border-radius: 6px; padding: 1rem 1.1rem; overflow-x: auto;
-  font-size: 0.85rem; line-height: 1.55; margin-top: 1.2rem;
-}
+/* pathway diagram */
+.pathway { margin-top: 1.5rem; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1.2rem 1rem 1rem; overflow-x: auto; max-width: 48rem; }
+.pathway svg { width: 100%; min-width: 560px; height: auto; display: block; }
+.pathway text { font-family: "Archivo", sans-serif; font-stretch: 85%; fill: var(--ink); }
+.pathway .small { fill: var(--muted); font-size: 12px; }
+
+/* roadmap */
+ol.road { margin: 1rem 0 0; padding: 0; list-style: none; max-width: 44rem; counter-reset: r; }
+ol.road li { counter-increment: r; display: grid; grid-template-columns: 2rem 1fr; gap: 0 0.4rem; padding: 0.55rem 0; border-bottom: 1px solid var(--rule); }
+ol.road li::before { content: counter(r); font-family: "Archivo", sans-serif; font-weight: 800; color: var(--muted); }
+ol.road b { font-family: "Archivo", sans-serif; font-stretch: 90%; }
+ol.road span.why { grid-column: 2; font-size: 0.9rem; color: var(--muted); }
+
+pre { background: var(--code-bg); border-radius: 6px; padding: 1rem 1.1rem; overflow-x: auto;
+  font-size: 0.85rem; line-height: 1.55; margin-top: 1.1rem; max-width: 48rem; }
 code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
 p code, li code, td code { background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 3px; }
 
 footer { margin-top: 5rem; padding: 2rem 0 3rem; border-top: 1px solid var(--rule); font-size: 0.9rem; color: var(--muted); }
-footer p { margin-top: 0.6rem; }
+footer p { margin-top: 0.6rem; max-width: 44rem; }
 
-@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
 
 <header class="top wrap">
-  <h1>A robot arm run by the wiring of a fly's brain</h1>
-  <p class="lede">The arm sees the tray through a camera wired into a fruit fly's
-    <span class="eye">eye neurons</span>, feels its joints through the fly's
-    <span class="bod">body-sense neurons</span>, and moves through the fly's
-    <span class="cmd">command neurons</span>. Everything in between is the real
-    connection map of the fly brain.</p>
+  <h1>Robots run by the wiring of a fly's brain</h1>
+  <p class="lede">Each robot sees through a fruit fly's <span class="eye">eye neurons</span>, feels its
+    body through the fly's <span class="bod">body-sense neurons</span> and moves through the fly's
+    <span class="cmd">command neurons</span>. Everything in between follows the real connection
+    map of the fly brain. Only the connection strengths are learned.</p>
   <p class="byline">
     <a href="https://github.com/nihal4/connectome-tray-balance">Code on GitHub</a>
+    <a href="#roadmap">What's next</a>
     <a href="#run-it">Run it yourself</a>
     <span>by S. M. Nihal Ahmed</span>
   </p>
+
+  <ul class="index" aria-label="Tasks so far">
+    <li><a href="#t1"><span class="n">1</span><span class="t">Balance a ball (numbers)</span><span class="tag done">Done</span></a></li>
+    <li><a href="#t2"><span class="n">2</span><span class="t">Tilt maze (numbers)</span><span class="tag part">Partly</span></a></li>
+    <li><a href="#t3"><span class="n">3</span><span class="t">Balance a ball by camera</span><span class="tag done">Done</span></a></li>
+    <li><a href="#t4"><span class="n">4</span><span class="t">Tilt maze by camera</span><span class="tag done">Done</span></a></li>
+    <li><a href="#t5"><span class="n">5</span><span class="t">Drone with compound eyes</span><span class="tag hold">On hold</span></a></li>
+    <li><a href="#t6"><span class="n">6</span><span class="t">Panda arm: reach a block</span><span class="tag done">Done</span></a></li>
+    <li><a href="#t7"><span class="n">7</span><span class="t">Panda arm: grasp and lift</span><span class="tag now">Training</span></a></li>
+    <li><a href="#roadmap"><span class="n">8+</span><span class="t">Sorting, smell, fruit</span><span class="tag next">Planned</span></a></li>
+  </ul>
 </header>
 
-<section class="hero wide">
-  <figure>
-    <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_clean.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_clean.jpg"
-           autoplay muted loop playsinline controls preload="metadata"
-           aria-label="Robot arm keeping a red ball on a tray; a small inset shows the 16 by 16 camera image the brain receives"></video>
-    <figcaption>The fly-brain network keeping the ball on the tray for the full 10 seconds (Kaggle run).
-      Top left: the 16×16 camera image it receives. It is never told where the ball is.</figcaption>
-  </figure>
-</section>
+<main class="wrap prose">
 
-<main class="wrap">
-
-  <h2>How the robot is wired</h2>
+  <h2>How the robots are wired</h2>
   <p>The fly brain has been mapped neuron by neuron: about 139,000 neurons and 15 million
-    connections (<a href="https://codex.flywire.ai">FlyWire</a>). For this robot I take
-    2,500 of them that lie on the real pathways from the eye to the brain's command neurons,
-    keep who connects to whom and whether each connection excites or inhibits, and train only
-    the connection strengths with reinforcement learning.</p>
+    connections (<a href="https://codex.flywire.ai">FlyWire</a>). For each robot I take the few
+    thousand neurons that lie on the real pathways from the fly's eye and body sense to its
+    command neurons, keep who connects to whom and whether each connection excites or
+    inhibits, and train only the connection strengths with reinforcement learning.</p>
 
-  <div class="pathway" role="img" aria-label="Diagram: camera feeds 512 photoreceptors, then optic lobe, visual projection and central brain neurons, then 64 descending neurons that drive the arm. Joint sensors feed 64 ascending neurons, which also reach the descending neurons.">
+  <div class="pathway" role="img" aria-label="Diagram: the eye feeds photoreceptors, then optic lobe, visual projection and central brain neurons, then descending neurons that drive the robot. Body sensors feed ascending neurons, which also reach the descending neurons.">
     <svg viewBox="0 0 740 260" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
         </marker>
       </defs>
-      <!-- robot side -->
-      <text x="8" y="70" font-size="14" font-weight="600">Camera</text>
-      <text x="8" y="88" class="small">16×16 image</text>
-      <text x="8" y="178" font-size="14" font-weight="600">Joints</text>
-      <text x="8" y="196" class="small">angles, tilt</text>
-      <text x="660" y="125" font-size="14" font-weight="600">Arm</text>
-      <text x="660" y="143" class="small">5 motors</text>
+      <text x="8" y="70" font-size="14" font-weight="600">Eyes</text>
+      <text x="8" y="88" class="small">camera or</text>
+      <text x="8" y="102" class="small">compound eye</text>
+      <text x="8" y="178" font-size="14" font-weight="600">Body</text>
+      <text x="8" y="196" class="small">position, touch</text>
+      <text x="660" y="125" font-size="14" font-weight="600">Robot</text>
+      <text x="660" y="143" class="small">arm or drone</text>
 
-      <!-- eye -->
       <rect x="130" y="45" width="120" height="56" rx="6" fill="none" stroke="var(--eye)" stroke-width="2.5"/>
       <text x="190" y="70" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--eye)">Eye</text>
-      <text x="190" y="88" class="small" text-anchor="middle">512 photoreceptors</text>
+      <text x="190" y="88" class="small" text-anchor="middle">photoreceptors</text>
 
-      <!-- brain -->
       <rect x="285" y="25" width="200" height="160" rx="10" fill="none" stroke="var(--brain)" stroke-width="1.5" stroke-dasharray="4 4"/>
       <text x="385" y="56" font-size="13" font-weight="600" text-anchor="middle">Optic lobe</text>
       <text x="385" y="90" font-size="13" font-weight="600" text-anchor="middle">Visual projection</text>
       <text x="385" y="124" font-size="13" font-weight="600" text-anchor="middle">Central brain</text>
-      <text x="385" y="164" class="small" text-anchor="middle">~1,900 pathway neurons</text>
+      <text x="385" y="164" class="small" text-anchor="middle">2,000–4,000 pathway neurons</text>
       <path d="M385 62 V75 M385 96 V109" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
 
-      <!-- body sense -->
       <rect x="130" y="155" width="120" height="56" rx="6" fill="none" stroke="var(--body)" stroke-width="2.5"/>
       <text x="190" y="180" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--body)">Body sense</text>
-      <text x="190" y="198" class="small" text-anchor="middle">64 ascending</text>
+      <text x="190" y="198" class="small" text-anchor="middle">ascending neurons</text>
 
-      <!-- commands -->
       <rect x="525" y="100" width="115" height="56" rx="6" fill="none" stroke="var(--cmd)" stroke-width="2.5"/>
       <text x="582" y="125" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--cmd)">Commands</text>
-      <text x="582" y="143" class="small" text-anchor="middle">64 descending</text>
+      <text x="582" y="143" class="small" text-anchor="middle">descending neurons</text>
 
-      <!-- arrows -->
       <path d="M100 74 H126" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
       <path d="M100 183 H126" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
       <path d="M250 73 H281" stroke="var(--eye)" stroke-width="2" marker-end="url(#ah)"/>
@@ -208,69 +267,98 @@ footer p { margin-top: 0.6rem; }
     </svg>
   </div>
 
-  <p>Each camera pixel drives exactly one <span class="eye">photoreceptor</span>
-    (R8 cells get the current frame, R7 cells the previous one, so motion is visible).
-    The arm's joint readings go into <span class="bod">ascending neurons</span>, the channel
-    that normally carries body sensation up to the fly's brain. The arm is driven from
-    <span class="cmd">descending neurons</span>, the brain's outgoing commands. A small learned
-    layer translates those commands into the arm's five motors.</p>
+  <p>The eye drives the fly's <span class="eye">photoreceptors</span>: in the first robots one
+    camera pixel per photoreceptor, in the drone and the Panda arm a fly-like compound eye whose
+    facets feed the R1–6, R7 (ultraviolet) and R8 (green) cells. Body readings go into
+    <span class="bod">ascending neurons</span>, the channel that normally carries body sensation up
+    to the fly's brain. The robot is driven from <span class="cmd">descending neurons</span>, the
+    brain's outgoing commands.</p>
+  <p>Every task below is a single training run, so read the numbers as first results, not a
+    benchmark. The videos are short; each one has full-screen in its controls.</p>
 
-  <h2>What happened, run by run</h2>
-  <p>A record of the experiments so far, including the ones that went badly. All are single
-    runs, so read the numbers as first results, not a benchmark.</p>
+  <!-- 1 ------------------------------------------------------------------ -->
+  <section class="task" id="t1">
+    <div class="task-head"><span class="num">1</span><h3>Balance a ball on a tray, given its position as numbers</h3><span class="tag done">Done</span></div>
+    <p>The first network used the 1,000 most connected fly neurons, with inputs and outputs picked
+      by me rather than by biology. It learned to keep a rolling ball on a flat tray in about 100,000
+      steps and coped with noise, pushes and a heavier ball. An easy start, so the tasks got harder.</p>
+    <ul class="facts"><li>Full 10 s from <b>~100k</b> steps</li><li>Robust to noise, pushes, heavy ball</li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v1_tray_balance/connectome_policy.mp4" poster="results/v1_tray_balance/poster.jpg" controls muted loop playsinline preload="none"
+               aria-label="Robot arm balancing a ball on a flat tray"></video>
+        <figcaption><b>Balancing</b> the ball for the full 10 seconds.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v1_tray_balance/curves.png"><img src="results/v1_tray_balance/curves.png" alt="Learning curve: the network reaches the full 500 steps by 100k training steps" loading="lazy"></a>
+        <figcaption><b>Learning curve</b>: full episodes from about 100k steps.</figcaption>
+      </figure>
+    </div>
+  </section>
 
-  <ol class="log">
-    <li>
-      <h3>Balancing a ball, given the ball's position as numbers</h3>
-      <p>The first network used the 1,000 most connected fly neurons with inputs and outputs
-        picked by me, not by biology. It learned to keep a rolling ball on a flat tray in about
-        100,000 steps and stayed robust to noise, pushes and a heavier ball. It only failed when
-        the ball was hidden from it. An easy start, so the tasks got harder.</p>
-      <div class="stack">
-        <figure>
-          <video src="results/v1_tray_balance/connectome_policy.mp4" poster="results/v1_tray_balance/poster.jpg" controls muted loop playsinline preload="metadata"
-                 aria-label="Robot arm balancing a ball on a flat tray"></video>
-          <figcaption>Fly-wired network balancing the ball.</figcaption>
-        </figure>
-        <figure>
-          <img class="plot" src="results/v1_tray_balance/curves.png" alt="Learning curve: the network reaches the full 500 steps by 100k training steps" loading="lazy">
-          <figcaption>Learning curve: the full 10 seconds from about 100,000 steps.</figcaption>
-        </figure>
-      </div>
-    </li>
+  <!-- 2 ------------------------------------------------------------------ -->
+  <section class="task" id="t2">
+    <div class="task-head"><span class="num">2</span><h3>A tilt-maze puzzle, given the ball's position as numbers</h3><span class="tag part">Partly</span></div>
+    <p>Like the wooden labyrinth toy: tilt the board so the ball rolls round the walls into the green
+      goal, and stop it there. The network gets the wall layout but not the route. On one fixed maze
+      it reached 30–40 % after a million steps, still rising; new random mazes were too hard.</p>
+    <ul class="facts"><li>Fixed maze: <b>30–40 %</b> at 1M steps</li><li>Random mazes: not yet</li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/previews/maze4_scripted_solver.mp4" poster="results/previews/maze4.png" controls muted loop playsinline preload="none"
+               aria-label="A scripted controller rolling the ball through a 4 by 4 maze with holes"></video>
+        <figcaption><b>The puzzle</b>, shown by a scripted controller that knows the route.</figcaption>
+      </figure>
+      <figure class="w2">
+        <video src="results/v2_maze_fixed3_local/connectome_attempts.mp4" poster="results/v2_maze_fixed3_local/poster.jpg" controls muted loop playsinline preload="none"
+               aria-label="Two attempts side by side: one reaches the goal but cannot stop, one gets stuck halfway"></video>
+        <figcaption><b>Fly-wired attempts</b>: left, reaches the goal but cannot hold the ball still; right, stuck halfway.</figcaption>
+      </figure>
+    </div>
+    <details>
+      <summary>Shortcuts it found, and how they were closed</summary>
+      <p>It learned to flick the ball over the walls (fixed with a glass lid), and to hover in and out
+        of the goal to collect reward (fixed by taking the resting reward back if the ball leaves).</p>
+    </details>
+  </section>
 
-    <li>
-      <h3>A tilt-maze puzzle</h3>
-      <p>Like the wooden labyrinth toy: roll the ball around the walls to the green goal and
-        stop it there. The network gets the wall layout but not the route. Along the way it found
-        two shortcuts I had to close: flicking the ball over the walls (now there is a glass lid)
-        and hovering in and out of the goal to collect reward (now the reward for resting is taken
-        back if the ball leaves).</p>
-      <div class="stack">
-        <figure>
-          <video src="results/previews/maze4_scripted_solver.mp4" poster="results/previews/maze4.png" controls muted loop playsinline preload="metadata"
-                 aria-label="A scripted controller rolling the ball through a 4 by 4 maze with holes"></video>
-          <figcaption>A scripted controller that knows the route, showing the puzzle (4×4 maze with holes).</figcaption>
-        </figure>
-        <figure>
-          <video src="results/v2_maze_fixed3_local/connectome_attempts.mp4" poster="results/v2_maze_fixed3_local/poster.jpg" controls muted loop playsinline preload="metadata"
-                 aria-label="Two attempts side by side: one reaches the goal but cannot stop, one gets stuck halfway"></video>
-          <figcaption>The fly-wired network's attempts: left, it reaches the goal but cannot hold the ball still; right, it gets stuck halfway.</figcaption>
-        </figure>
-      </div>
-      <p>On one fixed maze the fly-wired network learns slowly: its first solves appear after a few
-        hundred thousand steps and it reached 30 to 40 % by a million steps, still rising. It has not
-        learned to solve new, random mazes yet.</p>
-    </li>
-
-    <li>
-      <h3>Wired like a fly, seeing with a camera</h3>
-      <p>Then the robot was rewired through the fly's own channels, as in the diagram above, and the
-        ball's position was taken away: the network only gets the camera image and its joints. In the
-        full run (1 million steps on Kaggle, about 3 hours) it held the ball for a second or two at
-        first, then from 250,000 steps on it kept it for the full 10 seconds and stayed there.</p>
+  <!-- 3 ------------------------------------------------------------------ -->
+  <section class="task" id="t3">
+    <div class="task-head"><span class="num">3</span><h3>Balance a ball by camera, wired like a fly</h3><span class="tag done">Done</span></div>
+    <p>Then the robot was rewired through the fly's own channels, as in the diagram, and the ball's
+      position was taken away: the brain gets only a 16×16 camera image and its joints. From 250,000
+      steps on it kept the ball for the full 10 seconds, also with a heavier ball and random shoves.</p>
+    <ul class="facts"><li>Normal, heavy ball, pushes: <b>100 %</b></li><li>Ball hidden: <b>0 %</b></li><li>Camera noise: <b>0 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_clean.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_clean.jpg" controls muted loop playsinline preload="none"
+               aria-label="Robot arm keeping a red ball on a tray; a small inset shows the 16 by 16 camera image the brain receives"></video>
+        <figcaption><b>Balancing by sight.</b> Top left: the 16×16 image the brain receives.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_heavy_ball.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_heavy_ball.jpg" controls muted loop playsinline preload="none"
+               aria-label="The arm balancing a dark grey ball three times heavier than in training"></video>
+        <figcaption><b>3× heavier ball</b> (dark grey), never seen in training.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_push.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_push.jpg" controls muted loop playsinline preload="none"
+               aria-label="The arm recovering from random shoves on the ball; the frame flashes red at each shove"></video>
+        <figcaption><b>Random shoves</b> (red flash): it recovers every time.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v4_flyrobot_tray_vision_local/flyrobot_balances_by_vision.mp4" poster="results/v4_flyrobot_tray_vision_local/poster.jpg" controls muted loop playsinline preload="none"
+               aria-label="An earlier, shorter laptop run of the same camera-driven brain balancing the ball"></video>
+        <figcaption><b>First laptop run</b>, before the full Kaggle run.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v5_flyrobot_tray_vision_kaggle/curves.png"><img src="results/v5_flyrobot_tray_vision_kaggle/curves.png" alt="Learning curve: episode length jumps to the full 500 steps at 250k training steps and stays there to 1 million" loading="lazy"></a>
+        <figcaption><b>Learning curve</b>: full episodes from 250k steps.</figcaption>
+      </figure>
+    </div>
+    <details>
+      <summary>All tests</summary>
       <table>
-        <thead><tr><th>Test (10 new episodes)</th><th>Kept the ball for 10 s</th><th>Mean steps (of 500)</th></tr></thead>
+        <thead><tr><th>Test (10 new episodes)</th><th>Kept the ball 10 s</th><th>Mean steps (of 500)</th></tr></thead>
         <tbody>
           <tr><td>Normal conditions</td><td class="num yes">100 %</td><td class="num">500</td></tr>
           <tr><td>Ball three times heavier</td><td class="num yes">100 %</td><td class="num">500</td></tr>
@@ -280,59 +368,47 @@ footer p { margin-top: 0.6rem; }
           <tr><td>Ball removed from the camera image</td><td class="num no">0 %</td><td class="num">28</td></tr>
         </tbody>
       </table>
-      <p>The last row matters most: without seeing the ball it fails at once, so it really is
-        steering by what comes through its eye. Its weak spot is a noisy picture, which it never saw
-        while learning.</p>
-      <div class="stack">
-        <figure>
-          <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_heavy_ball.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_heavy_ball.jpg" controls muted loop playsinline preload="metadata"
-                 aria-label="The arm balancing a dark grey ball three times heavier than in training"></video>
-          <figcaption>A ball three times heavier than in training (drawn dark grey).</figcaption>
-        </figure>
-        <figure>
-          <video src="results/v5_flyrobot_tray_vision_kaggle/tray_vision_push.mp4" poster="results/v5_flyrobot_tray_vision_kaggle/poster_push.jpg" controls muted loop playsinline preload="metadata"
-                 aria-label="The arm recovering from random shoves on the ball; the frame flashes red at each shove"></video>
-          <figcaption>Random shoves on the ball: the frame flashes red at each one, and the brain recovers every time.</figcaption>
-        </figure>
-        <figure>
-          <img class="plot" src="results/v5_flyrobot_tray_vision_kaggle/curves.png" alt="Learning curve: episode length jumps to the full 500 steps at 250k training steps and stays there to 1 million" loading="lazy">
-          <figcaption>Learning curve of the camera-driven fly-brain network (Kaggle run).</figcaption>
-        </figure>
-      </div>
-    </li>
+      <p>Without seeing the ball it fails at once, so it really steers by what comes through its eye.
+        Its weak spot is a noisy picture, which it never saw while learning.</p>
+    </details>
+  </section>
 
-    <li>
-      <h3>The maze, seen only through the camera: solved</h3>
-      <p>The same fly-robot brain then had to solve the tilt maze with nothing but its eye: see the
-        walls, the goal and the ball in a 16×16 picture, find the way round and stop the ball in the goal.</p>
-      <p>First try (fast motors): it learned the route and rolled the ball to the goal in under a
-        second, but pinned it in the corner of the goal cell instead of stopping it in the middle, so
-        no maze counted as solved, even after 2 million steps.</p>
-      <p>Second try: <strong>slower, smoother motors</strong> (like servos with a speed limit, so the
-        ball moves about three times slower) and practice starts partway along the route. Nothing in
-        the brain changed. First solve at 350,000 steps, every test maze solved from 1.1 million
-        steps, and by 2 million it finishes in about 2.6 seconds and stops the ball in the centre.</p>
-      <div class="stack">
-        <figure>
-          <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_clean.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_clean.jpg" controls muted loop playsinline preload="metadata"
-                 aria-label="The arm tilts the maze so the red ball rolls around the inner walls into the green goal and stops in its centre"></video>
-          <figcaption>Solved in 136 steps (2.7 s). Top left: the camera image the brain receives.</figcaption>
-        </figure>
-        <figure>
-          <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_heavy_ball.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_heavy_ball.jpg" controls muted loop playsinline preload="metadata"
-                 aria-label="The same maze with a dark grey ball three times heavier; the arm still brings it into the goal and stops it"></video>
-          <figcaption>A ball three times heavier than in training (dark grey): still solved, in 159 steps.</figcaption>
-        </figure>
-        <figure>
-          <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_push.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_push.jpg" controls muted loop playsinline preload="metadata"
-                 aria-label="Random shoves knock the ball around the maze, the frame flashing red at each one; the arm recovers and still brings the ball into the goal"></video>
-          <figcaption>Random shoves (the frame flashes red): knocked off course several times, it recovers and still finishes, in 244 steps. Over 10 episodes it succeeds 60 % of the time.</figcaption>
-        </figure>
-        <figure>
-          <img class="plot" src="results/v7_maze_vision_slow_kaggle/curves.png" alt="Learning curves: solved rate rises from 0 at 300k steps to 100 percent at 1.1 million and stays there from 1.65 million; episode length falls from 300 to about 130 steps" loading="lazy">
-          <figcaption>Learning curves of the camera maze run with slow motors (Kaggle, 2 million steps).</figcaption>
-        </figure>
-      </div>
+  <!-- 4 ------------------------------------------------------------------ -->
+  <section class="task" id="t4">
+    <div class="task-head"><span class="num">4</span><h3>The tilt maze, seen only through the camera</h3><span class="tag done">Done</span></div>
+    <p>The same camera brain had to see the walls, goal and ball in a 16×16 picture, find the way
+      round and stop the ball in the goal. With fast motors it pinned the ball in the goal's corner and
+      never counted as solved. With <strong>slower, smoother motors</strong> and practice starts along
+      the route, it solved every test from 1.1M steps, in about 2.6 seconds.</p>
+    <ul class="facts"><li>Trained maze: <b>100 %</b></li><li>Heavy ball: <b>100 %</b></li><li>Pushes: <b>60 %</b></li><li>New mazes: <b>0 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_clean.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_clean.jpg" controls muted loop playsinline preload="none"
+               aria-label="The arm tilts the maze so the red ball rolls around the inner walls into the green goal and stops in its centre"></video>
+        <figcaption><b>Solved</b> in 136 steps (2.7 s).</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_heavy_ball.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_heavy_ball.jpg" controls muted loop playsinline preload="none"
+               aria-label="The same maze with a dark grey ball three times heavier; the arm still brings it into the goal and stops it"></video>
+        <figcaption><b>3× heavier ball</b>: still solved, 159 steps.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v7_maze_vision_slow_kaggle/maze_fixed3_vision_push.mp4" poster="results/v7_maze_vision_slow_kaggle/poster_push.jpg" controls muted loop playsinline preload="none"
+               aria-label="Random shoves knock the ball around the maze, the frame flashing red at each one; the arm recovers and still brings the ball into the goal"></video>
+        <figcaption><b>Random shoves</b>: knocked off course, still finishes.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v6_maze_vision_kaggle/pinned_in_goal_corner.mp4" poster="results/v6_maze_vision_kaggle/poster.jpg" controls muted loop playsinline preload="none"
+               aria-label="First try with fast motors: the ball reaches the goal but is pinned in its corner"></video>
+        <figcaption><b>First try, fast motors</b>: right route, ball pinned in the goal's corner.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v7_maze_vision_slow_kaggle/curves.png"><img src="results/v7_maze_vision_slow_kaggle/curves.png" alt="Learning curves: solved rate rises from 0 at 300k steps to 100 percent at 1.1 million; episode length falls from 300 to about 130 steps" loading="lazy"></a>
+        <figcaption><b>Learning curves</b> with slow motors (2M steps).</figcaption>
+      </figure>
+    </div>
+    <details>
+      <summary>All tests</summary>
       <table>
         <thead><tr><th>Test (10 episodes)</th><th>Solved</th><th>Mean steps (of 300)</th></tr></thead>
         <tbody>
@@ -344,54 +420,174 @@ footer p { margin-top: 0.6rem; }
           <tr><td>Mazes it has never seen</td><td class="num no">0 %</td><td class="num">300</td></tr>
         </tbody>
       </table>
-      <p>It steers by what it sees (it fails when the ball is hidden), but it has memorised this one
-        maze rather than learned to read walls: new mazes defeat it. That is the next test, training
-        on a new random maze every episode.</p>
-    </li>
+      <p>It steers by what it sees, but it memorised this one maze rather than learning to read walls.
+        Training on a new random maze every episode stalled, which is one reason the project moved to
+        a real robot arm with more varied but simpler tasks.</p>
+    </details>
+  </section>
 
-    <li>
-      <h3>A drone with a fly's compound eyes (on hold)</h3>
-      <p>A fly's brain evolved to steer flight, so the next robot is a small quadcopter. It sees
-        through two compound eyes of 160 facets each, covering almost every direction, each facet
-        a blurry spot as in a real fly. Every facet feeds its own three photoreceptors in the fly
-        wiring: R1–6 (brightness, the input to motion and looming detection), R7 (ultraviolet) and
-        R8 (green). A simple stabiliser keeps the drone level, the job a fly's halteres do outside
-        the brain. The fly-brain network (4,000 neurons) decides where to fly.</p>
-      <p>First task: a yellow ball appears somewhere new in a room each time; find it by eye, fly
-        to it and hover on it. Training already includes wind, gusts, a noisy eye, a slightly
-        different drone each time and blue decoy balls, so there is nothing to memorise and no
-        perfect world to get used to.</p>
-      <p>Checked before training: a hand-written pilot that sees only what the compound eye sees
-        finds and reaches the ball in 83 % of rooms, so the eye carries enough information; with
-        the ball made invisible it never succeeds, and hovering or random flying solve none. A first
-        version painted the floor green: the yellow ball was camouflaged against it, much as a
-        flower can be in grass, so the room is now grey. First run (600k steps): it learned to stay
-        in the air and sometimes reach the ball from close by, but rarely from far away. Paused for now.</p>
-    </li>
+  <!-- 5 ------------------------------------------------------------------ -->
+  <section class="task" id="t5">
+    <div class="task-head"><span class="num">5</span><h3>A drone with a fly's compound eyes</h3><span class="tag hold">On hold</span></div>
+    <p>A fly's brain evolved to steer flight, so the next robot was a small quadcopter seeing through
+      two compound eyes of 160 facets each, covering almost every direction. A simple stabiliser keeps
+      it level, the job a fly's halteres do outside the brain; the 4,000-neuron fly brain decides where
+      to fly. Task: find a yellow ball somewhere in a room, among blue decoys, in wind and gusts, and
+      hover on it.</p>
+    <ul class="facts"><li>Eye-only pilot: <b>83 %</b></li><li>Ball invisible: <b>0 %</b></li><li>Brain at 600k: reaches close balls, rarely far ones</li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/previews/drone_eye_only_pilot.mp4" poster="results/previews/drone_eye_only_pilot.jpg" controls muted loop playsinline preload="none"
+               aria-label="A drone in a grey room turns towards a yellow ball and flies to it; the strip at the top shows the two compound-eye images"></video>
+        <figcaption><b>The task</b>, flown by a hand-written pilot that sees only the two compound-eye images (top strip), not the fly brain.</figcaption>
+      </figure>
+    </div>
+    <details>
+      <summary>What was learned building it</summary>
+      <p>A first version painted the floor green: the yellow ball was camouflaged against it, much as a
+        flower can be in grass, so the room is now grey. A penalty for jerky commands punished the
+        network's own exploration and stalled learning, so it was removed. The drone is paused to focus
+        on the arm.</p>
+    </details>
+  </section>
 
-    <li>
-      <h3>Now: a real robot arm with a gripper (Franka Panda)</h3>
-      <p>The home-made arm learned slowly partly because the brain had to command each joint, so every
-        random exploration move shook the whole arm. Robot-learning benchmarks (Fetch, robosuite,
-        ManiSkill) let the policy move the hand instead and leave the joints to a controller. The new
-        setup does the same, with a Franka Panda arm and its two-finger gripper: the fly brain's
-        command neurons say "move the hand this way, open or close", much as a fly's descending neurons
-        drive leg circuits in the nerve cord.</p>
-      <p>It sees with two compound eyes: one on a head beside the table to find things, one on the
-        wrist to line up a grasp. A single fly-like eye is too coarse to aim within 3 cm from across
-        the table. First task: bring the gripper to a yellow block that appears somewhere new each time,
-        with blue decoys around. A pilot that sees only the two eye images manages it every time;
-        with the block invisible it never does.</p>
-      <p>Result: the fly brain learned it. After a first run (best 90 %) and a second round of
-        practice focused on the table edges, it reaches the block from 94 % of places across the
-        table, still 75 % with three times more noise in its eyes, and only 5 % when the block is
-        made invisible, so it really steers by what it sees. The extreme corners of the table are
-        still its weak spot.</p>
-      <p>Next: grasp the block and lift it. The brain now also feels touch: whether each finger is
-        pressing on something. Training starts from the reaching brain. Further on: put things into
-        bins, sort by colour, and then add the fly's sense of smell to sort fruit, for example ripe
-        from rotten.</p>
-    </li>
+  <!-- 6 ------------------------------------------------------------------ -->
+  <section class="task" id="t6">
+    <div class="task-head"><span class="num">6</span><h3>Franka Panda arm: reach a block it finds by eye</h3><span class="tag done">Done</span></div>
+    <p>A real lab robot (Franka Panda with its two-finger gripper), set up the way robot-learning
+      benchmarks do it: the brain's command neurons say "move the hand this way, open or close", and a
+      controller turns that into joint motions, much as a fly's nerve cord turns descending commands into
+      leg movements. Two compound eyes: one on a head beside the table to find things, one on the wrist
+      to line up. Task: bring the gripper just above a yellow block that appears somewhere new each time,
+      with blue decoys around.</p>
+    <ul class="facts"><li>Across the table: <b>73 % → 94 %</b></li><li>Clean: <b>90 %</b></li><li>3× eye noise: <b>75 %</b></li><li>Block invisible: <b>5 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v8_panda_reach/main_1300k_three_solved.mp4" poster="results/v8_panda_reach/poster_main_1300k.jpg" controls muted loop playsinline preload="none"
+               aria-label="Three test layouts in a row, each ending with a green border: the arm moves its gripper over the yellow block"></video>
+        <figcaption><b>First run, 1.3M steps</b>: three test layouts, all reached (green border).</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v8_panda_reach/main_1500k_corner_miss.mp4" poster="results/v8_panda_reach/poster_main_1500k.jpg" controls muted loop playsinline preload="none"
+               aria-label="Three spread-out test layouts; in the first, with the block in a near corner, the arm hovers between blue decoys instead (red border)"></video>
+        <figcaption><b>Spread-out layouts</b> reveal a weak corner: layout 1 missed (red).</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v8_panda_reach/finetune_200k_all_three_solved.mp4" poster="results/v8_panda_reach/poster_ft_200k.jpg" controls muted loop playsinline preload="none"
+               aria-label="The same three spread-out layouts after edge practice: the arm passes the decoys and reaches the yellow block in all three"></video>
+        <figcaption><b>After edge practice</b>: the same layouts, all three reached.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v8_panda_reach/curves_finetune.png"><img src="results/v8_panda_reach/curves_finetune.png" alt="Fine-tune learning curves: solved rate between 80 and 98 percent, best 94 percent at 900k steps" loading="lazy"></a>
+        <figcaption><b>Fine-tune curves</b>: 50 test episodes per point, best 94 %.</figcaption>
+      </figure>
+    </div>
+
+    <div class="maps" role="group" aria-label="Success maps across the table, before and after edge practice">
+      <div class="map">
+        <h4>First run <span>· 109/150 (73 %)</span></h4>
+        <div class="grid5">
+          <span></span><span class="col">right</span><span class="col"></span><span class="col">centre</span><span class="col"></span><span class="col">left</span>
+          <span class="lab">near</span><span class="c v2" title="near, right edge: 2 of 6">2</span><span class="c v5" title="5 of 6">5</span><span class="c v5" title="5 of 6">5</span><span class="c v2" title="2 of 6">2</span><span class="c v1" title="near, left edge: 1 of 6">1</span>
+          <span class="lab"></span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v4">4</span><span class="c v4">4</span>
+          <span class="lab"></span><span class="c v4">4</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v4">4</span><span class="c v3">3</span>
+          <span class="lab"></span><span class="c v5">5</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v4">4</span>
+          <span class="lab">far</span><span class="c v2" title="far, right edge: 2 of 6">2</span><span class="c v6 hi">6</span><span class="c v5">5</span><span class="c v3">3</span><span class="c v2" title="far, left edge: 2 of 6">2</span>
+        </div>
+      </div>
+      <div class="map">
+        <h4>After edge practice <span>· 141/150 (94 %)</span></h4>
+        <div class="grid5">
+          <span></span><span class="col">right</span><span class="col"></span><span class="col">centre</span><span class="col"></span><span class="col">left</span>
+          <span class="lab">near</span><span class="c v3" title="near, right edge: 3 of 6">3</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v5" title="near, left edge: 5 of 6">5</span>
+          <span class="lab"></span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span>
+          <span class="lab"></span><span class="c v5">5</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span>
+          <span class="lab"></span><span class="c v5">5</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span><span class="c v6 hi">6</span>
+          <span class="lab">far</span><span class="c v5" title="far, right edge: 5 of 6">5</span><span class="c v6 hi">6</span><span class="c v5">5</span><span class="c v6 hi">6</span><span class="c v5" title="far, left edge: 5 of 6">5</span>
+        </div>
+      </div>
+      <p class="key">Each cell: a block position on the table (5 × 5 grid, seen from the robot), number of
+        successes out of 6 tries with different starts. Stronger colour = more successes.</p>
+    </div>
+
+    <details>
+      <summary>Tests, corners and what went wrong on the way</summary>
+      <table>
+        <thead><tr><th>Test (best brain, 20 episodes)</th><th>Reached</th></tr></thead>
+        <tbody>
+          <tr><td>Normal conditions</td><td class="num yes">90 %</td></tr>
+          <tr><td>No decoy blocks</td><td class="num yes">90 %</td></tr>
+          <tr><td>Three times more noise in the eyes</td><td class="num">75 %</td></tr>
+          <tr><td>Light twice as dim or bright</td><td class="num">70 %</td></tr>
+          <tr><td>Yellow block made invisible</td><td class="num no">5 %</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Exact corner tip (20 tries)</th><th>First run</th><th>After edge practice</th></tr></thead>
+        <tbody>
+          <tr><td>Centre (reference)</td><td class="num">18</td><td class="num yes">20</td></tr>
+          <tr><td>Far left</td><td class="num">9</td><td class="num yes">15</td></tr>
+          <tr><td>Near left</td><td class="num">6</td><td class="num">11</td></tr>
+          <tr><td>Near right</td><td class="num">5</td><td class="num">10</td></tr>
+          <tr><td>Far right</td><td class="num">10</td><td class="num no">4</td></tr>
+        </tbody>
+      </table>
+      <p>Corner misses end about 30 cm away, drifting towards the table centre: at the extreme tips the
+        block is a small, dim dot for the head eye and outside the downward wrist eye, so the brain falls
+        back to where blocks usually are. Decoys hardly matter (82–83 % with 0, 1 or 2).</p>
+      <p>On the way: a success rule that also demanded a nearly still hand could not be met under the
+        network's own exploration jitter (even a perfect pilot with that jitter passed 27 %), so it became
+        "stay within 3 cm for 0.2 s". The first run peaked at 90 % and then declined, so the best brain
+        was kept and fine-tuned at a lower learning rate, with more practice blocks near the table edges.</p>
+    </details>
+  </section>
+
+  <!-- 7 ------------------------------------------------------------------ -->
+  <section class="task" id="t7">
+    <div class="task-head"><span class="num">7</span><h3>Franka Panda arm: grasp the block and lift it</h3><span class="tag now">Training now</span></div>
+    <p>Same robot, eyes and brain, plus <strong>touch</strong>: the brain feels whether each finger
+      presses on something, like a fly's mechanosensors. It must close both fingers on the yellow
+      block and lift it 8 cm. The reward comes in stages (reach, hold, lift), and lifting only counts
+      while the block is held, so pushing or flicking it earns nothing. Training starts from the
+      reaching brain.</p>
+    <ul class="facts"><li>Scripted pilot: <b>95 %</b></li><li>Pilot with training-like noise: <b>90 %</b></li><li>Hover only / random: <b>0 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/previews/panda_lift_scripted.mp4" poster="results/previews/panda_lift_scripted.jpg" controls muted loop playsinline preload="none"
+               aria-label="The Panda gripper descends over the yellow block, closes on it and lifts it"></video>
+        <figcaption><b>The task</b>, done by a scripted pilot that knows where the block is. The fly brain is learning it now.</figcaption>
+      </figure>
+    </div>
+    <details>
+      <summary>Checks before training</summary>
+      <table>
+        <thead><tr><th>Behaviour (40 episodes)</th><th>Return</th><th>Lifted</th></tr></thead>
+        <tbody>
+          <tr><td>Random, or doing nothing</td><td class="num">2</td><td class="num">0 %</td></tr>
+          <tr><td>Hovering above the block (the reaching brain)</td><td class="num">13</td><td class="num">0 %</td></tr>
+          <tr><td>Touching it with a closed gripper</td><td class="num">15</td><td class="num">0 %</td></tr>
+          <tr><td>Grasping but never lifting</td><td class="num">31</td><td class="num">0 %</td></tr>
+          <tr><td>Scripted pilot with training-like noise</td><td class="num">52</td><td class="num yes">90 %</td></tr>
+          <tr><td>Scripted pilot</td><td class="num">66</td><td class="num yes">95 %</td></tr>
+        </tbody>
+      </table>
+      <p>Every step towards the goal pays more, so the reward cannot be gamed by stopping halfway.</p>
+    </details>
+  </section>
+
+  <!-- roadmap ------------------------------------------------------------- -->
+  <h2 id="roadmap">What's next</h2>
+  <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
+    arm, and then to use the senses a fly is best at.</p>
+  <ol class="road">
+    <li><b>Pick and place</b><span class="why">carry the block into a bin</span></li>
+    <li><b>Sort by colour</b><span class="why">three colours, three bins</span></li>
+    <li><b>Add smell</b><span class="why">wire in the fly's antennal lobe and mushroom body, the circuits flies use to judge fruit; real odour-response data for fly smell neurons exists</span></li>
+    <li><b>Sort fruit by smell</b><span class="why">fruits that look the same but smell different, so the eyes alone cannot do it</span></li>
+    <li><b>Colour and smell together</b><span class="why">and a conflict test: it looks like one fruit but smells like another; which sense wins?</span></li>
+    <li><b>Taste by touch</b><span class="why">flies taste with their feet; taste sensors on the gripper fingers</span></li>
+    <li><b>Ripe or rotten</b><span class="why">a fly's natural strength: fermentation odours</span></li>
+    <li><b>Formalin-treated or natural fruit</b><span class="why">reject adulterated fruit; there is no published data on how flies respond to formaldehyde, so the fly response would be an assumption</span></li>
   </ol>
 
   <h2>What is biological here, and what is not</h2>
@@ -403,26 +599,25 @@ footer p { margin-top: 0.6rem; }
       <tr><td>Route from eye through optic lobe and central brain to commands</td><td class="yes">Real pathways</td></tr>
       <tr><td>Connection strengths</td><td class="no">Start from real synapse counts, then retrained</td></tr>
       <tr><td>Neurons</td><td class="no">Simple rate units, not spiking cells</td></tr>
-      <tr><td>The eye's input</td><td class="no">Arm: a 16×16 grey image. Drone: a fly-like compound eye with real photoreceptor types, but 160 instead of ~800 facets per eye and 25 instead of ~200 images per second</td></tr>
-      <tr><td>Balance</td><td class="no">Drone: a simple stabiliser stands in for the halteres and nerve cord, which the brain map does not include</td></tr>
+      <tr><td>The eye's input</td><td class="no">Early arm: a 16×16 grey image. Drone and Panda: a fly-like compound eye with real photoreceptor types, but 160 instead of ~800 facets per eye and 25 instead of ~200 images per second</td></tr>
+      <tr><td>Below the brain</td><td class="no">A controller turns hand commands into joint motions (Panda) or keeps the drone level, standing in for the nerve cord and halteres, which the brain map does not include</td></tr>
       <tr><td>Learning</td><td class="no">Reinforcement learning (PPO), not how a fly learns</td></tr>
     </tbody>
   </table>
-  <p>So this is not a simulated fly mind. It uses the fly brain's circuit layout as the design
-    of a robot controller, and asks how well that design can learn tasks a fly never does.</p>
+  <p>So this is not a simulated fly mind. It uses the fly brain's circuit layout as the design of a
+    robot controller, and asks how well that design can learn tasks a fly never does.</p>
 
   <h2 id="run-it">Run it yourself</h2>
-  <p>Everything runs on a laptop (with a safe low-power mode for an 8 GB Mac) or on a free
-    Kaggle notebook (<code>notebooks/kaggle_flyrobot.ipynb</code>).</p>
+  <p>Runs on a laptop, a free Kaggle notebook or an always-on Linux PC (see <code>scripts/desktop/</code>).</p>
 <pre><code>git clone https://github.com/nihal4/connectome-tray-balance
 cd connectome-tray-balance
 pip install -r requirements.txt
 
 python scripts/download_connectome.py     # fly wiring + cell types
-python scripts/build_flybrain.py          # eye-to-command brain, 2,500 neurons
-python scripts/train.py --env tray_vision --policy connectome \
-       --subset data/flybrain_cam16_N2500.npz --profile kaggle</code></pre>
-  <p>For the camera maze, set <code>ENV = "maze_fixed3_vision"</code> in the notebook (the current default).</p>
+python scripts/download_panda.py          # Franka Panda model (MuJoCo Menagerie)
+python scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5
+python scripts/train.py --env panda_reach --policy connectome \
+       --subset data/flybrain_eye160_N4000.npz --profile desktop --random_start 0.3</code></pre>
 
 </main>
 
@@ -430,8 +625,8 @@ python scripts/train.py --env tray_vision --policy connectome \
   <p>Data: FlyWire connectome v783 (Dorkenwald et al. 2024; Schlegel et al. 2024, <em>Nature</em>),
     processed edge list from Shiu et al. 2024 (<em>Nature</em>), cell types from
     <a href="https://github.com/flyconnectome/flywire_annotations">flywire_annotations</a>.
-    Simulation: MuJoCo. Training: Stable-Baselines3 PPO.</p>
-  <p>Related work: FLYNN (Wang &amp; Chen 2026), FlyGM (2026), Lappalainen et al. 2024.</p>
+    Robot: Franka Emika Panda from MuJoCo Menagerie. Simulation: MuJoCo. Training: Stable-Baselines3 PPO.</p>
+  <p>Related work: NeuroMechFly v2 (2024), FLYNN (2026), FlyGM (2026), Lappalainen et al. 2024.</p>
   <p>Exploratory project by S. M. Nihal Ahmed.
     <a href="https://github.com/nihal4/connectome-tray-balance">Source code and full results</a>.</p>
 </footer>
