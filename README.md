@@ -211,6 +211,15 @@ Checks (40 episodes each; solved = lifted and held at the end of the episode, as
 Training starts from the reach brain (`--init_from`; same inputs and outputs), which scores 14.5
 on lift at step 0, the "hover above" level.
 
+`--lift_reward goal` (ManiSkill PickCube style): while held, the block is rewarded for being near a
+point 8 cm straight above where it started, `2 (1 - tanh(10 d))`; success = held within 2.5 cm of
+that point for 0.2 s. Added after the brain learned to grasp but carried the block sideways at low
+height: with the height-only reward, lifting while carrying 8 cm sideways scored 77.6 vs 75.8
+straight up; with the goal reward 52.1 vs 94.4 (straight up solves 95 %, scripted pilot 98 %,
+with noise 78 %). Switching a resumed run keeps the old evaluation history and best brain as
+`*_height_until_<N>k*` and starts new ones; the choice is saved in the run's config and used by
+training, the evaluation chart, the videos and `fly eval`.
+
 Planned ladder: reach -> grasp and lift -> pick and place into a bin -> sort by colour into
 3 bins -> add the fly's smell pathway (antennal lobe, mushroom body) and sort fruits by smell
 -> colour + smell, conflicting cues -> taste by touch -> ripe vs rotten -> formalin-treated vs

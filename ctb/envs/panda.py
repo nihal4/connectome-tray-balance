@@ -65,6 +65,10 @@ HOLD_STEPS = 5
 # Lift only counts while held, so pushing or flicking the block earns nothing extra.
 LIFT_GOAL = 0.08             # raise the block's centre this far (m) ...
 LIFT_HOLD = 5                # ... while held, for 5 steps (0.2 s)
+# lift_reward="goal" (ManiSkill PickCube style): while held, reward the block for being near a
+# point in the air LIFT_GOAL straight above where it started (2 x (1 - tanh(10 d))), so going
+# up pays and carrying it sideways costs. Success = held within GOAL_DIST of that point, 0.2 s.
+GOAL_DIST = 0.025
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
 TABLE = np.array([0.35, 0.30, 0.35])     # grey
@@ -144,7 +148,7 @@ class FlyPandaEnv(gym.Env):
 
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
-                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, **_):
+                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height", **_):
         assert task in ("reach", "lift"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -204,6 +208,8 @@ class FlyPandaEnv(gym.Env):
         # training only (lift): share of episodes that start partway through the task, half with the
         # gripper open around the block, half with the block already held (practice closing / lifting)
         self.grasp_start = grasp_start
+        assert lift_reward in ("height", "goal"), lift_reward
+        self.lift_reward = lift_reward
         # hand commands are averaged over the last few steps (like a real arm controller):
         # 1.0 = no smoothing, 0.3 = each step moves 30 % towards the new command
         self.cmd_smooth = cmd_smooth
@@ -421,6 +427,7 @@ class FlyPandaEnv(gym.Env):
                 d.qvel[:] = 0
             mujoco.mj_forward(m, d)
         self._block_z0 = float(self.block_pos()[2])
+        self._goal = self.block_pos() + np.array([0, 0, LIFT_GOAL])     # straight above the start
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
         self._hold = 0
@@ -448,9 +455,15 @@ class FlyPandaEnv(gym.Env):
         held = self.is_grasped()
         lift = self.lift_height()
         r = 1 - np.tanh(5 * d_t)                                      # reach the block
-        if held:
-            r += 1.0 + 2.0 * float(np.clip(lift / LIFT_GOAL, 0, 1))   # grasp, then lift
-        up = held and lift >= LIFT_GOAL
+        if self.lift_reward == "goal":
+            g = float(np.linalg.norm(self.block_pos() - self._goal))
+            if held:
+                r += 1.0 + 2.0 * (1 - np.tanh(10 * g))                # grasp, then bring it up to the goal
+            up = held and g < GOAL_DIST
+        else:
+            if held:
+                r += 1.0 + 2.0 * float(np.clip(lift / LIFT_GOAL, 0, 1))   # grasp, then lift
+            up = held and lift >= LIFT_GOAL
         self._hold = self._hold + 1 if up else 0
         success = self._hold >= LIFT_HOLD
         if success:
@@ -480,7 +493,8 @@ class FlyPandaEnv(gym.Env):
         truncated = self._steps >= self.max_steps
         info = {"is_success": success, "dist": d_t}
         if self.task == "lift":
-            info.update(grasped=self.is_grasped(), lift=self.lift_height())
+            info.update(grasped=self.is_grasped(), lift=self.lift_height(),
+                        goal_dist=float(np.linalg.norm(self.block_pos() - self._goal)))
         return self._get_obs(), float(r), False, truncated, info
 
     # ------------------------------------------------------------------ rendering
@@ -544,7 +558,8 @@ def _lift_controller(env):
         a[3] = -1.0
         goal = blk.copy()
         if env._grip_ctrl <= 0 and env.finger_touch()[2]:
-            goal = np.array([blk[0], blk[1], env._block_z0 + LIFT_GOAL + 0.03])
+            goal = (env._goal.copy() if env.lift_reward == "goal"
+                    else np.array([blk[0], blk[1], env._block_z0 + LIFT_GOAL + 0.03]))
             goal = goal - (blk - tcp)                  # move the hand, keep the hold offset
     a[:3] = np.clip((goal - tcp) / STEP * 0.5, -1, 1)
     return a

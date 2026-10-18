@@ -66,6 +66,10 @@ def parse():
     ap.add_argument("--grasp_start", type=float, default=0.0,
                     help="panda_lift: share of TRAINING episodes that start with the gripper around the block "
                          "(half open, half already holding it)")
+    ap.add_argument("--lift_reward", choices=["height", "goal"], default=None,
+                    help="panda_lift task definition: 'height' (lift progress by height) or 'goal' (bring the "
+                         "block to a point straight above its start; sideways carrying costs). Applies to "
+                         "training AND evaluation, and is saved in the run's config.")
     ap.add_argument("--set_std", type=float, default=None,
                     help="resumed run: reset the exploration noise (action std) to this value, ONCE "
                          "(remembered in the run folder, so a later restart does not reset it again)")
@@ -120,6 +124,12 @@ def main():
             raise SystemExit("drone/panda envs need a compound-eye brain: "
                              "python scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5")
         env_kw["n_facets"] = int(brain["facets"])     # eye size must match the brain's eye
+    if args.lift_reward is None and args.resume and os.path.exists(os.path.join(out, "config.json")):
+        # keep the task this run was last trained on, even if the job line leaves the option out
+        args.lift_reward = json.load(open(os.path.join(out, "config.json"))).get("lift_reward")
+    if args.lift_reward:          # task definition: applies to training and evaluation
+        env_kw["lift_reward"] = args.lift_reward
+        print(f"[train] lift reward: {args.lift_reward}")
     if args.action_rate > 0:      # robot property: applies to training and evaluation
         env_kw["action_rate"] = args.action_rate
         print(f"[train] slow motors: joint targets change by at most {args.action_rate} per step")
@@ -157,7 +167,7 @@ def main():
         from ctb.policies import load_ppo
         shutil.copy(os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
         parent = json.load(open(os.path.join(init, "config.json")))
-        parent.update(env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
+        parent.update(lift_reward=args.lift_reward or "height", env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
                       random_start=args.random_start, eval_episodes=cfg["eval_episodes"])
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)
@@ -193,6 +203,25 @@ def main():
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
         print(f"[train] resumed from {locals().get('model_path_used', model_path)} at {model.num_timesteps} steps")
         reset = False
+        if args.lift_reward:
+            cfg_path = os.path.join(out, "config.json")
+            run_cfg = json.load(open(cfg_path))
+            old_task = run_cfg.get("lift_reward") or "height"
+            if old_task != args.lift_reward:
+                # new task definition: scores before and after are not comparable, so the old
+                # evaluation history and best brain are kept under other names and start fresh
+                tag = f"_{old_task}_until_{model.num_timesteps // 1000}k"
+                for f in ("evaluations.npz", "best_model.zip"):
+                    src = os.path.join(out, f)
+                    if os.path.exists(src):
+                        os.replace(src, os.path.join(out, f.replace(".", tag + ".", 1)))
+                run_cfg["lift_reward"] = args.lift_reward
+                run_cfg.setdefault("task_changes", []).append({"steps": int(model.num_timesteps), "lift_reward": args.lift_reward})
+                with open(cfg_path + ".tmp", "w") as fh:
+                    json.dump(run_cfg, fh, indent=2)
+                os.replace(cfg_path + ".tmp", cfg_path)
+                print(f"[train] task changed: lift reward {old_task} -> {args.lift_reward} at {model.num_timesteps:,} steps; "
+                      f"old evaluation history and best brain kept as *{tag}*, new ones start now")
         if args.set_lr:
             from stable_baselines3.common.utils import get_schedule_fn
             model.learning_rate = args.set_lr

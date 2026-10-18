@@ -83,6 +83,8 @@ def run_env_kw(run):
     """Robot settings a run was trained with (so evaluation uses the same robot)."""
     cfg = run_config(run)
     kw = {"action_rate": cfg["action_rate"]} if cfg.get("action_rate") else {}
+    if cfg.get("lift_reward"):              # task definition (reward + success rule), not a training aid
+        kw["lift_reward"] = cfg["lift_reward"]
     if cfg["env"].startswith(("drone", "panda")):
         import numpy as np
         brain = os.path.join(run, "subset.npz")
