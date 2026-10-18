@@ -122,6 +122,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         beta = 0.5 ** k                            # who drives: teacher 100 %, 50 %, 25 % ...
         n_steps = first_steps if k == 0 else steps
         t0 = time.time()
+        log(f"[imitate] round {k + 1}/{iters}: collecting {n_steps:,} steps (teacher drives {beta:.0%}) ...")
         # ---- 1. collect: teacher labels everywhere, mixed control ------------------------------
         obs = venv.reset()
         xs, ys, ep_r, ep_s = [], [], [], []
@@ -157,6 +158,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             X, Y = X[idx], Y[idx]
         t_collect = time.time() - t0
         # ---- 2. train the fly brain on the teacher's moves --------------------------------------
+        log(f"[imitate] round {k + 1}/{iters}: collected in {t_collect:.0f}s; learning from {len(X):,} examples ...")
         model.policy.train()
         # round 0 learns the teacher thoroughly; later rounds a fixed, sufficient amount
         n_up = int(first_epochs * len(X) / batch) if k == 0 else min(max_updates, int(epochs * len(X) / batch))
@@ -170,10 +172,14 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(_actor_params(model.policy), 1.0)
             opt.step()
-            losses.append(float(loss))
+            losses.append(loss.item())
+            if (u + 1) % max(1, n_up // 4) == 0 and u + 1 < n_up:
+                log(f"[imitate] round {k + 1}/{iters}: learning {100 * (u + 1) // n_up}% "
+                    f"(imitation loss {np.mean(losses[-50:]):.4f})")
         model.policy.eval()
         t_train = time.time() - t0 - t_collect
         # ---- 3. test the student alone ----------------------------------------------------------
+        log(f"[imitate] round {k + 1}/{iters}: testing the student alone on {eval_episodes} episodes ...")
         rets, lens, succ = evaluate()
         hist["timesteps"] = np.append(hist["timesteps"], state["steps"])
         for key, v in (("results", rets), ("ep_lengths", lens), ("successes", succ)):
