@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fly-brain training</title>
+<style>
+:root {
+  --bg: #f3f5f7; --panel: #ffffff; --ink: #18212a; --muted: #5d6975; --faint: #8b96a1;
+  --rule: #dde2e7; --grid: #eceff2; --accent: #2f6fd6; --accent-soft: rgba(47,111,214,.12);
+  --good: #18865a; --warn: #b26b00; --bad: #c0392b; --track: #e6eaee;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171d; --panel: #182129; --ink: #e5ebf0; --muted: #9daab6; --faint: #6f7c88;
+    --rule: #26313b; --grid: #202a33; --accent: #6ea0f2; --accent-soft: rgba(110,160,242,.16);
+    --good: #3cc488; --warn: #e3a33b; --bad: #ec6a5c; --track: #25303a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px; }
+h1 { font-size: 20px; margin: 0; flex: 1 1 auto; letter-spacing: -.01em; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--panel);
+  border: 1px solid var(--rule); font-size: 13px; color: var(--muted); white-space: nowrap; }
+.pill b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.live .dot { background: var(--good); animation: pulse 2s ease-in-out infinite; }
+.stale .dot { background: var(--warn); }
+.stopped .dot { background: var(--faint); }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live .dot { animation: none; } }
+.pill.warn b { color: var(--warn); } .pill.bad b { color: var(--bad); }
+
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.card h2 { font-size: 17px; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.card h2 .env { font-weight: 500; color: var(--muted); font-size: 14px; }
+.badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.badge.on { background: var(--good); color: var(--panel); }
+.badge.off { background: var(--track); color: var(--muted); }
+.extra { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--faint); margin-top: 4px; word-break: break-word; }
+
+.progress { margin-top: 12px; }
+.bar { height: 10px; background: var(--track); border-radius: 999px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); border-radius: 999px; transition: width .6s ease; }
+.progress .row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); margin-top: 5px; flex-wrap: wrap; }
+.progress .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.tile { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.tile .s { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 12px; }
+.chart { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 8px 4px; position: relative; }
+.chart .t { font-size: 13px; font-weight: 600; margin: 0 0 2px 4px; }
+.chart .t span { font-weight: 400; color: var(--faint); }
+.chart svg { display: block; width: 100%; height: 170px; overflow: visible; }
+.chart text { fill: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.chart .empty { height: 170px; display: grid; place-items: center; color: var(--faint); font-size: 13px; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); font-size: 12px; padding: 3px 7px;
+  border-radius: 5px; white-space: nowrap; transform: translate(-50%, -100%); display: none; font-variant-numeric: tabular-nums; }
+
+.events { margin-top: 10px; font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); }
+.events div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+h3 { font-size: 15px; margin: 16px 0 8px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.gallery figure { margin: 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.gallery video { display: block; width: 100%; aspect-ratio: 4/3; background: #000; }
+.gallery figcaption { font-size: 12px; color: var(--muted); padding: 4px 8px; display: flex; justify-content: space-between; }
+.gallery figcaption .new { color: var(--accent); font-weight: 600; }
+.muted { color: var(--faint); font-size: 13px; }
+
+details.run { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; margin-bottom: 8px; }
+details.run summary { cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; list-style: none; }
+details.run summary::-webkit-details-marker { display: none; }
+details.run summary::before { content: "▸"; color: var(--faint); }
+details.run[open] summary::before { content: "▾"; }
+details.run summary b { font-weight: 600; }
+details.run summary span { font-size: 13px; color: var(--muted); }
+details.run .body { padding: 0 14px 14px; }
+@media (max-width: 560px) {
+  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile .v { font-size: 19px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fly-brain training PC</h1>
+    <span class="pill stopped" id="live"><span class="dot"></span><span id="liveText">connecting…</span></span>
+    <span class="pill" id="temp">CPU <b>–</b></span>
+    <span class="pill" id="ram">RAM free <b>–</b></span>
+  </header>
+
+  <section class="card" id="now"><p class="muted">Loading…</p></section>
+
+  <h3 id="earlierTitle" hidden>Earlier runs</h3>
+  <div id="earlier"></div>
+  <p class="muted">Numbers update every 10 seconds without reloading the page. Progress videos: the newest brain on the
+    same three test layouts, every 100k steps (border at the end: green = solved, red = not).</p>
+</div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const fmtSteps = n => n == null ? "–" : n >= 1e6 ? (n / 1e6).toFixed(2).replace(/\.?0+$/, "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(Math.round(n));
+const fmt1 = (x, d = 1) => x == null || isNaN(x) ? "–" : Number(x).toFixed(d);
+const pct = x => x == null ? "–" : Math.round(x) + " %";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function ago(sec) {
+  if (sec < 60) return Math.max(0, Math.round(sec)) + " s ago";
+  if (sec < 3600) return Math.round(sec / 60) + " min ago";
+  return (sec / 3600).toFixed(1) + " h ago";
+}
+function dur(sec) {
+  if (!isFinite(sec) || sec <= 0) return "–";
+  const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  return h ? `${h} h ${m} min` : `${m} min`;
+}
+
+/* ---------- charts: one series each, drawn as SVG in the browser ---------- */
+function niceTicks(lo, hi, n = 4) {
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const span = hi - lo, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0) || mag * 10;
+  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step, out = [];
+  for (let v = a; v <= b + step / 2; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+function drawChart(box, xs, ys, opts) {
+  const pts = xs.map((x, i) => [x, ys[i]]).filter(p => p[1] != null && !isNaN(p[1]));
+  const key = JSON.stringify([pts.length, pts[pts.length - 1], box.clientWidth]);
+  if (box._key === key) return;
+  box._key = key;
+  if (pts.length < 1) { box.innerHTML = `<div class="t">${opts.title}</div><div class="empty">${opts.empty}</div>`; return; }
+  const W = Math.max(box.clientWidth - 16, 200), H = 170, L = 38, R = 8, T = 8, B = 22;
+  const xMin = 0, xMax = Math.max(...pts.map(p => p[0]));
+  let yLo = opts.yMin ?? Math.min(...pts.map(p => p[1])), yHi = opts.yMax ?? Math.max(...pts.map(p => p[1]));
+  const yt = niceTicks(yLo, yHi); yLo = Math.min(yLo, yt[0]); yHi = Math.max(yHi, yt[yt.length - 1]);
+  const step = yt.length > 1 ? yt[1] - yt[0] : 1, dec = Math.max(0, Math.min(3, -Math.floor(Math.log10(step) + 1e-9) + (step / Math.pow(10, Math.floor(Math.log10(step))) % 1 ? 1 : 0)));
+  const X = x => L + (x - xMin) / ((xMax - xMin) || 1) * (W - L - R);
+  const Y = y => T + (1 - (y - yLo) / ((yHi - yLo) || 1)) * (H - T - B);
+  const xt = niceTicks(0, xMax, 4).filter(v => v <= xMax * 1.001);
+  let g = "";
+  yt.forEach(v => g += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${Y(v) + 3.5}" text-anchor="end">${opts.yFmt(v, dec)}</text>`);
+  xt.forEach(v => g += `<text x="${X(v)}" y="${H - 6}" text-anchor="middle">${fmtSteps(v)}</text>`);
+  const d = pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join("");
+  const area = d + `L${X(pts[pts.length - 1][0]).toFixed(1)} ${Y(yLo)}L${X(pts[0][0]).toFixed(1)} ${Y(yLo)}Z`;
+  const last = pts[pts.length - 1];
+  let best = "";
+  if (opts.best && pts.length > 1) {
+    const bi = pts.reduce((b, p, i) => p[1] > pts[b][1] ? i : b, 0);
+    best = `<circle cx="${X(pts[bi][0])}" cy="${Y(pts[bi][1])}" r="4.5" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/>`;
+  }
+  box.innerHTML = `<div class="t">${opts.title} <span>${opts.sub || ""}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">${g}
+      <path d="${area}" fill="var(--accent-soft)"/><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${best}<circle cx="${X(last[0])}" cy="${Y(last[1])}" r="4.5" fill="var(--accent)" stroke="var(--panel)" stroke-width="2"/>
+      <line class="cross" y1="${T}" y2="${H - B}" stroke="var(--faint)" stroke-dasharray="3 3" visibility="hidden"/>
+      <circle class="hov" r="5" fill="var(--accent)" stroke="var(--panel)" stroke-width="2" visibility="hidden"/>
+      <rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/></svg><div class="tip"></div>`;
+  const svg = $("svg", box), tip = $(".tip", box), cross = $(".cross", box), hov = $(".hov", box);
+  const move = ev => {
+    const r = svg.getBoundingClientRect(), mx = (ev.clientX - r.left) * W / r.width;
+    let bi = 0, bd = 1e18;
+    pts.forEach((p, i) => { const dd = Math.abs(X(p[0]) - mx); if (dd < bd) { bd = dd; bi = i; } });
+    const p = pts[bi], px = X(p[0]), py = Y(p[1]);
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("visibility", "visible");
+    hov.setAttribute("cx", px); hov.setAttribute("cy", py); hov.setAttribute("visibility", "visible");
+    tip.style.display = "block"; tip.style.left = (8 + px * r.width / W) + "px"; tip.style.top = (24 + py * r.height / H - 6) + "px";
+    tip.textContent = `${fmtSteps(p[0])} steps: ${opts.tipFmt(p[1])}`;
+  };
+  svg.addEventListener("pointermove", move);
+  svg.addEventListener("pointerleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); hov.setAttribute("visibility", "hidden"); });
+}
+function charts(el, run, nEp) {
+  if (!el.querySelector(".chart")) el.innerHTML = '<div class="chart"></div><div class="chart"></div><div class="chart"></div>';
+  const [a, b, c] = el.querySelectorAll(".chart");
+  drawChart(a, run.eval.t, run.eval.r, { title: "Eval return", sub: nEp ? `· ${nEp} test episodes per point` : "", best: true,
+    empty: "first evaluation at 50k steps", yFmt: (v, d) => fmt1(v, d), tipFmt: v => fmt1(v) });
+  drawChart(b, run.eval.t, run.eval.s, { title: "Solved (eval)", sub: "· % of test episodes", yMin: 0, yMax: 100,
+    empty: "first evaluation at 50k steps", yFmt: (v, d) => fmt1(v, d) + "%", tipFmt: v => pct(v) });
+  drawChart(c, run.train.t, run.train.r, { title: "Training return", sub: "· practice episodes (incl. easier starts)",
+    empty: "first point at 50k steps", yFmt: (v, d) => fmt1(v, d), tipFmt: v => fmt1(v) });
+}
+function gallery(el, run) {
+  const key = run.videos.join("|");
+  if (el._key === key) return;               // do not interrupt a playing video
+  el._key = key;
+  if (!run.videos.length) { el.innerHTML = '<p class="muted">First progress video after 100k steps.</p>'; return; }
+  el.innerHTML = '<div class="gallery">' + run.videos.slice(0, 12).map((v, i) => {
+    const step = (v.match(/step_0*(\d+)k/) || [])[1];
+    return `<figure><video src="${esc(v)}#t=2" controls muted playsinline preload="${i < 4 ? "metadata" : "none"}"></video>
+      <figcaption><span>${step ? fmtSteps(+step * 1000) + " steps" : esc(v)}</span>${i === 0 ? '<span class="new">newest</span>' : ""}</figcaption></figure>`;
+  }).join("") + "</div>";
+}
+
+/* ---------- live update ---------- */
+let S = null;
+function render() {
+  if (!S) return;
+  const now = Date.now() / 1000, L = S.live || {}, job = S.job || {};
+  const run = (S.runs || []).find(r => r.active) || null;
+  const logAge = L.log_mtime ? now - L.log_mtime : Infinity;
+  const live = $("#live"), txt = $("#liveText");
+  if (S.service !== "active") { live.className = "pill stopped"; txt.textContent = "training stopped"; }
+  else if (logAge > 300) { live.className = "pill stale"; txt.textContent = "running, log quiet " + ago(logAge); }
+  else { live.className = "pill live"; txt.textContent = "live · log " + ago(logAge); }
+  const t = S.cpu_temp;
+  $("#temp").className = "pill" + (t >= 88 ? " bad" : t >= 80 ? " warn" : "");
+  $("#temp").innerHTML = `CPU <b>${t == null ? "n/a" : Math.round(t) + " °C" + (t >= 88 ? " ▲ hot" : t >= 80 ? " ▲ warm" : "")}</b>`;
+  $("#ram").innerHTML = `RAM free <b>${S.ram_free_gb == null ? "n/a" : S.ram_free_gb + " GB"}</b>`;
+
+  const now_ = $("#now");
+  if (!run) { now_.innerHTML = `<h2>No active run</h2><p class="muted">Set one with <code>fly job</code>.</p>`; }
+  else {
+    if (!now_._built || now_._name !== run.name) {
+      now_._built = true; now_._name = run.name;
+      now_.innerHTML = `<h2><span>${esc(run.name)}</span><span class="env">${esc(job.env || run.env)}</span><span class="badge" id="badge"></span></h2>
+        <div class="extra" id="extra"></div>
+        <div class="progress"><div class="bar"><div id="bar" style="width:0"></div></div>
+          <div class="row"><span id="stepsTxt"></span><span id="eta"></span></div></div>
+        <div class="tiles" id="tiles"></div><div class="charts" id="charts"></div>
+        <div class="events" id="events"></div><h3>Progress videos</h3><div id="vids"></div>`;
+    }
+    const on = S.service === "active";
+    $("#badge").className = "badge " + (on ? "on" : "off"); $("#badge").textContent = on ? "training now" : "stopped";
+    $("#extra").textContent = job.extra ? "options: " + job.extra : "";
+    const steps = Math.max(L.total_timesteps || 0, L.train_steps || 0, L.eval_steps || 0, run.eval.t.slice(-1)[0] || 0);
+    const total = job.steps_total || 0, frac = total ? Math.min(steps / total, 1) : 0;
+    $("#bar").style.width = (frac * 100).toFixed(2) + "%";
+    $("#stepsTxt").innerHTML = `<b>${steps.toLocaleString()}</b> of ${total ? total.toLocaleString() : "?"} steps (${(frac * 100).toFixed(1)} %)`;
+    $("#eta").innerHTML = on && L.fps ? `<b>${Math.round(L.fps)}</b> steps/s · about <b>${dur((total - steps) / L.fps)}</b> left` : "";
+    const ev = run.eval, n = ev.r.length;
+    const tile = (k, v, s) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+    $("#tiles").innerHTML =
+      tile("Eval return", n ? fmt1(ev.r[n - 1]) : "–", n ? `best ${fmt1(run.best_return)} · at ${fmtSteps(ev.t[n - 1])}` : "first at 50k steps") +
+      tile("Solved (eval)", ev.s.length ? pct(ev.s[ev.s.length - 1]) : "–", ev.s.length ? `best ${pct(run.best_solved)}` : "&nbsp;") +
+      tile("Training return", L.train_return != null ? fmt1(L.train_return) : "–", L.train_solved != null ? `solved ${pct(L.train_solved)} in practice` : "&nbsp;") +
+      tile("Exploration noise", L.std != null ? fmt1(L.std, 3) : "–", "action std") +
+      tile("Update size", L.approx_kl != null ? fmt1(L.approx_kl, 3) : "–", L.learning_rate != null ? `KL · lr ${L.learning_rate}` : "approx. KL");
+    charts($("#charts"), run, ev.n_episodes);
+    $("#events").innerHTML = (S.events || []).slice(-4).map(e => `<div title="${esc(e)}">${esc(e)}</div>`).join("");
+    gallery($("#vids"), run);
+  }
+
+  const others = (S.runs || []).filter(r => !r.active);
+  $("#earlierTitle").hidden = !others.length;
+  const box = $("#earlier");
+  others.forEach(r => {
+    let d = box.querySelector(`details[data-run="${CSS.escape(r.name)}"]`);
+    if (!d) {
+      d = document.createElement("details"); d.className = "run"; d.dataset.run = r.name;
+      d.innerHTML = `<summary></summary><div class="body"><div class="charts"></div><h3>Progress videos</h3><div class="vids"></div></div>`;
+      d.addEventListener("toggle", () => d.open && fill(d, r.name));
+      box.appendChild(d);
+    }
+    const n = r.eval.r.length;
+    d.querySelector("summary").innerHTML = `<b>${esc(r.name)}</b><span>${n ? `${fmtSteps(r.eval.t[n - 1])} steps · best return ${fmt1(r.best_return)}` +
+      (r.best_solved != null ? ` · best solved ${pct(r.best_solved)}` : "") : "no evaluations"} · ${r.videos.length} videos · updated ${ago(now - r.last_update)}</span>`;
+    if (d.open) fill(d, r.name);
+  });
+}
+function fill(d, name) {
+  const r = (S.runs || []).find(x => x.name === name); if (!r) return;
+  charts(d.querySelector(".charts"), r, r.eval.n_episodes);
+  gallery(d.querySelector(".vids"), r);
+}
+async function poll() {
+  try {
+    const res = await fetch("status.json?t=" + Date.now(), { cache: "no-store" });
+    if (res.ok) { S = await res.json(); render(); }
+  } catch (e) { $("#liveText").textContent = "dashboard offline"; $("#live").className = "pill stale"; }
+}
+poll();
+setInterval(poll, 10000);
+setInterval(render, 1000);        // keeps the "x s ago" text fresh between updates
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { document.querySelectorAll(".chart").forEach(c => c._key = null); render(); }, 200); });
+</script>
+</body>
+</html>

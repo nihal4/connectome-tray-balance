@@ -1,16 +1,18 @@
-"""Progress videos + dashboard for the training PC (runs as the flybrain-watch service).
+"""Live dashboard + progress videos for the training PC (runs as the flybrain-watch service).
 
-Every minute: for each run in ~/flybrain/runs, when training has passed another 100k steps,
-run the newest checkpoint on 3 test mazes / rooms (always the same three, so the videos can
-be compared, but different from each other) and save runs/<run>/progress/step_<N>k.mp4. Then rewrite ~/flybrain/index.html
-(learning curves, latest numbers, CPU temperature, all progress videos), which the
-flybrain-web service shows at http://<pc>:8080.
+Every 10 s: read only the NEW lines of the training log and write ~/flybrain/status.json
+(a few KB: live numbers, learning-curve data, video list, CPU temperature, RAM). The page
+~/flybrain/index.html (copied from dashboard.html) fetches it and redraws in the browser, so
+the PC does no plotting for the dashboard. The flybrain-web service serves it on port 8080.
+
+Every 60 s: when a run has passed another 100k steps, record the newest checkpoint on the same
+3 test layouts and save runs/<run>/progress/step_<N>k.mp4; redraw runs/<run>/curves.png (used
+by `fly export`) only when a new evaluation has arrived.
 
 Runs at the lowest priority with 1 thread, so it barely slows training.
 """
 import argparse
 import glob
-import html
 import json
 import os
 import subprocess
@@ -94,92 +96,235 @@ def record_tests(run, out):
     print(f"{out}: solved {sum(results)}/{len(results)}")
 
 
-def current_job(root):
-    """Run name from ~/flybrain/job.env (the run the training service works on)."""
+def read_job(root):
+    """~/flybrain/job.env as a dict (ENV, STEPS, EXTRA, NAME, BRAIN)."""
+    job = {}
     try:
         for line in open(os.path.join(root, "job.env")):
-            if line.startswith("NAME="):
-                return line.strip().split("=", 1)[1]
+            if "=" in line:
+                k, v = line.strip().split("=", 1)
+                job[k] = v.strip('"')
+    except OSError:
+        pass
+    return job
+
+
+def current_job(root):
+    """Run name the training service works on."""
+    return read_job(root).get("NAME")
+
+
+def service_state(name="flybrain-train"):
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", name], capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def ram_free_gb():
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable:"):
+                return round(int(line.split()[1]) / 1048576, 1)
     except OSError:
         pass
     return None
 
 
-def write_dashboard(root, runs):
-    t = cpu_temp_c()
-    active = current_job(root)
-    # the run being trained first, then the others, most recently updated first
-    def last_update(r):
-        f = os.path.join(r, "progress.csv")
-        return os.path.getmtime(f) if os.path.exists(f) else 0
-    runs = sorted(runs, key=lambda r: (os.path.basename(r) != active, -last_update(r)))
-    rows = []
-    for i, run in enumerate(runs):
-        name = os.path.basename(run)
-        ev = last_eval(run) or {}
-        curve = os.path.join(run, "curves.png")
+def _num(x):
+    try:
+        return float(x.replace(",", "").replace("%", ""))
+    except ValueError:
+        return None
+
+
+class LogTail:
+    """Reads a training log incrementally (only bytes added since the last call) and keeps
+    the latest numbers plus the training-return history from the [progress] lines."""
+
+    KEYS = {"fps": "fps", "std": "std", "approx_kl": "approx_kl", "ep_rew_mean": "ep_rew_mean",
+            "total_timesteps": "total_timesteps", "learning_rate": "learning_rate",
+            "clip_fraction": "clip_fraction", "explained_variance": "explained_variance"}
+
+    def __init__(self, path):
+        self.path, self.pos, self.buf = path, 0, ""
+        self.live, self.train = {}, {"t": [], "r": [], "s": []}
+        self.events = []
+
+    def update(self):
         try:
-            subprocess.run([sys.executable, os.path.join(ROOT_REPO, "scripts/plot_runs.py"), run, "--out", curve],
-                           capture_output=True, timeout=120)
-        except Exception:
-            pass
+            size = os.path.getsize(self.path)
+        except OSError:
+            return
+        if size < self.pos:                       # log was replaced: start over
+            self.__init__(self.path)
+        if size == self.pos:
+            return
+        with open(self.path, "rb") as f:
+            f.seek(self.pos)
+            chunk = f.read(size - self.pos).decode("utf-8", "replace")
+        self.pos = size
+        lines = (self.buf + chunk).split("\n")
+        self.buf = lines.pop()                    # keep a half-written last line for next time
+        for ln in lines:
+            self._line(ln.strip())
+        self.live["log_mtime"] = os.path.getmtime(self.path)
+
+    def _line(self, ln):
+        if ln.startswith("[progress]"):
+            # [progress] 1,150,012 steps | training episodes: return 31.16 | solved 0%
+            parts = ln.split("|")
+            steps = _num(parts[0].split()[1])
+            ret = sol = None
+            for p in parts[1:]:
+                if "return" in p:
+                    ret = _num(p.split("return")[1].strip())
+                if "solved" in p:
+                    sol = _num(p.split("solved")[1].strip())
+            if steps is not None and ret is not None:
+                if self.train["t"] and steps <= self.train["t"][-1]:     # resumed: drop the overlap
+                    while self.train["t"] and self.train["t"][-1] >= steps:
+                        for k in self.train:
+                            self.train[k].pop()
+                self.train["t"].append(steps)
+                self.train["r"].append(ret)
+                self.train["s"].append(sol)
+                self.live.update(train_steps=steps, train_return=ret, train_solved=sol)
+        elif ln.startswith("|") and ln.count("|") >= 3:
+            cells = [c.strip() for c in ln.strip("|").split("|")]
+            if len(cells) == 2 and cells[0] in self.KEYS:
+                v = _num(cells[1])
+                if v is not None:
+                    self.live[self.KEYS[cells[0]]] = v
+        elif ln.startswith("Eval num_timesteps="):
+            try:
+                self.live["eval_steps"] = int(ln.split("=")[1].split(",")[0])
+                self.live["eval_return"] = float(ln.split("episode_reward=")[1].split()[0])
+            except (IndexError, ValueError):
+                pass
+        elif ln.startswith("Success rate:"):
+            self.live["eval_solved"] = _num(ln.split(":")[1].strip())
+        elif ln.startswith("[train]") or ln.startswith("[safety]"):
+            self.events = (self.events + [ln[:200]])[-8:]
+
+
+def eval_history(run):
+    """Evaluation history of a run (from evaluations.npz) for the browser charts."""
+    f = os.path.join(run, "evaluations.npz")
+    try:
+        d = np.load(f)
+        t = d["timesteps"].tolist()
+        r = d["results"].mean(1).round(2).tolist() if len(t) else []
+        s = (d["successes"].mean(1) * 100).round(1).tolist() if "successes" in d.files and d["successes"].size else []
+        return {"t": t, "r": r, "s": s, "n_episodes": int(d["results"].shape[1]) if len(t) else 0}
+    except Exception:
+        return {"t": [], "r": [], "s": [], "n_episodes": 0}
+
+
+class Dashboard:
+    def __init__(self, root):
+        self.root = root
+        self.tails = {}          # log path -> LogTail
+        self.cache = {}          # run -> (evaluations.npz mtime, eval history)
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
+        dst = os.path.join(root, "index.html")
+        if os.path.exists(page):
+            tmp = dst + ".tmp"
+            with open(page) as fi, open(tmp, "w") as fo:
+                fo.write(fi.read())
+            os.replace(tmp, dst)
+
+    def run_info(self, run, active):
+        name = os.path.basename(run)
+        f = os.path.join(run, "evaluations.npz")
+        mt = os.path.getmtime(f) if os.path.exists(f) else 0
+        if self.cache.get(run, (None,))[0] != mt:
+            self.cache[run] = (mt, eval_history(run))
+            if mt:                                 # new evaluation: refresh curves.png for `fly export`
+                try:
+                    subprocess.run([sys.executable, os.path.join(ROOT_REPO, "scripts/plot_runs.py"), run,
+                                    "--out", os.path.join(run, "curves.png")], capture_output=True, timeout=120)
+                except Exception:
+                    pass
+        ev = self.cache[run][1]
         vids = sorted(glob.glob(os.path.join(run, "progress", "*.mp4")), reverse=True)
-        rel = lambda p: os.path.relpath(p, root)  # noqa: E731
-        num = ""
-        if ev:
-            num = (f"{ev['steps']:,} steps &middot; eval return {ev['return']:.1f} (best {ev['best_return']:.1f})"
-                   + (f" &middot; solved {ev['solved']:.0%} (best {ev['best_solved']:.0%})" if "solved" in ev else ""))
-        v = "".join(f'<figure><video src="{rel(p)}" controls muted preload="none"></video>'
-                    f'<figcaption>{os.path.basename(p)[5:-4]}</figcaption></figure>' for p in vids[:12])
-        img = f'<img src="{rel(curve)}?t={int(time.time())}">' if os.path.exists(curve) else ""
-        badge = ("<span class='now'>training now</span>" if name == active
-                 else "<span class='old'>paused / finished</span>")
-        if i == 1 or (i == 0 and name != active):
-            rows.append("<h2 class='earlier'>Earlier runs</h2>")
-        rows.append(f"<section><h2>{html.escape(name)} {badge}</h2><p>{num or 'no evaluation yet (first one at 50k steps)'}</p>{img}"
-                    f"<div class='v'>{v or '<p>first progress video after 100k steps</p>'}</div></section>")
-    page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="120"><title>Fly-brain training</title>
-<style>body{{font:15px system-ui;margin:16px;max-width:1100px;background:#fafafa;color:#222}}
-img{{max-width:100%;border:1px solid #ddd}}.v{{display:flex;flex-wrap:wrap;gap:10px}}
-figure{{margin:0;width:340px}}video{{width:100%}}figcaption{{font-size:13px;color:#555}}
-section{{background:#fff;padding:12px;margin:12px 0;border:1px solid #e5e5e5;border-radius:8px}}
-.now{{background:#1f8a3b;color:#fff;font-size:13px;padding:2px 8px;border-radius:10px;vertical-align:middle}}
-.old{{background:#ddd;color:#444;font-size:13px;padding:2px 8px;border-radius:10px;vertical-align:middle}}
-h2.earlier{{margin-top:28px;color:#666;font-size:18px}}</style>
-<h1>Fly-brain training PC</h1>
-<p>Updated {time.strftime('%Y-%m-%d %H:%M')} &middot; CPU {'%.0f &deg;C' % t if t else 'n/a'} &middot; refreshes every 2 min.
-Progress videos: newest checkpoint on the same 3 test mazes/rooms each time (border at the end of each: green = solved, red = not), newest first.</p>
-{''.join(rows) or '<p>No runs yet.</p>'}"""
-    tmp = os.path.join(root, "index.html.tmp")
-    open(tmp, "w").write(page)
-    os.replace(tmp, os.path.join(root, "index.html"))
+        log = os.path.join(self.root, "logs", name + ".log")
+        train = {"t": [], "r": [], "s": []}
+        if os.path.exists(log):
+            if log not in self.tails:
+                self.tails[log] = LogTail(log)
+            self.tails[log].update()
+            train = self.tails[log].train
+        try:
+            env = json.load(open(os.path.join(run, "config.json"))).get("env", "")
+        except Exception:
+            env = ""
+        stamps = [mt] + [os.path.getmtime(v) for v in vids[:1]]
+        if os.path.exists(log):
+            stamps.append(os.path.getmtime(log))
+        last = max(stamps)
+        return {"name": name, "env": env, "active": name == active, "eval": ev, "train": train,
+                "best_return": max(ev["r"]) if ev["r"] else None,
+                "best_solved": max(ev["s"]) if ev["s"] else None,
+                "videos": [os.path.relpath(v, self.root) for v in vids],
+                "last_update": last}
+
+    def write(self, runs):
+        job = read_job(self.root)
+        active = job.get("NAME")
+        infos = [self.run_info(r, active) for r in runs]
+        infos.sort(key=lambda i: (not i["active"], -i["last_update"]))
+        live = {}
+        events = []
+        if active:
+            tail = self.tails.get(os.path.join(self.root, "logs", active + ".log"))
+            if tail:
+                live, events = dict(tail.live), tail.events
+        t = cpu_temp_c()
+        status = {"updated": time.time(), "cpu_temp": round(t, 1) if t else None, "ram_free_gb": ram_free_gb(),
+                  "service": service_state(), "job": {"name": active, "env": job.get("ENV"),
+                  "steps_total": _num(job.get("STEPS", "") or "0"), "extra": job.get("EXTRA", "")},
+                  "live": live, "events": events, "runs": infos}
+        tmp = os.path.join(self.root, "status.json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(status, f, separators=(",", ":"))
+        os.replace(tmp, os.path.join(self.root, "status.json"))
+
+
+def find_runs(root):
+    return sorted(r for r in glob.glob(os.path.join(root, "runs", "*"))
+                  if os.path.exists(os.path.join(r, "config.json")))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.expanduser("~/flybrain"))
     ap.add_argument("--every", type=int, default=100_000, help="steps between progress videos")
+    ap.add_argument("--live", type=int, default=10, help="seconds between dashboard updates")
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
     state_f = os.path.join(args.root, "watch_state.json")
+    dash = Dashboard(args.root)
+    last_video_check = 0.0
     while True:
-        state = json.load(open(state_f)) if os.path.exists(state_f) else {}
-        runs = sorted(r for r in glob.glob(os.path.join(args.root, "runs", "*"))
-                      if os.path.exists(os.path.join(r, "config.json")))
-        for run in runs:
-            ev = last_eval(run)
-            if not ev or not os.path.exists(os.path.join(run, "model.zip")):
-                continue
-            mark = ev["steps"] // args.every * args.every
-            if mark >= args.every and mark > state.get(run, 0):
-                if make_video(run, mark // 1000, sys.executable):
-                    state[run] = mark
-                    json.dump(state, open(state_f, "w"))
-        write_dashboard(args.root, runs)
+        runs = find_runs(args.root)
+        if time.time() - last_video_check >= 60:
+            last_video_check = time.time()
+            state = json.load(open(state_f)) if os.path.exists(state_f) else {}
+            for run in runs:
+                ev = last_eval(run)
+                if not ev or not os.path.exists(os.path.join(run, "model.zip")):
+                    continue
+                mark = ev["steps"] // args.every * args.every
+                if mark >= args.every and mark > state.get(run, 0):
+                    if make_video(run, mark // 1000, sys.executable):
+                        state[run] = mark
+                        json.dump(state, open(state_f, "w"))
+        dash.write(runs)
         if args.once:
             break
-        time.sleep(60)
+        time.sleep(args.live)
 
 
 if __name__ == "__main__":
