@@ -133,10 +133,23 @@ def ram_free_gb():
 
 
 def _num(x):
+    """Number from a log cell, or None (also for nan / inf, which would make the JSON unreadable)."""
     try:
-        return float(x.replace(",", "").replace("%", ""))
+        v = float(x.replace(",", "").replace("%", ""))
     except ValueError:
         return None
+    return v if np.isfinite(v) else None
+
+
+def _clean(o):
+    """Replace nan / inf anywhere in the status by None, so the browser can always parse it."""
+    if isinstance(o, float):
+        return o if np.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_clean(v) for v in o]
+    return o
 
 
 class LogTail:
@@ -215,7 +228,7 @@ def eval_history(run):
     try:
         d = np.load(f)
         t = d["timesteps"].tolist()
-        r = d["results"].mean(1).round(2).tolist() if len(t) else []
+        r = np.nan_to_num(d["results"].mean(1), nan=0.0).round(2).tolist() if len(t) else []
         s = (d["successes"].mean(1) * 100).round(1).tolist() if "successes" in d.files and d["successes"].size else []
         return {"t": t, "r": r, "s": s, "n_episodes": int(d["results"].shape[1]) if len(t) else 0}
     except Exception:
@@ -288,7 +301,7 @@ class Dashboard:
                   "live": live, "events": events, "runs": infos}
         tmp = os.path.join(self.root, "status.json.tmp")
         with open(tmp, "w") as f:
-            json.dump(status, f, separators=(",", ":"))
+            json.dump(_clean(status), f, separators=(",", ":"), allow_nan=False)
         os.replace(tmp, os.path.join(self.root, "status.json"))
 
 
