@@ -192,13 +192,24 @@ class ConnectomeCore(nn.Module):
 class ConnectomeExtractor(nn.Module):
     """SB3 'mlp_extractor': returns (actor latent, critic latent)."""
 
-    def __init__(self, obs_dim, subset_path, k_steps, leak, gain, wiring, critic_hidden=64):
+    def __init__(self, obs_dim, subset_path, k_steps, leak, gain, wiring, critic_hidden=64, n_priv=0, mask_inputs=()):
         super().__init__()
-        self.core = ConnectomeCore(obs_dim, subset_path, k_steps, leak, gain, wiring)
+        # n_priv > 0: the LAST n_priv observation values are the simulator's true state (block,
+        # goal, grasp ...). Only the critic gets them (asymmetric actor-critic, Pinto et al. 2017);
+        # the fly brain is built for, and only ever receives, the first obs_dim - n_priv values.
+        self.n_priv = n_priv
+        self.n_brain = obs_dim - n_priv
+        self.core = ConnectomeCore(self.n_brain, subset_path, k_steps, leak, gain, wiring)
+        # brain inputs held at zero (e.g. the previous command: copying it is the classic
+        # "copycat" shortcut in imitation learning, so the student must read its eyes instead)
+        self.register_buffer("mask_idx", torch.as_tensor(list(mask_inputs), dtype=torch.long), persistent=False)
         # The output neurons' activity is small and similar across inputs at init.
         # A LayerNorm readout rescales it so the action head gets a usable signal.
         self.readout_norm = nn.LayerNorm(self.core.out_dim)
-        self.critic = nn.Sequential(nn.Linear(obs_dim, critic_hidden), nn.Tanh(),
+        crit_in = n_priv if n_priv else obs_dim
+        if n_priv:
+            critic_hidden = max(critic_hidden, 128)
+        self.critic = nn.Sequential(nn.Linear(crit_in, critic_hidden), nn.Tanh(),
                                     nn.Linear(critic_hidden, critic_hidden), nn.Tanh())
         self.latent_dim_pi = self.core.out_dim
         self.latent_dim_vf = critic_hidden
@@ -207,16 +218,21 @@ class ConnectomeExtractor(nn.Module):
         return self.forward_actor(x), self.forward_critic(x)
 
     def forward_actor(self, x):
+        x = x[:, :self.n_brain]                                       # the fly brain: eyes + body only
+        if len(self.mask_idx):
+            x = x.clone()
+            x[:, self.mask_idx] = 0.0
         return self.readout_norm(self.core(x))
 
     def forward_critic(self, x):
-        return self.critic(x)
+        return self.critic(x[:, self.n_brain:] if self.n_priv else x)
 
 
 class ConnectomePolicy(ActorCriticPolicy):
     def __init__(self, *args, subset_path: str = "", k_steps: int = 4, leak: float = 0.5,
-                 gain: float = 1.5, wiring: str = "real", **kwargs):
-        self._cfg = dict(subset_path=subset_path, k_steps=k_steps, leak=leak, gain=gain, wiring=wiring)
+                 gain: float = 1.5, wiring: str = "real", n_priv: int = 0, mask_inputs=(), **kwargs):
+        self._cfg = dict(subset_path=subset_path, k_steps=k_steps, leak=leak, gain=gain, wiring=wiring, n_priv=n_priv,
+                         mask_inputs=tuple(mask_inputs))
         kwargs["ortho_init"] = False   # keep the connectome-based initial weights
         super().__init__(*args, **kwargs)
 
@@ -249,6 +265,7 @@ def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu", custo
     kwargs = dict(subset_path=os.path.abspath(subset), k_steps=cfg.get("k_steps") or 4,
                   leak=cfg.get("leak") if cfg.get("leak") is not None else 0.5,
                   gain=cfg.get("gain") if cfg.get("gain") is not None else 1.5,
-                  wiring=cfg.get("wiring", "real"), log_std_init=-0.5)
+                  wiring=cfg.get("wiring", "real"), log_std_init=-0.5, n_priv=int(cfg.get("n_priv", 0) or 0),
+                  mask_inputs=tuple(cfg.get("mask_inputs", ()) or ()))
     return PPO.load(model_path, env=env, device=device,
                     custom_objects={"policy_class": ConnectomePolicy, "policy_kwargs": kwargs, **(custom or {})})

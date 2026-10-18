@@ -218,7 +218,7 @@ class LogTail:
                 pass
         elif ln.startswith("Success rate:"):
             self.live["eval_solved"] = _num(ln.split(":")[1].strip())
-        elif ln.startswith("[train]") or ln.startswith("[safety]"):
+        elif ln.startswith(("[train]", "[safety]", "[imitate]")):
             self.events = (self.events + [ln[:200]])[-8:]
 
 

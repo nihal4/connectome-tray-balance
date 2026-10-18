@@ -70,6 +70,19 @@ def parse():
                     help="panda_lift task definition: 'height' (lift progress by height) or 'goal' (bring the "
                          "block to a point straight above its start; sideways carrying costs). Applies to "
                          "training AND evaluation, and is saved in the run's config.")
+    ap.add_argument("--imitate", type=int, default=0,
+                    help="panda_lift: first train the fly brain by imitating the scripted teacher (DAgger) for "
+                         "this many rounds, then continue with PPO (needs --init_from, --privileged)")
+    ap.add_argument("--imitate_steps", type=int, default=15_000, help="arm steps collected per later imitation round "
+                    "(the first round collects 30,000 teacher steps)")
+    ap.add_argument("--imitate_first_steps", type=int, default=30_000, help="teacher steps in the first imitation round")
+    ap.add_argument("--imitate_epochs", type=float, default=6.0, help="passes over the imitation data per later round "
+                    "(at most 2,000 updates; the first round makes 15 passes)")
+    ap.add_argument("--privileged", action="store_true", default=None,
+                    help="give the training-only critic the true simulator state (asymmetric actor-critic); "
+                         "the fly brain never receives it")
+    ap.add_argument("--grip_mode", choices=["delta", "absolute"], default=None,
+                    help="panda: 'absolute' = the grip command IS the finger target (closed stays closed)")
     ap.add_argument("--set_std", type=float, default=None,
                     help="resumed run: reset the exploration noise (action std) to this value, ONCE "
                          "(remembered in the run folder, so a later restart does not reset it again)")
@@ -124,9 +137,18 @@ def main():
             raise SystemExit("drone/panda envs need a compound-eye brain: "
                              "python scripts/build_flybrain.py --eye compound --facets 160 --n 4000 --hops 5")
         env_kw["n_facets"] = int(brain["facets"])     # eye size must match the brain's eye
-    if args.lift_reward is None and args.resume and os.path.exists(os.path.join(out, "config.json")):
-        # keep the task this run was last trained on, even if the job line leaves the option out
-        args.lift_reward = json.load(open(os.path.join(out, "config.json"))).get("lift_reward")
+    if args.resume and os.path.exists(os.path.join(out, "config.json")):
+        # keep the task / robot this run was last trained with, even if the job line leaves an option out
+        _saved = json.load(open(os.path.join(out, "config.json")))
+        for _k in ("lift_reward", "grip_mode", "privileged"):
+            if getattr(args, _k) is None and _saved.get(_k) is not None:
+                setattr(args, _k, _saved[_k])
+    if args.grip_mode:            # robot property: applies to training and evaluation
+        env_kw["grip_mode"] = args.grip_mode
+        print(f"[train] gripper command: {args.grip_mode}")
+    if args.privileged:           # critic input (training only); the fly brain never sees it
+        env_kw["privileged"] = True
+        print("[train] critic gets the true simulator state (asymmetric actor-critic); the fly brain does not")
     if args.lift_reward:          # task definition: applies to training and evaluation
         env_kw["lift_reward"] = args.lift_reward
         print(f"[train] lift reward: {args.lift_reward}")
@@ -161,7 +183,52 @@ def main():
         if not os.path.exists(os.path.join(init, "best_model.zip")):
             raise SystemExit(f"--init_from: no best_model.zip in {init}")
 
-    if init:
+    do_imitate = False
+    if init and args.imitate:
+        # teacher -> student: a new run whose policy has the asymmetric critic. The fly brain's
+        # learned weights are copied from the parent; imitation (DAgger) then PPO follow below.
+        if not args.privileged:
+            raise SystemExit("--imitate needs --privileged (the critic for the PPO phase)")
+        import shutil
+        from ctb.envs.panda import N_PRIV
+        from ctb.policies import load_ppo
+        shutil.copy(os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
+        parent = json.load(open(os.path.join(init, "config.json")))
+        # brain body-sense layout (last 13 of the brain inputs): hand position (3), velocity (3), finger
+        # opening, gripper-closed flag, touch, previous command (4). Hide the flag and the previous
+        # command from the student: copying them is the "copycat" shortcut of imitation learning.
+        n_brain = venv.observation_space.shape[0] - N_PRIV
+        mask = [n_brain - 13 + 7] + list(range(n_brain - 4, n_brain))
+        parent.update(mask_inputs=mask)
+        parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
+                      n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
+                      edge_bias=args.edge_bias, random_start=args.random_start, eval_episodes=cfg["eval_episodes"],
+                      imitation={"rounds": args.imitate, "steps_per_round": args.imitate_steps,
+                                 "teacher": "ctb.envs.panda.lift_teacher (true block position; training targets only)"})
+        with open(os.path.join(out, "config.json"), "w") as f:
+            json.dump(parent, f, indent=2)
+        norm = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
+        policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=parent["k_steps"],
+                             leak=parent["leak"], gain=parent["gain"], wiring=parent.get("wiring", "real"),
+                             log_std_init=-0.5, n_priv=N_PRIV, mask_inputs=mask)
+        model = PPO(ConnectomePolicy, norm, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
+                    n_steps=cfg["n_steps"], batch_size=cfg["batch_size"], n_epochs=cfg["n_epochs"],
+                    learning_rate=lr, gamma=0.99, gae_lambda=0.95, clip_range=0.2,
+                    ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0)
+        src = load_ppo(init, os.path.join(init, "best_model.zip"), device=args.device).policy.state_dict()
+        dst = model.policy.state_dict()
+        same = [k for k in dst if k in src and src[k].shape == dst[k].shape
+                and not k.startswith(("mlp_extractor.critic", "value_net"))]
+        for k in same:
+            dst[k] = src[k]
+        model.policy.load_state_dict(dst)
+        venv = norm
+        eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
+        print(f"[train] teacher -> student: fly brain copied from {init}/best_model.zip ({len(same)} tensors); "
+              f"{args.imitate} imitation rounds of {args.imitate_steps:,} steps, then PPO (lr {lr})")
+        do_imitate = True
+        reset = False
+    elif init:
         # fine-tune: copy the parent's brain wiring + settings, load its BEST brain, fresh step count
         import shutil
         from ctb.policies import load_ppo
@@ -301,6 +368,18 @@ def main():
         dfd = os.open(out, os.O_RDONLY)       # make the renames themselves durable
         os.fsync(dfd)
         os.close(dfd)
+
+    if do_imitate:
+        from ctb.imitate import run_dagger
+        run_dagger(model, venv, eval_env, out, init, iters=args.imitate, steps=args.imitate_steps,
+                   eval_episodes=cfg["eval_episodes"], seed=args.seed, final_std=args.std or 0.15,
+                   epochs=args.imitate_epochs, first_steps=args.imitate_first_steps,
+                   log=lambda m: print(m, flush=True), save_fn=save)
+        if model.num_timesteps >= cfg["total_steps"]:
+            print(f"[train] finished after imitation. Saved to {out}.")
+            venv.close()
+            eval_env.close()
+            return
 
     eval_cb = EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
                            eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),

@@ -16,7 +16,10 @@ case "${1:-help}" in
       *_vision)  BRAIN=data/flybrain_cam16_N2500.npz;  EXTRA="${4:---action_rate 0.1 --random_start 0.5}"; NAME="$ENV-connectome-real-s0-slow" ;;
       *)         BRAIN=data/subset_flywire783_N1000.npz; EXTRA="${4:-}"; NAME="$ENV-connectome-real-s0" ;;
     esac
-    case "$EXTRA" in *--init_from*) NAME="$NAME-ft" ;; esac      # fine-tune = a new run next to its parent
+    case "$EXTRA" in
+      *--imitate*)   NAME="$NAME-imitate" ;;                       # teacher -> student: its own run
+      *--init_from*) NAME="$NAME-ft" ;;                            # fine-tune = a new run next to its parent
+    esac
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;
   start)   $U start flybrain-train && echo "started: $("$0" job)" ;;

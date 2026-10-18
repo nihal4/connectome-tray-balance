@@ -69,6 +69,7 @@ LIFT_HOLD = 5                # ... while held, for 5 steps (0.2 s)
 # point in the air LIFT_GOAL straight above where it started (2 x (1 - tanh(10 d))), so going
 # up pays and carrying it sideways costs. Success = held within GOAL_DIST of that point, 0.2 s.
 GOAL_DIST = 0.025
+N_PRIV = 17                  # size of privileged_state()
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
 TABLE = np.array([0.35, 0.30, 0.35])     # grey
@@ -148,7 +149,8 @@ class FlyPandaEnv(gym.Env):
 
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
-                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height", **_):
+                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
+                 grip_mode="delta", privileged=False, **_):
         assert task in ("reach", "lift"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -201,7 +203,9 @@ class FlyPandaEnv(gym.Env):
         self.table_id = m.geom("table").id
 
         self.n_vis = 2 * n_facets * N_CH
-        self.observation_space = spaces.Box(-np.inf, np.inf, (2 * self.n_vis + 13,), np.float32)
+        self.n_brain_obs = 2 * self.n_vis + 13              # what the fly brain sees
+        self.observation_space = spaces.Box(-np.inf, np.inf, (self.n_brain_obs + (N_PRIV if privileged else 0),),
+                                            np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (4,), np.float32)
         self.random_start = random_start
         self.edge_bias = edge_bias          # training only: share of blocks put near the table edges / corners
@@ -210,6 +214,13 @@ class FlyPandaEnv(gym.Env):
         self.grasp_start = grasp_start
         assert lift_reward in ("height", "goal"), lift_reward
         self.lift_reward = lift_reward
+        # grip_mode: "delta" = each command nudges the finger target (old); "absolute" = the command
+        # IS the finger target (-1 closed .. +1 open), as in ManiSkill / Fetch: a closed hand stays closed
+        assert grip_mode in ("delta", "absolute"), grip_mode
+        self.grip_mode = grip_mode
+        # privileged: append the true state (block, goal, grasp ...) AFTER the brain's inputs, for the
+        # training-only critic (asymmetric actor-critic). The fly brain never receives these numbers.
+        self.privileged = privileged
         # hand commands are averaged over the last few steps (like a real arm controller):
         # 1.0 = no smoothing, 0.3 = each step moves 30 % towards the new command
         self.cmd_smooth = cmd_smooth
@@ -287,6 +298,10 @@ class FlyPandaEnv(gym.Env):
         """Pre-grasp point: just above the block, where a grasp would start."""
         return self.block_pos() + np.array([0, 0, BLOCK_H + 0.015])
 
+    def teacher_action(self):
+        """The imitation teacher's move for the current situation (called across processes)."""
+        return lift_teacher(self)
+
     def finger_touch(self):
         """(left touching anything, right touching anything, both fingers on the block)."""
         d = self.data
@@ -353,7 +368,19 @@ class FlyPandaEnv(gym.Env):
             v = v + self.rng.normal(0, 2 * self.body_noise, 3)
         body = np.concatenate([(p - 0.5 * (WS_LO + WS_HI)) * 4, v * 2, [self.gripper_width() * 25 - 1],
                                [float(self._grip_ctrl > 127)], [self._touch_obs()], self._last_action])
-        return np.concatenate([img, d_img, body]).astype(np.float32)
+        out = [img, d_img, body]
+        if self.privileged:
+            out.append(self.privileged_state())
+        return np.concatenate(out).astype(np.float32)
+
+    def privileged_state(self):
+        """True state for the training-only critic (never given to the fly brain)."""
+        tcp, blk = self.tcp_pos(), self.block_pos()
+        goal = getattr(self, "_goal", blk + np.array([0, 0, LIFT_GOAL]))
+        l, r, _ = self.finger_touch()
+        return np.concatenate([tcp, blk, blk - tcp, goal - blk,
+                               [float(self.is_grasped()), self.lift_height() if hasattr(self, "_block_z0") else 0.0,
+                                self.gripper_width(), float(l), float(r)]])
 
     def _touch_obs(self):
         """Touch: 0 none, 0.5 one finger, 1 both fingers press on something (reach: unused, 0)."""
@@ -483,7 +510,10 @@ class FlyPandaEnv(gym.Env):
         if n > 0.05:
             self._target = tcp + off * 0.05 / n
         d.ctrl[:7] = self._ik_solve(self._target, d.qpos[:7].copy())
-        self._grip_ctrl = float(np.clip(self._grip_ctrl + a[3] * 64, 0, 255))   # 4 steps to open/close
+        if self.grip_mode == "absolute":
+            self._grip_ctrl = float((a[3] + 1) * 127.5)                        # -1 closed .. +1 open
+        else:
+            self._grip_ctrl = float(np.clip(self._grip_ctrl + a[3] * 64, 0, 255))   # 4 steps to open/close
         d.ctrl[7] = self._grip_ctrl
         for _ in range(FRAME_SKIP):
             mujoco.mj_step(m, d)
@@ -562,4 +592,35 @@ def _lift_controller(env):
                     else np.array([blk[0], blk[1], env._block_z0 + LIFT_GOAL + 0.03]))
             goal = goal - (blk - tcp)                  # move the hand, keep the hold offset
     a[:3] = np.clip((goal - tcp) / STEP * 0.5, -1, 1)
+    return a
+
+
+def lift_teacher(env):
+    """Teacher for imitation (DAgger). Uses the TRUE block position (the fly brain never does)
+    and decides only from the current situation, so it also gives the right move in situations
+    the student got itself into: rise if low and off-target, line up above the block with the
+    hand open, descend, close when level with the block, then bring the held block to the goal
+    point straight above its start. If the block slips out, it starts again from that state."""
+    tcp, blk = env.tcp_pos(), env.block_pos()
+    a = np.zeros(4)
+    if env.is_grasped():
+        goal = getattr(env, "_goal", blk + np.array([0, 0, LIFT_GOAL]))
+        target = goal - (blk - tcp)                       # move the hand so the block reaches the goal
+        a[3] = -1.0
+    else:
+        xy_err = float(np.linalg.norm((blk - tcp)[:2]))
+        dz = float(tcp[2] - blk[2])
+        if xy_err > 0.012:
+            if dz < 0.045:                                # low and off-target: go up first (no collisions)
+                target = np.array([tcp[0], tcp[1], blk[2] + 0.08])
+            else:                                         # line up above the block
+                target = np.array([blk[0], blk[1], max(tcp[2], blk[2] + 0.06)])
+            a[3] = 1.0
+        elif dz > 0.008:                                  # straight down, hand open
+            target = blk.copy()
+            a[3] = 1.0
+        else:                                             # level with the block: close
+            target = blk.copy()
+            a[3] = -1.0
+    a[:3] = np.clip((target - tcp) / STEP * 0.6, -1, 1)
     return a

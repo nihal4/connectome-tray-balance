@@ -220,6 +220,35 @@ with noise 78 %). Switching a resumed run keeps the old evaluation history and b
 `*_height_until_<N>k*` and starts new ones; the choice is saved in the run's config and used by
 training, the evaluation chart, the videos and `fly eval`.
 
+### Teacher -> student (imitation, then PPO) for `panda_lift`
+
+Pure PPO from the fly eyes learned to find, grasp and partly lift, but never completed a lift in
+1.6M steps (it carried the block sideways at low height). Vision-based robot policies are usually
+trained teacher -> student instead (Genesis manipulation example; asymmetric actor-critic, Pinto et
+al. 2017; FlyGM used imitation first, then PPO):
+
+* **Teacher** (`ctb/envs/panda.py: lift_teacher`): a hand-written controller using the TRUE block
+  position; it decides from the current situation only, so it also rescues situations the student
+  got into (98 % solved from normal starts, 100 % with corner blocks, 87 % with action noise 0.3,
+  98 % after 25 random steps first). Training targets only; never used in evaluation or videos.
+* **Student**: the fly brain, eyes + body sense only. The previous command and the
+  gripper-closed flag are hidden from it (copying them is the "copycat" shortcut of imitation).
+* **DAgger** (`ctb/imitate.py`, `--imitate N`): round 1 = 30k teacher steps, 15 passes; later
+  rounds 15k steps where the teacher drives 50 %, 25 % ... of the time and labels every step;
+  data aggregated (up to 120k examples); after each round the student is tested ALONE on 50 normal
+  episodes (same evaluation as PPO). Checkpointed per round, including the data.
+* **Then PPO** continues from the imitated brain with an **asymmetric critic** (`--privileged`):
+  the critic gets the true state (17 numbers); the policy slices them away (changing them changes
+  the fly brain's action by exactly 0.0).
+* **Gripper** `--grip_mode absolute`: the command is the finger target (closed stays closed),
+  as in ManiSkill / Fetch, instead of a per-step nudge.
+
+Checks before the desktop run: the fly brain can fit the teacher (validation error = training
+error, still falling after 20 passes); a pure imitation student (30k teacher steps) grasped in
+40 % and completed the lift alone in 1 of 30 episodes, the first ever; a 3-round DAgger test went
+0 % -> 7 % -> 7 % solved alone. A first attempt failed for a known reason: too little training
+per round (sideways errors larger than the teacher's own spread).
+
 Planned ladder: reach -> grasp and lift -> pick and place into a bin -> sort by colour into
 3 bins -> add the fly's smell pathway (antennal lobe, mushroom body) and sort fruits by smell
 -> colour + smell, conflicting cues -> taste by touch -> ripe vs rotten -> formalin-treated vs
