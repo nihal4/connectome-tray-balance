@@ -295,6 +295,11 @@ def main():
         eval_cb.evaluations_length = [list(r) for r in old["ep_lengths"][keep]]
         if "successes" in old.files and len(old["successes"]):
             eval_cb.evaluations_successes = [list(r) for r in old["successes"][keep]]
+        # remember the best score so far: otherwise the first evaluation after a restart counts as
+        # a "new best" and overwrites best_model.zip even when it is worse
+        if keep.any():
+            eval_cb.best_mean_reward = float(old["results"][keep].mean(axis=1).max())
+            print(f"[train] best evaluation so far: {eval_cb.best_mean_reward:.1f} (best_model.zip kept until beaten)")
     callbacks = [eval_cb]
     # Save model + normalisation every 50k steps, so a crashed or timed-out session
     # (Kaggle limit, laptop sleep) can continue with --resume instead of starting over.
