@@ -144,7 +144,7 @@ class FlyPandaEnv(gym.Env):
 
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
-                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, **_):
+                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, **_):
         assert task in ("reach", "lift"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -201,6 +201,9 @@ class FlyPandaEnv(gym.Env):
         self.action_space = spaces.Box(-1.0, 1.0, (4,), np.float32)
         self.random_start = random_start
         self.edge_bias = edge_bias          # training only: share of blocks put near the table edges / corners
+        # training only (lift): share of episodes that start partway through the task, half with the
+        # gripper open around the block, half with the block already held (practice closing / lifting)
+        self.grasp_start = grasp_start
         # hand commands are averaged over the last few steps (like a real arm controller):
         # 1.0 = no smoothing, 0.3 = each step moves 30 % towards the new command
         self.cmd_smooth = cmd_smooth
@@ -393,13 +396,25 @@ class FlyPandaEnv(gym.Env):
         start = self.rng.uniform([0.35, -0.2, 0.18], [0.65, 0.2, 0.35])
         if self.random_start > 0 and self.rng.random() < self.random_start:
             start = np.array([*target, 0.0]) + self.rng.uniform([-0.08, -0.08, 0.05], [0.08, 0.08, 0.12])
+        mid = held = False
+        if self.task == "lift" and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
+            mid, held = True, self.rng.random() < 0.5
+            start = np.array([target[0], target[1], BLOCK_H]) + self.rng.uniform([-0.008, -0.008, -0.004],
+                                                                                   [0.008, 0.008, 0.006])
         q = self._ik_solve(start, HOME, iters=60)
         d.qpos[:7] = q
         d.ctrl[:7] = q
         d.ctrl[7] = self._grip_ctrl = 255.0
+        if mid:                                             # align the block with the fingers
+            yaw = self.rng.uniform(-0.3, 0.3)
+            d.qpos[self.block_q + 3:self.block_q + 7] = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]
         mujoco.mj_forward(m, d)
         for _ in range(50):                                 # let blocks settle
             mujoco.mj_step(m, d)
+        if held:                                            # close the fingers on the block
+            d.ctrl[7] = self._grip_ctrl = 0.0
+            for _ in range(150):
+                mujoco.mj_step(m, d)
         if n_d < len(self.decoy_q):                          # keep parked decoys parked
             for qa in self.decoy_q[n_d:]:
                 d.qpos[qa:qa + 3] = [0, 0, -5]

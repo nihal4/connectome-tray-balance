@@ -63,6 +63,9 @@ def parse():
     ap.add_argument("--lr", type=float, default=None, help="learning rate (default 3e-4; fine-tuning: 1e-4)")
     ap.add_argument("--std", type=float, default=None,
                     help="fine-tune: reset the exploration noise (action std) of the loaded brain, e.g. 0.25")
+    ap.add_argument("--grasp_start", type=float, default=0.0,
+                    help="panda_lift: share of TRAINING episodes that start with the gripper around the block "
+                         "(half open, half already holding it)")
     ap.add_argument("--edge_bias", type=float, default=0.0,
                     help="panda: share of TRAINING episodes with the block near the table edges / corners")
     # profile overrides
@@ -127,6 +130,9 @@ def main():
     if args.edge_bias > 0:                  # training only; evaluation keeps uniform block positions
         train_kw["edge_bias"] = args.edge_bias
         print(f"[train] {args.edge_bias:.0%} of training blocks placed near the table edges / corners")
+    if args.grasp_start > 0:                # training only; evaluation always starts from scratch
+        train_kw["grasp_start"] = args.grasp_start
+        print(f"[train] {args.grasp_start:.0%} of training episodes start at the block (half open, half holding it)")
     if args.random_start > 0:
         print(f"[train] curriculum: {args.random_start:.0%} of training episodes start near the goal / at a random point on the route")
     venv = Vec([make_env(args.env, seed=args.seed * 1000 + i, **train_kw) for i in range(cfg["n_envs"])])
