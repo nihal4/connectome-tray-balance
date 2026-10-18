@@ -209,7 +209,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t4"><span class="n">4</span><span class="t">Tilt maze by camera</span><span class="tag done">Done</span></a></li>
     <li><a href="#t5"><span class="n">5</span><span class="t">Drone with compound eyes</span><span class="tag hold">On hold</span></a></li>
     <li><a href="#t6"><span class="n">6</span><span class="t">Panda arm: reach a block</span><span class="tag done">Done</span></a></li>
-    <li><a href="#t7"><span class="n">7</span><span class="t">Panda arm: grasp and lift</span><span class="tag now">Training</span></a></li>
+    <li><a href="#t7"><span class="n">7</span><span class="t">Panda arm: grasp and lift</span><span class="tag part">First lifts</span></a></li>
     <li><a href="#roadmap"><span class="n">8+</span><span class="t">Sorting, smell, fruit</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
@@ -544,20 +544,64 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
 
   <!-- 7 ------------------------------------------------------------------ -->
   <section class="task" id="t7">
-    <div class="task-head"><span class="num">7</span><h3>Franka Panda arm: grasp the block and lift it</h3><span class="tag now">Training now</span></div>
+    <div class="task-head"><span class="num">7</span><h3>Franka Panda arm: grasp the block and lift it</h3><span class="tag part">First lifts</span></div>
     <p>Same robot, eyes and brain, plus <strong>touch</strong>: the brain feels whether each finger
       presses on something, like a fly's mechanosensors. It must close both fingers on the yellow
       block and lift it 8 cm. The reward comes in stages (reach, hold, lift), and lifting only counts
       while the block is held, so pushing or flicking it earns nothing. Training starts from the
       reaching brain.</p>
-    <ul class="facts"><li>Scripted pilot: <b>92 %</b></li><li>Pilot with training-like noise: <b>78 %</b></li><li>Hover only / random: <b>0 %</b></li></ul>
+    <p>Result, by trial and error alone: for 2 million steps it found the block, went down to it and
+      learned to close its fingers, but never completed a lift. Then, at 2.15 million steps, the first
+      full lifts appeared, and by 3.2 million it found, grasped, lifted and held the block on its own in
+      about one attempt in five. With the block made invisible it never succeeds, so it works by eye.
+      Its lifts are not yet clean: it often swings the block sideways while raising it.</p>
+    <ul class="facts"><li>Solved alone: <b>~20 %</b> (16–38 %)</li><li>No decoys: <b>24 %</b></li><li>3× eye noise: <b>8 %</b></li><li>Block invisible: <b>0 %</b></li></ul>
     <div class="gallery">
+      <figure>
+        <video src="results/v9_panda_lift/showcase_best_brain.mp4" poster="results/v9_panda_lift/poster_showcase.jpg" controls muted loop playsinline preload="none"
+               aria-label="The fly-brain arm grasps the yellow block and lifts it in three episodes (green border) and misses once (red border)"></video>
+        <figcaption><b>The fly brain's own lifts</b>: 3 solved (green) and 1 miss, best brain, new layouts.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v9_panda_lift/showcase_2500k.mp4" poster="results/v9_panda_lift/poster_showcase_2500k.jpg" controls muted loop playsinline preload="none"
+               aria-label="Earlier successes at 2.5 million steps, including a lift next to two blue decoys"></video>
+        <figcaption><b>Earlier lifts</b> at 2.5M steps, one next to two blue decoys.</figcaption>
+      </figure>
       <figure>
         <video src="results/previews/panda_lift_scripted.mp4" poster="results/previews/panda_lift_scripted.jpg" controls muted loop playsinline preload="none"
                aria-label="The Panda gripper descends over the yellow block, closes on it and lifts it"></video>
-        <figcaption><b>The task</b>, done by a scripted pilot that knows where the block is. The fly brain is learning it now.</figcaption>
+        <figcaption><b>The task</b> done by a scripted pilot that knows where the block is, for comparison.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v9_panda_lift/curves.png"><img src="results/v9_panda_lift/curves.png" alt="Learning curves: eval return rises from 14 to about 35; solved stays at 0 until 2.15 million steps, then rises to 10 to 38 percent" loading="lazy"></a>
+        <figcaption><b>Learning curves</b>: solved stays at 0 % until 2.15M steps, then climbs.</figcaption>
       </figure>
     </div>
+    <details>
+      <summary>How it got there, and the tests</summary>
+      <table>
+        <thead><tr><th>Steps</th><th>Change</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td class="num">0–0.7M</td><td>start from the reaching brain</td><td>goes down to the block, never grasps</td></tr>
+          <tr><td class="num">0.75M</td><td>some practice episodes start at the block (open, or already holding it)</td><td>learns to close and hold</td></tr>
+          <tr><td class="num">1.1M</td><td>exploration noise reset once, lower learning rate</td><td>aim restored; grasps; lifts a little</td></tr>
+          <tr><td class="num">2.15M</td><td>–</td><td class="yes">first full lifts</td></tr>
+          <tr><td class="num">3.2M</td><td>–</td><td class="yes">best brain: about 1 in 5 solved</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Test (best brain, 50 episodes)</th><th>Solved</th></tr></thead>
+        <tbody>
+          <tr><td>Normal conditions</td><td class="num">16 %</td></tr>
+          <tr><td>No decoy blocks</td><td class="num">24 %</td></tr>
+          <tr><td>Light twice as dim or bright</td><td class="num">20 %</td></tr>
+          <tr><td>Three times more noise in the eyes</td><td class="num">8 %</td></tr>
+          <tr><td>Yellow block made invisible</td><td class="num no">0 %</td></tr>
+        </tbody>
+      </table>
+      <p>One training run; 50-episode tests swing by about ±10 points. Videos and tests always start
+        from scratch (no help), unlike some practice episodes.</p>
+    </details>
     <details>
       <summary>Checks before training</summary>
       <table>

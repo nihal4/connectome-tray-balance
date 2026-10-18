@@ -1,0 +1,27 @@
+{
+  "clean": {
+    "return": 34.2,
+    "length": 100.0,
+    "success_rate": 0.16
+  },
+  "no_decoys": {
+    "return": 37.3,
+    "length": 100.0,
+    "success_rate": 0.24
+  },
+  "eye_noise_x3": {
+    "return": 19.1,
+    "length": 100.0,
+    "success_rate": 0.08
+  },
+  "dim_or_bright_x2": {
+    "return": 30.5,
+    "length": 100.0,
+    "success_rate": 0.2
+  },
+  "target_hidden": {
+    "return": 6.1,
+    "length": 100.0,
+    "success_rate": 0.0
+  }
+}

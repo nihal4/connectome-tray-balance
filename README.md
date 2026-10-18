@@ -224,8 +224,9 @@ training, the evaluation chart, the videos and `fly eval`.
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
 by 1.6M steps it had not completed a lift (it carried the block sideways at low height), but kept
-going: at 2.2M it completed the full lift-and-hold alone in 6 % of evaluation episodes (training
-return 42.8, 6 % of practice episodes). Slow, but discovered from reward alone. Vision-based robot policies are usually
+going: first solved evaluation episodes at 2.15M, 12 % at 2.4M, best brain at 3.2M; mean 22.8 %
+solved over the last 13 evaluations, 16 % on a fresh 50-episode test (0 % with the block hidden).
+Discovered from reward alone. Details, robustness and success clips: `results/v9_panda_lift/`. Vision-based robot policies are usually
 trained teacher -> student instead (Genesis manipulation example; asymmetric actor-critic, Pinto et
 al. 2017; FlyGM used imitation first, then PPO):
 
