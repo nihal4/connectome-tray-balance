@@ -210,7 +210,8 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t5"><span class="n">5</span><span class="t">Drone with compound eyes</span><span class="tag hold">On hold</span></a></li>
     <li><a href="#t6"><span class="n">6</span><span class="t">Panda arm: reach a block</span><span class="tag done">Done</span></a></li>
     <li><a href="#t7"><span class="n">7</span><span class="t">Panda arm: grasp and lift</span><span class="tag done">Done</span></a></li>
-    <li><a href="#roadmap"><span class="n">8+</span><span class="t">Sorting, smell, fruit</span><span class="tag next">Planned</span></a></li>
+    <li><a href="#t8"><span class="n">8</span><span class="t">Panda arm: pick and place</span><span class="tag done">Done</span></a></li>
+    <li><a href="#roadmap"><span class="n">9+</span><span class="t">Sorting, smell, fruit</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
 
@@ -714,13 +715,93 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     </details>
   </section>
 
+  <!-- 8 ------------------------------------------------------------------ -->
+  <section class="task" id="t8">
+    <div class="task-head"><span class="num">8</span><h3>Franka Panda arm: pick the block and place it in a bin</h3><span class="tag done">Done</span></div>
+    <p>A shallow red bin (14 × 14 cm, 1.5 cm rim) appears somewhere new on the table each time, away from
+      the yellow block. The fly brain has to find both by eye, grasp the block, carry it over the bin,
+      lower it onto the bin's floor, let go and move its hand away. Solved = the block rests inside the bin,
+      touched by neither finger, for 0.2 s, within 6 seconds.</p>
+    <p>Same recipe as the lift: starting from the lift brain, a scripted teacher (knows where block and
+      bin are) showed it the right moves for 10 short rounds, then it practised on its own. The
+      teacher rounds alone already reached 82–88 %; practice then held it at 84–92 %, levelling off
+      within 0.2 million steps. Total: 0.77 million steps, under 4 hours on the desktop.</p>
+    <ul class="facts"><li>Solved alone: <b>92 %</b></li><li>Block lands <b>1.0 cm</b> from the bin centre</li><li>3× eye noise: <b>86 %</b></li><li>Block invisible: <b>0 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v11_panda_place/showcase_best_brain.mp4" poster="results/v11_panda_place/poster_showcase_best_brain.jpg" controls muted loop playsinline preload="none"
+               aria-label="Three new layouts: the arm grasps the yellow block, carries it to the red bin, puts it in and lets go (green borders); in a fourth it ends still holding the block in the bin (red border)"></video>
+        <figcaption><b>Pick and place by eye</b>: 3 solved on new layouts and 1 miss (still holding it at the end).</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v11_panda_place/progress_0700k_fixed_layouts.mp4" poster="results/v11_panda_place/poster_progress_0700k_fixed_layouts.jpg" controls muted loop playsinline preload="none"
+               aria-label="The three fixed test layouts at 700 thousand steps, all solved"></video>
+        <figcaption><b>The three fixed test layouts</b> at 0.7M steps: all solved.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v11_panda_place/progress_0500k_rim_miss.mp4" poster="results/v11_panda_place/poster_progress_0500k_rim_miss.jpg" controls muted loop playsinline preload="none"
+               aria-label="At 500 thousand steps: two layouts solved; in the third the block is lowered off-centre, catches on the bin rim and ends tilted"></video>
+        <figcaption><b>At 0.5M</b>: the third block catches on the rim; fixed by 0.7M.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v11_panda_place/curves.png"><img src="results/v11_panda_place/curves.png" alt="Learning curves: solved rises from 2 percent to 82 percent during the teacher rounds and stays between 84 and 92 percent during practice" loading="lazy"></a>
+        <figcaption><b>Learning curves</b>: 50 test episodes per point.</figcaption>
+      </figure>
+    </div>
+
+    <div class="maps" role="group" aria-label="Success map by where the bin was placed">
+      <div class="map">
+        <h4>Where the bin was <span>· 160/200 (80 %)</span></h4>
+        <div class="grid5">
+          <span></span><span class="col">right</span><span class="col"></span><span class="col">centre</span><span class="col"></span><span class="col">left</span>
+          <span class="lab">near</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v4" title="6 of 8">6</span><span class="c v4" title="5 of 8">5</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v4" title="6 of 8">6</span>
+          <span class="lab"></span><span class="c v5" title="7 of 8">7</span><span class="c v4" title="5 of 8">5</span><span class="c v2" title="3 of 8">3</span><span class="c v4" title="6 of 8">6</span><span class="c v4" title="6 of 8">6</span>
+          <span class="lab"></span><span class="c v5" title="7 of 8">7</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v4" title="6 of 8">6</span><span class="c v5" title="7 of 8">7</span><span class="c v4" title="6 of 8">6</span>
+          <span class="lab"></span><span class="c v6 hi" title="8 of 8">8</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v5" title="7 of 8">7</span><span class="c v5" title="7 of 8">7</span><span class="c v4" title="6 of 8">6</span>
+          <span class="lab">far</span><span class="c v5" title="7 of 8">7</span><span class="c v5" title="7 of 8">7</span><span class="c v5" title="7 of 8">7</span><span class="c v4" title="6 of 8">6</span><span class="c v2" title="3 of 8">3</span>
+        </div>
+      </div>
+      <p class="key">Each cell: a bin position on the table (5 × 5 grid, seen from the robot), number of
+        successes out of 8 layouts with the block, decoys and start placed at random. Weakest: the bin
+        near the middle of the table and in the far-left corner.</p>
+    </div>
+
+    <details open>
+      <summary>Tests and what goes wrong (best brain)</summary>
+      <table>
+        <thead><tr><th>Test (50 episodes)</th><th>Solved</th></tr></thead>
+        <tbody>
+          <tr><td>Normal conditions</td><td class="num yes">92 %</td></tr>
+          <tr><td>No decoy blocks</td><td class="num yes">92 %</td></tr>
+          <tr><td>Three times more noise in the eyes</td><td class="num yes">86 %</td></tr>
+          <tr><td>Light twice as dim or bright</td><td class="num">58 %</td></tr>
+          <tr><td>Yellow block made invisible</td><td class="num no">0 %</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>200 new layouts</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Grasped the block</td><td class="num">94 %</td></tr>
+          <tr><td>Carried it over the bin</td><td class="num">90 %</td></tr>
+          <tr><td>Solved (in the bin, released)</td><td class="num yes">84 %</td></tr>
+          <tr><td>Block centre to bin centre when placed (median)</td><td class="num">1.0 cm</td></tr>
+          <tr><td>Time to solve (median)</td><td class="num">2.7 s</td></tr>
+        </tbody>
+      </table>
+      <p>On 200 layouts it solved 84 %, against 92 % on the 50-episode test: the honest figure is
+        somewhere in the high 80s. The most common miss (7 %): it holds the block 2–3 cm above the bin
+        floor and never lowers it (in the case examined, the block was gripped high and hung tilted between
+        the fingers). Then: never grasping the block (6 %), and ending with the block in the bin but still
+        held (1–2 %). Lighting remains the weak spot, as for the lift.</p>
+    </details>
+  </section>
+
   <!-- roadmap ------------------------------------------------------------- -->
   <h2 id="roadmap">What's next</h2>
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Robust to lighting</b><span class="why">the lift drops to 60 % under 2× dimmer or brighter light; practise under varied lighting</span></li>
-    <li><b>Pick and place</b><span class="why">carry the block into a bin</span></li>
+    <li><b>Robust to lighting</b><span class="why">lift and pick-and-place drop to about 60 % under 2× dimmer or brighter light; practise under varied lighting</span></li>
     <li><b>Sort by colour</b><span class="why">three colours, three bins</span></li>
     <li><b>Add smell</b><span class="why">wire in the fly's antennal lobe and mushroom body, the circuits flies use to judge fruit; real odour-response data for fly smell neurons exists</span></li>
     <li><b>Sort fruit by smell</b><span class="why">fruits that look the same but smell different, so the eyes alone cannot do it</span></li>

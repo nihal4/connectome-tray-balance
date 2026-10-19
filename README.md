@@ -237,6 +237,12 @@ lift 8 cm, carry over the bin, lower, open, hand up. Solves 100 % of 40 episodes
 DAgger rounds, then PPO with the asymmetric critic (23 true-state numbers: + bin position and
 block-to-bin); PPO now starts from the best imitation round, not the last.
 
+**Result (v11, `results/v11_panda_place/`, one seed, 0.77M steps, under 4 h):** teacher rounds alone
+reached 82-88 % solved; PPO from the best round held 84-92 %. Best brain, `fly eval 50`: clean 92 %,
+no decoys 92 %, eye noise x3 86 %, light x2 58 %, block hidden 0 %. On 200 new layouts: 84 % solved,
+block centre lands a median 1.0 cm from the bin centre, solved in a median 2.7 s. Most common miss:
+holding the block over the bin without lowering it (7 %).
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
@@ -440,6 +446,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v8, Panda reach by fly eyes** (`results/v8_panda_reach/`): 94 % across the table after edge practice.
 - **v9, Panda grasp and lift, PPO only** (`results/v9_panda_lift/`): first lifts at 2.15M, ~20 % solved, block carried ~20 cm sideways.
 - **v10, Panda grasp and lift, teacher then PPO** (`results/v10_panda_lift_imitate/`): ~90 % solved alone by eye, block ends 1.3 cm from the target point; 60 % under 2x light changes.
+- **v11, Panda pick and place into a bin** (`results/v11_panda_place/`): ~90 % solved alone by eye (84-92 %), block lands 1.0 cm from the bin centre; 58 % under 2x light changes.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 
