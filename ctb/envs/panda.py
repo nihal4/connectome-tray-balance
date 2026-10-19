@@ -25,6 +25,9 @@ Tasks (task=...):
     place   pick and place: grasp the yellow block, carry it into a shallow red bin (new place
             every episode, seen by the eyes) and let go; success = block resting inside the bin,
             released, for 0.2 s (150 steps = 6 s).
+    sort    sort by colour: ONE block per episode, yellow, blue or red at random, and three bins of
+            those colours (new places every episode); put the block into the bin of ITS colour and
+            let go. No decoys. Success as in place, but only in the matching bin (150 steps).
 
 Needs the Panda model: python scripts/download_panda.py
 """
@@ -87,8 +90,13 @@ REST_Z = BIN_FLOOR + BLOCK_H # block centre height when resting in the bin
 
 
 def n_priv(task):
-    """Size of privileged_state() for a task (place adds the bin position and block-to-bin)."""
-    return N_PRIV + (6 if task == "place" else 0)
+    """Size of privileged_state() for a task (place adds the bin position and block-to-bin;
+    sort also the block's colour, one-hot)."""
+    return N_PRIV + {"place": 6, "sort": 9}.get(task, 0)
+
+
+SORT_BIN_GAP = 0.17          # sort: bin centres at least this far apart (bins are 14 cm)
+SORT_BLOCK_GAP = 0.12        # sort: block starts at least this far from every bin centre
 
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
@@ -98,6 +106,10 @@ WALLS = np.array([0.55, 0.60, 0.50])     # background (no hit): pale, a bit UV
 TARGET = np.array([1.0, 0.05, 1.0])      # yellow block: green, almost no UV (unique)
 DECOY = np.array([0.75, 0.90, 0.15])     # blue-violet decoy block
 BIN = np.array([0.20, 0.65, 0.05])       # red bin: dark, some UV, no green (unlike table, block, decoys)
+# sort: the three colours, for blocks and bins alike (photoreceptor view, render colour)
+SORT_COLOURS = [("yellow", TARGET, [0.95, 0.85, 0.1, 1]),
+                ("blue", DECOY, [0.3, 0.3, 0.95, 1]),
+                ("red", BIN, [0.75, 0.12, 0.1, 1])]
 
 
 def _turn(u, v):
@@ -109,7 +121,7 @@ def _turn(u, v):
     return np.array([np.cos(ang / 2), *(np.sin(ang / 2) * ax)])
 
 
-def _build_model(n_decoys, n_facets, with_bin=False):
+def _build_model(n_decoys, n_facets, bins=()):
     spec = mujoco.MjSpec.from_file(PANDA_XML)
     wb = spec.worldbody
     light = wb.add_light()
@@ -134,18 +146,18 @@ def _build_model(n_decoys, n_facets, with_bin=False):
         return b
 
     block("block", [0.95, 0.85, 0.1, 1])
-    if with_bin:                                  # a shallow box the eyes see by ray (group 0), moved per episode
+    for k, (bname, rgba) in enumerate(bins):     # shallow boxes the eyes see by ray (group 0), moved per episode
         bn = wb.add_body()
-        bn.name, bn.mocap, bn.pos = "bin", True, [0.5, 0.2, 0]
+        bn.name, bn.mocap, bn.pos = bname, True, [0.5, 0.2 - 0.2 * k, 0]
         h, w, f, rim = BIN_HALF, BIN_WALL, BIN_FLOOR, BIN_RIM_H
-        parts = [("bin_floor", [h, h, f / 2], [0, 0, f / 2])]
+        parts = [("floor", [h, h, f / 2], [0, 0, f / 2])]
         zc, hz = f + rim / 2, rim / 2
-        parts += [("bin_n", [h, w / 2, hz], [0, h - w / 2, zc]), ("bin_s", [h, w / 2, hz], [0, -h + w / 2, zc]),
-                  ("bin_e", [w / 2, h - w, hz], [h - w / 2, 0, zc]), ("bin_w", [w / 2, h - w, hz], [-h + w / 2, 0, zc])]
+        parts += [("n", [h, w / 2, hz], [0, h - w / 2, zc]), ("s", [h, w / 2, hz], [0, -h + w / 2, zc]),
+                  ("e", [w / 2, h - w, hz], [h - w / 2, 0, zc]), ("w", [w / 2, h - w, hz], [-h + w / 2, 0, zc])]
         for nm, size, pos in parts:
             bg = bn.add_geom()
-            bg.name, bg.type, bg.size, bg.pos = nm, mujoco.mjtGeom.mjGEOM_BOX, size, pos
-            bg.rgba, bg.group, bg.friction = [0.75, 0.12, 0.1, 1], 0, [1.0, 0.005, 0.0001]
+            bg.name, bg.type, bg.size, bg.pos = f"{bname}_{nm}", mujoco.mjtGeom.mjGEOM_BOX, size, pos
+            bg.rgba, bg.group, bg.friction = rgba, 0, [1.0, 0.005, 0.0001]
     for i in range(n_decoys):
         block(f"decoy{i}", [0.3, 0.3, 0.95, 1])
     right, _, _, _ = eye_facets(n_facets)
@@ -184,18 +196,22 @@ class FlyPandaEnv(gym.Env):
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
                  grip_mode="delta", privileged=False, **_):
-        assert task in ("reach", "lift", "place"), task
+        assert task in ("reach", "lift", "place", "sort"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
-        if task == "place" and max_steps == 60:
+        if task in ("place", "sort") and max_steps == 60:
             max_steps = 150                      # + carry, lower and let go
+        if task == "sort":
+            max_distractors = 0                  # the other two bins are the clutter
         if not os.path.exists(PANDA_XML):
             raise FileNotFoundError(f"{PANDA_XML} not found. Run: python scripts/download_panda.py")
         self.task, self.max_steps, self.render_mode = task, max_steps, render_mode
         self.eye_noise, self.body_noise, self.light_jitter = eye_noise, body_noise, light_jitter
         self.max_dist, self.target_visible = max_distractors, target_visible
         self.n_decoys = 2
-        self.model = _build_model(self.n_decoys, n_facets, with_bin=task == "place")
+        bins = [("bin", [0.75, 0.12, 0.1, 1])] if task == "place" else \
+            [(f"bin_{c[0]}", c[2]) for c in SORT_COLOURS] if task == "sort" else []
+        self.model = _build_model(self.n_decoys, n_facets, bins=bins)
         self.data = mujoco.MjData(self.model)
         self._ik = mujoco.MjData(self.model)
         m = self.model
@@ -236,10 +252,15 @@ class FlyPandaEnv(gym.Env):
         self.spectrum = np.tile(ROBOT, (m.ngeom, 1))
         self.spectrum[m.geom("table").id] = TABLE
         self.table_id = m.geom("table").id
-        if task == "place":
-            self.bin_mocap = m.body_mocapid[m.body("bin").id]
-            for nm in ("bin_floor", "bin_n", "bin_s", "bin_e", "bin_w"):
-                self.spectrum[m.geom(nm).id] = BIN
+        self.bin_mocaps = [m.body_mocapid[m.body(b).id] for b, _ in bins]
+        specs = [BIN] if task == "place" else [c[1] for c in SORT_COLOURS] if task == "sort" else []
+        for (b, _), sp in zip(bins, specs):
+            for nm in ("floor", "n", "s", "e", "w"):
+                self.spectrum[m.geom(f"{b}_{nm}").id] = sp
+        if bins:
+            self.bin_mocap = self.bin_mocaps[0]          # the TARGET bin (sort: the block's colour)
+        self._colour = 0                                 # sort: index into SORT_COLOURS
+        self._block_spec = TARGET
         self.n_priv = n_priv(task)
 
         self.n_vis = 2 * n_facets * N_CH
@@ -301,7 +322,7 @@ class FlyPandaEnv(gym.Env):
             img[e * F:(e + 1) * F] = (val.reshape(-1, F, N_CH) * self.ray_w[:, None, None]).sum(0)
             world_center[e * F:(e + 1) * F] = world[:F]
             # blocks: blended into every facet by how much of its blurry view they fill
-            objs = [(self.block_geom, TARGET)] if self.target_visible else []
+            objs = [(self.block_geom, self._block_spec)] if self.target_visible else []
             objs += [(g, DECOY) for g in self.decoy_geoms if d.geom_xpos[g][2] > -1]
             r_eq = BLOCK_H * 1.2                      # a cube seen as a ball of about the same size
             gid1 = np.zeros(1, np.int32)
@@ -340,7 +361,7 @@ class FlyPandaEnv(gym.Env):
 
     def teacher_action(self):
         """The imitation teacher's move for the current situation (called across processes)."""
-        return place_teacher(self) if self.task == "place" else lift_teacher(self)
+        return place_teacher(self) if self.task in ("place", "sort") else lift_teacher(self)
 
     def bin_pos(self):
         """Centre of the bin floor (on the table)."""
@@ -356,6 +377,12 @@ class FlyPandaEnv(gym.Env):
                 if other in self.finger_geoms[0] or other in self.finger_geoms[1]:
                     return True
         return False
+
+    def in_wrong_bin(self):
+        """sort: block resting inside one of the OTHER bins."""
+        b = self.block_pos()
+        return any(np.all(np.abs(b[:2] - self.data.mocap_pos[mc][:2]) < BIN_IN) and b[2] < REST_Z + 0.012
+                   for mc in self.bin_mocaps if mc != self.bin_mocap)
 
     def in_bin(self):
         """Block resting inside the bin (centre within BIN_IN in x and y, down on the floor)."""
@@ -441,9 +468,11 @@ class FlyPandaEnv(gym.Env):
         out = [tcp, blk, blk - tcp, goal - blk,
                [float(self.is_grasped()), self.lift_height() if hasattr(self, "_block_z0") else 0.0,
                 self.gripper_width(), float(l), float(r)]]
-        if self.task == "place":
+        if self.task in ("place", "sort"):
             c = self.bin_pos()
             out += [c, blk - (c + np.array([0, 0, REST_Z]))]
+        if self.task == "sort":
+            out += [np.eye(3)[self._colour]]
         return np.concatenate(out)
 
     def _touch_obs(self):
@@ -477,6 +506,22 @@ class FlyPandaEnv(gym.Env):
                 target[ax] = (BLOCK_HI[ax] - self.rng.uniform(0, band)) if self.rng.random() < 0.5 \
                     else (BLOCK_LO[ax] + self.rng.uniform(0, band))
         placed = [target]
+        if self.task == "sort":                         # block colour, then three bins and the block
+            self._colour = int(self.rng.integers(3))
+            self._block_spec = SORT_COLOURS[self._colour][1]
+            m.geom_rgba[self.block_geom] = SORT_COLOURS[self._colour][2]
+            self.bin_mocap = self.bin_mocaps[self._colour]
+            for _ in range(500):
+                cs = [self.rng.uniform(BIN_LO, BIN_HI) for _ in range(3)]
+                if min(np.linalg.norm(cs[i] - cs[j]) for i in range(3) for j in range(i)) > SORT_BIN_GAP:
+                    break
+            for _ in range(500):
+                if min(np.linalg.norm(target - c) for c in cs) > SORT_BLOCK_GAP:
+                    break
+                target = self.rng.uniform(BLOCK_LO, BLOCK_HI)
+            for mc, c in zip(self.bin_mocaps, cs):
+                d.mocap_pos[mc] = [c[0], c[1], 0.0]
+            placed += cs
         if self.task == "place":                        # the bin: somewhere else on the table
             for _ in range(200):
                 binc = self.rng.uniform(BIN_LO, BIN_HI)
@@ -501,7 +546,7 @@ class FlyPandaEnv(gym.Env):
         if self.random_start > 0 and self.rng.random() < self.random_start:
             start = np.array([*target, 0.0]) + self.rng.uniform([-0.08, -0.08, 0.05], [0.08, 0.08, 0.12])
         mid = held = False
-        if self.task in ("lift", "place") and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
+        if self.task in ("lift", "place", "sort") and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
             mid, held = True, self.rng.random() < 0.5
             start = np.array([target[0], target[1], BLOCK_H]) + self.rng.uniform([-0.008, -0.008, -0.004],
                                                                                    [0.008, 0.008, 0.006])
@@ -526,7 +571,7 @@ class FlyPandaEnv(gym.Env):
             mujoco.mj_forward(m, d)
         self._block_z0 = float(self.block_pos()[2])
         self._goal = self.block_pos() + np.array([0, 0, LIFT_GOAL])     # straight above the start
-        if self.task == "place":                                         # where the block should end up
+        if self.task in ("place", "sort"):                               # where the block should end up
             self._goal = self.bin_pos() + np.array([0, 0, REST_Z])
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
@@ -539,7 +584,7 @@ class FlyPandaEnv(gym.Env):
     def _reward(self):
         if self.task == "lift":
             return self._reward_lift()
-        if self.task == "place":
+        if self.task in ("place", "sort"):
             return self._reward_place()
         d_t = float(np.linalg.norm(self.tcp_pos() - self.reach_point()))
         inside = d_t < SOLVE_DIST
@@ -621,11 +666,13 @@ class FlyPandaEnv(gym.Env):
         r, success, d_t = self._reward()
         truncated = self._steps >= self.max_steps
         info = {"is_success": success, "dist": d_t}
-        if self.task in ("lift", "place"):
+        if self.task in ("lift", "place", "sort"):
             info.update(grasped=self.is_grasped(), lift=self.lift_height(),
                         goal_dist=float(np.linalg.norm(self.block_pos() - self._goal)))
-        if self.task == "place":
+        if self.task in ("place", "sort"):
             info.update(in_bin=self.in_bin())
+        if self.task == "sort":
+            info.update(colour=SORT_COLOURS[self._colour][0], wrong_bin=self.in_wrong_bin())
         return self._get_obs(), float(r), False, truncated, info
 
     # ------------------------------------------------------------------ rendering
@@ -667,7 +714,7 @@ class FlyPandaEnv(gym.Env):
 
 def panda_controller(env, obs=None):
     """Hand-written solution using the TRUE block position (the brain never gets it)."""
-    if env.task == "place":
+    if env.task in ("place", "sort"):
         return place_teacher(env)
     if env.task == "lift":
         return _lift_controller(env)
