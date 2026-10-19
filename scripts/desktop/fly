@@ -41,7 +41,7 @@ case "${1:-help}" in
     tail -n 400 "$ROOT/logs/$R.log" > "$D/train_log_tail.txt" 2>/dev/null
     # only the newest progress video and the best model (all earlier videos stay on the PC/dashboard)
     LAST=$(ls "$D"/progress/*.mp4 2>/dev/null | sort | tail -1)
-    (cd "$ROOT/runs" && zip -q -r "$Z" "$R" -x "*.bak" "*model_tmp*" "*.tmp" "$R/model.zip" "$R/progress/*" \
+    (cd "$ROOT/runs" && zip -q -r "$Z" "$R" -x "*.bak" "*model_tmp*" "*.tmp" "$R/model.zip" "$R/progress/*" "$R/imitate_data.npz" "$R/imitate_policy.pt" "$R/imitate_best_policy.pt" \
         && { [ -z "$LAST" ] || zip -q "$Z" "$R/progress/$(basename "$LAST")"; })
     echo "saved $Z ($(du -h "$Z" | cut -f1))"
     echo "download on the Mac:  http://$(hostname -I | awk '{print $1}'):8080/exports/$(basename "$Z")"
