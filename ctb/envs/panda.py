@@ -200,7 +200,7 @@ class FlyPandaEnv(gym.Env):
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
-                 grip_mode="delta", privileged=False, **_):
+                 grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, **_):
         assert task in ("reach", "lift", "place", "sort"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -287,6 +287,10 @@ class FlyPandaEnv(gym.Env):
         # privileged: append the true state (block, goal, grasp ...) AFTER the brain's inputs, for the
         # training-only critic (asymmetric actor-critic). The fly brain never receives these numbers.
         self.privileged = privileged
+        # lighting: by default brightness x (1 +- light_jitter). light_log > 0 (training): brightness x
+        # exp(uniform(-light_log, light_log)), e.g. ln 2 = anything from half to double. light_choices
+        # (tests): brightness is one of these factors, picked at random each episode.
+        self.light_log, self.light_choices = light_log, light_choices
         # hand commands are averaged over the last few steps (like a real arm controller):
         # 1.0 = no smoothing, 0.3 = each step moves 30 % towards the new command
         self.cmd_smooth = cmd_smooth
@@ -498,7 +502,12 @@ class FlyPandaEnv(gym.Env):
             self.rng = np.random.default_rng(seed)
         m, d = self.model, self.data
         mujoco.mj_resetDataKeyframe(m, d, 0)
-        self._light = 1 + self.rng.uniform(-self.light_jitter, self.light_jitter)
+        if self.light_choices:
+            self._light = float(self.rng.choice(self.light_choices))
+        elif self.light_log > 0:
+            self._light = float(np.exp(self.rng.uniform(-self.light_log, self.light_log)))
+        else:
+            self._light = 1 + self.rng.uniform(-self.light_jitter, self.light_jitter)
         self._tile = self.rng.uniform(0.06, 0.14)
         target = self.rng.uniform(BLOCK_LO, BLOCK_HI)
         if self.edge_bias > 0 and self.rng.random() < self.edge_bias:

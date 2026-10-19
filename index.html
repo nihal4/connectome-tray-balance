@@ -520,7 +520,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
           <tr><td>Normal conditions</td><td class="num yes">90 %</td></tr>
           <tr><td>No decoy blocks</td><td class="num yes">90 %</td></tr>
           <tr><td>Three times more noise in the eyes</td><td class="num">75 %</td></tr>
-          <tr><td>Light twice as dim or bright</td><td class="num">70 %</td></tr>
+          <tr><td>Brightness changes twice as large (±40 % instead of ±20 %)</td><td class="num">70 %</td></tr>
           <tr><td>Yellow block made invisible</td><td class="num no">5 %</td></tr>
         </tbody>
       </table>
@@ -630,7 +630,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
           <tr><td>Normal conditions</td><td class="num">16 %</td><td class="num yes">90 %</td></tr>
           <tr><td>No decoy blocks</td><td class="num">24 %</td><td class="num yes">90 %</td></tr>
           <tr><td>Three times more noise in the eyes</td><td class="num">8 %</td><td class="num yes">96 %</td></tr>
-          <tr><td>Light twice as dim or bright</td><td class="num">20 %</td><td class="num">60 %</td></tr>
+          <tr><td>Brightness changes twice as large (±40 % instead of ±20 %)</td><td class="num">20 %</td><td class="num">60 %</td></tr>
           <tr><td>Yellow block made invisible</td><td class="num no">0 %</td><td class="num no">0 %</td></tr>
         </tbody>
       </table>
@@ -690,7 +690,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
         <tbody>
           <tr><td>Normal conditions</td><td class="num">16 %</td></tr>
           <tr><td>No decoy blocks</td><td class="num">24 %</td></tr>
-          <tr><td>Light twice as dim or bright</td><td class="num">20 %</td></tr>
+          <tr><td>Brightness changes twice as large (±40 % instead of ±20 %)</td><td class="num">20 %</td></tr>
           <tr><td>Three times more noise in the eyes</td><td class="num">8 %</td></tr>
           <tr><td>Yellow block made invisible</td><td class="num no">0 %</td></tr>
         </tbody>
@@ -775,7 +775,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
           <tr><td>Normal conditions</td><td class="num yes">92 %</td></tr>
           <tr><td>No decoy blocks</td><td class="num yes">92 %</td></tr>
           <tr><td>Three times more noise in the eyes</td><td class="num yes">86 %</td></tr>
-          <tr><td>Light twice as dim or bright</td><td class="num">58 %</td></tr>
+          <tr><td>Brightness changes twice as large (±40 % instead of ±20 %)</td><td class="num">58 %</td></tr>
           <tr><td>Yellow block made invisible</td><td class="num no">0 %</td></tr>
         </tbody>
       </table>
@@ -847,11 +847,11 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
         <tbody>
           <tr><td>Normal conditions</td><td class="num yes">92 %</td></tr>
           <tr><td>Three times more noise in the eyes</td><td class="num yes">84 %</td></tr>
-          <tr><td>Light twice as dim or bright</td><td class="num">50 %</td></tr>
+          <tr><td>Brightness changes twice as large (±40 % instead of ±20 %)</td><td class="num">50 %</td></tr>
           <tr><td>Block made invisible</td><td class="num no">0 %</td></tr>
         </tbody>
       </table>
-      <p>Lighting hurts colour sorting the most (50 %), probably because brightness is one of the
+      <p>Brightness changes hurt colour sorting the most (50 %), probably because brightness is one of the
         three channels the colours differ in (not yet checked per colour). A first design, with bins coloured like the blocks and at random places,
         failed in the teacher rounds (0 %): a big yellow bin looked like "the yellow thing" too, so the
         brain could no longer find the block.</p>
@@ -863,7 +863,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Robust to lighting</b><span class="why">lift, pick-and-place and sorting drop to 50–60 % under 2× dimmer or brighter light; practise under varied lighting</span></li>
+    <li><b>Robust to lighting</b><span class="why">lift, pick-and-place and sorting drop to 50–60 % when brightness varies ±40 % instead of ±20 %; practise under much wider lighting</span></li>
     <li><b>Add smell</b><span class="why">wire in the fly's olfactory receptor neurons, antennal lobe, mushroom body and lateral horn from FlyWire; receptor responses to each chemical from measured fly data (DoOR, Hallem &amp; Carlson 2006); two antennae near the gripper</span></li>
     <li><b>Ripe or rotten, by smell alone</b><span class="why">the same fruit, looking identical: ripe smells of fruity esters, rotten of fermentation (ethanol, acetic acid, ethyl acetate), a fly's natural strength</span></li>
     <li><b>Real fruit</b><span class="why">real sizes that fit the gripper, colours from measured reflectance spectra as the fly's photoreceptors see them, rot patches; eyes only vs smell only vs both, and a conflict test (looks ripe, smells rotten)</span></li>

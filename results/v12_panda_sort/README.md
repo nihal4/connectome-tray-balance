@@ -42,7 +42,7 @@ the weakest. Placed blocks end a median 1.3 cm from the bin centre (90th pct 2.6
 | clean | 92 % |
 | no decoys (there are none in this task) | 92 % |
 | eye noise x3 | 84 % |
-| light 2x dimmer or brighter | 50 % |
+| brightness +-40 % (training +-20 %) | 50 % |
 | block invisible | 0 % |
 
 ## Honest notes

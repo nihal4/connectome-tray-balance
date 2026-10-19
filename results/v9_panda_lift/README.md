@@ -29,7 +29,7 @@ exploration noise kept shrinking (0.30 -> 0.15), so the run was stopped at 3.4M.
 |---|---|---|
 | clean | 16 % | 34.2 |
 | no decoys | 24 % | 37.3 |
-| light 2x dimmer or brighter | 20 % | 30.5 |
+| brightness +-40 % (training +-20 %) | 20 % | 30.5 |
 | eye noise x3 | 8 % | 19.1 |
 | yellow block invisible | 0 % | 6.1 |
 

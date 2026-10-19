@@ -43,7 +43,7 @@ best brain at 1.765M, return 73.0, 96 %).
 | clean | 16 % | **90 %** |
 | no decoys | 24 % | **90 %** |
 | eye noise x3 | 8 % | **96 %** |
-| light 2x dimmer or brighter | 20 % | **60 %** |
+| brightness +-40 % (training +-20 %) | 20 % | **60 %** |
 | block invisible | 0 % | 0 % |
 
 ## Precision (`scripts/precision_lift.py`, same rules for both brains)

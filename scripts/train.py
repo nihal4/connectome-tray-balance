@@ -88,6 +88,9 @@ def parse():
                          "(remembered in the run folder, so a later restart does not reset it again)")
     ap.add_argument("--set_lr", type=float, default=None,
                     help="resumed run: change the learning rate from now on (e.g. 1e-4)")
+    ap.add_argument("--light_log", type=float, default=0.0,
+                    help="panda: TRAINING brightness x exp(uniform(-L, L)); 0.69 = half to double "
+                         "(default training: x 0.8 .. 1.2). Evaluation keeps the default.")
     ap.add_argument("--edge_bias", type=float, default=0.0,
                     help="panda: share of TRAINING episodes with the block near the table edges / corners")
     # profile overrides
@@ -164,6 +167,9 @@ def main():
                     "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"]:
             os.environ[var] = "1"
     train_kw = dict(env_kw, random_start=args.random_start) if args.random_start > 0 else dict(env_kw)
+    if args.light_log > 0:                  # training only; evaluation keeps the default lighting
+        train_kw["light_log"] = args.light_log
+        print(f"[train] training brightness x {np.exp(-args.light_log):.2f} .. {np.exp(args.light_log):.2f}")
     if args.edge_bias > 0:                  # training only; evaluation keeps uniform block positions
         train_kw["edge_bias"] = args.edge_bias
         print(f"[train] {args.edge_bias:.0%} of training blocks placed near the table edges / corners")
@@ -204,7 +210,7 @@ def main():
         parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
                       n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
                       edge_bias=args.edge_bias, random_start=args.random_start, eval_episodes=cfg["eval_episodes"],
-                      imitation={"rounds": args.imitate, "steps_per_round": args.imitate_steps,
+                      light_log=args.light_log, imitation={"rounds": args.imitate, "steps_per_round": args.imitate_steps,
                                  "teacher": ("ctb.envs.panda.place_teacher (true block and bin positions" if args.env in ("panda_place", "panda_sort") else "ctb.envs.panda.lift_teacher (true block position") + "; training targets only)"})
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)

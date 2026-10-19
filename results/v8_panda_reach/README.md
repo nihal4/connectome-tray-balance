@@ -45,7 +45,7 @@ ended over a decoy. Decoys are not the problem; table position is.
 | clean | 90 % | 35.3 |
 | no decoys | 90 % | 34.8 |
 | eye noise x3 | 75 % | 28.3 |
-| light 2x dimmer or brighter | 70 % | 25.6 |
+| brightness +-40 % (training +-20 %) | 70 % | 25.6 |
 | yellow block invisible | 5 % | 6.6 |
 
 With the block invisible it fails: it steers by what its eyes see.

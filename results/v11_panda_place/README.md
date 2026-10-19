@@ -27,7 +27,7 @@ PPO started from the best round by return (round 6) and stayed at 84-92 % on eve
 | clean | 92 % |
 | no decoys | 92 % |
 | eye noise x3 | 86 % |
-| light 2x dimmer or brighter | 58 % |
+| brightness +-40 % (training +-20 %) | 58 % |
 | yellow block invisible | 0 % |
 
 ## Precision (`scripts/precision_place.py`)

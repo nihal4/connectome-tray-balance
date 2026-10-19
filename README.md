@@ -185,7 +185,7 @@ brain, unchanged, solves 80 %; the pilots 100 % (also with training noise); idle
 **Result (v8, `results/v8_panda_reach/`):** main run peaked at 90 % (1.3M steps) and then
 declined; a fine-tune from that best brain (lower learning rate, more practice blocks near the
 table edges) reached 94 % across a 5 x 5 grid of block positions (was 73 %), 90 % clean, 75 %
-with 3x eye noise, 70 % with light 2x dimmer/brighter, 5 % with the block invisible. Remaining
+with 3x eye noise, 70 % with brightness changes of +-40 % (training: +-20 %), 5 % with the block invisible. Remaining
 weak spot: the extreme corner tips of the table.
 
 ### Task `panda_lift`: grasp the block and lift it
@@ -239,7 +239,7 @@ block-to-bin); PPO now starts from the best imitation round, not the last.
 
 **Result (v11, `results/v11_panda_place/`, one seed, 0.77M steps, under 4 h):** teacher rounds alone
 reached 82-88 % solved; PPO from the best round held 84-92 %. Best brain, `fly eval 50`: clean 92 %,
-no decoys 92 %, eye noise x3 86 %, light x2 58 %, block hidden 0 %. On 200 new layouts: 84 % solved,
+no decoys 92 %, eye noise x3 86 %, light +-40 % 58 %, block hidden 0 %. On 200 new layouts: 84 % solved,
 block centre lands a median 1.0 cm from the bin centre, solved in a median 2.7 s. Most common miss:
 holding the block over the bin without lowering it (7 %).
 
@@ -255,13 +255,22 @@ block's colour (one-hot). Teacher: 100 % solved (98 % with action noise 0.3), ne
 Fixed video layouts: seeds 13 (yellow), 11 (blue), 10 (orange). Starts from the v11 brain.
 
 **Result (v12, `results/v12_panda_sort/`, one seed, 0.5M steps, ~3 h):** 98 % solved at 515k;
-`fly eval 50`: clean 92 %, eye noise x3 84 %, light x2 50 %, block hidden 0 %. On 300 new layouts:
+`fly eval 50`: clean 92 %, eye noise x3 84 %, light +-40 % 50 %, block hidden 0 %. On 300 new layouts:
 95 % solved (yellow 98, blue 92, orange 97 %) and **0 blocks in a wrong bin**; misses never reached any
 bin.
 
 First design (dropped after 5 imitation rounds): bins coloured like the blocks, at random places.
 The student alone solved 0 % and got worse each round (imitation loss 0.04 -> 0.13): there was
 always a big bin of the block's own colour, so "find the yellow thing" no longer found the block.
+
+### Lighting (`--light_log`)
+
+The default scene varies brightness x 0.8-1.2 per episode; the `dim_or_bright_x2` test doubles that
+to x 0.6-1.4 (earlier pages called it "2x dimmer or brighter", which was wrong). The v12 sorting brain
+solves 50 % there, and **0 of 30 at a fixed x 0.6 or x 1.4** (and at x 0.4 or x 2.5): it only works
+near the brightness it practised under. Fix: `--light_log 0.69` practises at anything from half to
+double brightness (training only), and a new test `light_0.4x_or_2.5x` checks brightness beyond even
+that range.
 
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
@@ -300,7 +309,7 @@ brain; 10 DAgger rounds (165k steps), then PPO with the asymmetric critic, goal 
 gripper. The student alone solved 0 % -> 56 % (round 7) -> 4 % (round 10: once it drove itself, the
 data filled with its own near-misses and it lost the final lift, keeping a clean reach and grasp).
 PPO then took it to 84 % by 0.6M and 84-96 % on every evaluation after 0.7M (mean 91 % from 1.5M).
-Best brain, `fly eval 50`: clean 90 %, no decoys 90 %, eye noise x3 96 %, light x2 60 %, block
+Best brain, `fly eval 50`: clean 90 %, no decoys 90 %, eye noise x3 96 %, light +-40 % 60 %, block
 hidden 0 % (v9: 16 / 24 / 8 / 20 / 0 %). Precision on 200 new layouts, same rule for both: held
 within 2.5 cm of the point 8 cm above the start at the end 94 % (v9 0 %); median distance from that
 point at the end 1.3 cm (v9 20.4 cm); median largest sideways drift in the air 1.1 cm (v9 23.4 cm).
@@ -465,9 +474,9 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v7, camera maze solved with slow motors** (`results/v7_maze_vision_slow_kaggle/`, Kaggle, 2M steps, one seed): fresh run with `--action_rate 0.1 --random_start 0.5`, brain unchanged. First solve at 350k, 100 % from 1.1M, 100 % on every eval from 1.65M; solves in ~130 steps and stops the ball in the goal centre. Robustness: heavy ball 100 %, pushes 60 %, camera noise 0 %, ball hidden 0 %, **unseen mazes 0 %** (memorised this maze).
 - **v8, Panda reach by fly eyes** (`results/v8_panda_reach/`): 94 % across the table after edge practice.
 - **v9, Panda grasp and lift, PPO only** (`results/v9_panda_lift/`): first lifts at 2.15M, ~20 % solved, block carried ~20 cm sideways.
-- **v10, Panda grasp and lift, teacher then PPO** (`results/v10_panda_lift_imitate/`): ~90 % solved alone by eye, block ends 1.3 cm from the target point; 60 % under 2x light changes.
-- **v11, Panda pick and place into a bin** (`results/v11_panda_place/`): ~90 % solved alone by eye (84-92 %), block lands 1.0 cm from the bin centre; 58 % under 2x light changes.
-- **v12, Panda sort by colour** (`results/v12_panda_sort/`): 95 % of 300 new layouts sorted, none into a wrong bin; 50 % under 2x light changes.
+- **v10, Panda grasp and lift, teacher then PPO** (`results/v10_panda_lift_imitate/`): ~90 % solved alone by eye, block ends 1.3 cm from the target point; 60 % under +-40 % brightness changes.
+- **v11, Panda pick and place into a bin** (`results/v11_panda_place/`): ~90 % solved alone by eye (84-92 %), block lands 1.0 cm from the bin centre; 58 % under +-40 % brightness changes.
+- **v12, Panda sort by colour** (`results/v12_panda_sort/`): 95 % of 300 new layouts sorted, none into a wrong bin; 50 % under +-40 % brightness changes.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 
