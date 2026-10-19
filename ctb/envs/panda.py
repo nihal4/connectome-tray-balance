@@ -25,9 +25,10 @@ Tasks (task=...):
     place   pick and place: grasp the yellow block, carry it into a shallow red bin (new place
             every episode, seen by the eyes) and let go; success = block resting inside the bin,
             released, for 0.2 s (150 steps = 6 s).
-    sort    sort by colour: ONE block per episode, yellow, blue or red at random, and three bins of
-            those colours (new places every episode); put the block into the bin of ITS colour and
-            let go. No decoys. Success as in place, but only in the matching bin (150 steps).
+    sort    sort by colour, like a sorting station: ONE block per episode, yellow, blue or orange at
+            random, on the near half of the table; three identical red bins in a row along the far
+            side (left, centre, right, a little jitter). Yellow goes left, blue centre, orange right.
+            No decoys. Success as in place, but only in the block's own bin (150 steps).
 
 Needs the Panda model: python scripts/download_panda.py
 """
@@ -95,8 +96,10 @@ def n_priv(task):
     return N_PRIV + {"place": 6, "sort": 9}.get(task, 0)
 
 
-SORT_BIN_GAP = 0.17          # sort: bin centres at least this far apart (bins are 14 cm)
-SORT_BLOCK_GAP = 0.12        # sort: block starts at least this far from every bin centre
+SORT_BINS = np.array([[0.60, 0.17], [0.60, 0.0], [0.60, -0.17]])   # sort: left, centre, right bin
+SORT_JITTER = 0.015          # sort: each bin moves up to this much per episode
+SORT_BLOCK_LO = np.array([0.35, -0.22])   # sort: blocks appear on the near half
+SORT_BLOCK_HI = np.array([0.47, 0.22])
 
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
@@ -106,10 +109,12 @@ WALLS = np.array([0.55, 0.60, 0.50])     # background (no hit): pale, a bit UV
 TARGET = np.array([1.0, 0.05, 1.0])      # yellow block: green, almost no UV (unique)
 DECOY = np.array([0.75, 0.90, 0.15])     # blue-violet decoy block
 BIN = np.array([0.20, 0.65, 0.05])       # red bin: dark, some UV, no green (unlike table, block, decoys)
-# sort: the three colours, for blocks and bins alike (photoreceptor view, render colour)
-SORT_COLOURS = [("yellow", TARGET, [0.95, 0.85, 0.1, 1]),
-                ("blue", DECOY, [0.3, 0.3, 0.95, 1]),
-                ("red", BIN, [0.75, 0.12, 0.1, 1])]
+# sort: block colours (photoreceptor view: brightness, UV, green; render colour), and their bins.
+# The bins all look the same (red, as in place), so a bin never looks like a block: where each
+# colour goes is the rule to learn. Orange = bright, no UV, little green (unlike yellow, blue, bins).
+SORT_COLOURS = [("yellow", TARGET, [0.95, 0.85, 0.1, 1]),     # -> left bin
+                ("blue", DECOY, [0.3, 0.3, 0.95, 1]),         # -> centre bin
+                ("orange", np.array([0.95, 0.05, 0.2]), [0.95, 0.5, 0.1, 1])]   # -> right bin
 
 
 def _turn(u, v):
@@ -210,7 +215,7 @@ class FlyPandaEnv(gym.Env):
         self.max_dist, self.target_visible = max_distractors, target_visible
         self.n_decoys = 2
         bins = [("bin", [0.75, 0.12, 0.1, 1])] if task == "place" else \
-            [(f"bin_{c[0]}", c[2]) for c in SORT_COLOURS] if task == "sort" else []
+            [(f"bin_{n}", [0.75, 0.12, 0.1, 1]) for n in ("left", "centre", "right")] if task == "sort" else []
         self.model = _build_model(self.n_decoys, n_facets, bins=bins)
         self.data = mujoco.MjData(self.model)
         self._ik = mujoco.MjData(self.model)
@@ -253,7 +258,7 @@ class FlyPandaEnv(gym.Env):
         self.spectrum[m.geom("table").id] = TABLE
         self.table_id = m.geom("table").id
         self.bin_mocaps = [m.body_mocapid[m.body(b).id] for b, _ in bins]
-        specs = [BIN] if task == "place" else [c[1] for c in SORT_COLOURS] if task == "sort" else []
+        specs = [BIN] * len(bins)
         for (b, _), sp in zip(bins, specs):
             for nm in ("floor", "n", "s", "e", "w"):
                 self.spectrum[m.geom(f"{b}_{nm}").id] = sp
@@ -511,14 +516,8 @@ class FlyPandaEnv(gym.Env):
             self._block_spec = SORT_COLOURS[self._colour][1]
             m.geom_rgba[self.block_geom] = SORT_COLOURS[self._colour][2]
             self.bin_mocap = self.bin_mocaps[self._colour]
-            for _ in range(500):
-                cs = [self.rng.uniform(BIN_LO, BIN_HI) for _ in range(3)]
-                if min(np.linalg.norm(cs[i] - cs[j]) for i in range(3) for j in range(i)) > SORT_BIN_GAP:
-                    break
-            for _ in range(500):
-                if min(np.linalg.norm(target - c) for c in cs) > SORT_BLOCK_GAP:
-                    break
-                target = self.rng.uniform(BLOCK_LO, BLOCK_HI)
+            cs = [c + self.rng.uniform(-SORT_JITTER, SORT_JITTER, 2) for c in SORT_BINS]
+            target = self.rng.uniform(SORT_BLOCK_LO, SORT_BLOCK_HI)
             for mc, c in zip(self.bin_mocaps, cs):
                 d.mocap_pos[mc] = [c[0], c[1], 0.0]
             placed += cs

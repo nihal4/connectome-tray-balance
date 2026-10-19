@@ -243,17 +243,20 @@ no decoys 92 %, eye noise x3 86 %, light x2 58 %, block hidden 0 %. On 200 new l
 block centre lands a median 1.0 cm from the bin centre, solved in a median 2.7 s. Most common miss:
 holding the block over the bin without lowering it (7 %).
 
-### Task `panda_sort`: sort by colour into three bins
+### Task `panda_sort`: sort by colour, like a sorting station
 
-Like `panda_place`, but each episode the block is yellow, blue or red at random, and there are
-three bins of those colours (14 cm, at new places every episode, centres at least 17 cm apart; the
-block starts at least 12 cm from every bin; no decoys). Put the block into the bin of ITS colour and
-let go; a block in another bin earns nothing (reported as `wrong_bin`). Same staged reward and
-success rule as place, 150 steps. Colours as the fly eye sees them (brightness, UV, green): yellow
-(1, 0.05, 1), blue (0.75, 0.9, 0.15), red (0.2, 0.65, 0.05). Critic: place's 23 true-state numbers
-+ the block's colour (one-hot). Teacher: `place_teacher` towards the matching bin, 97 % solved
-(85 % with action noise 0.3), never the wrong bin. Fixed video layouts: seeds 1 (yellow), 4 (blue),
-5 (red). Starts from the v11 pick-and-place brain.
+One block per episode, yellow, blue or orange at random, on the near half of the table; three
+identical red bins in a row along the far side (left / centre / right, +-1.5 cm jitter). Yellow goes
+left, blue centre, orange right; let go inside the right bin. A block in another bin earns nothing
+(reported as `wrong_bin`). Same staged reward and success rule as place, 150 steps, no decoys.
+Colours as the fly eye sees them (brightness, UV, green): yellow (1, 0.05, 1), blue (0.75, 0.9,
+0.15), orange (0.95, 0.05, 0.2); bins (0.2, 0.65, 0.05). Critic: place's 23 true-state numbers + the
+block's colour (one-hot). Teacher: 100 % solved (98 % with action noise 0.3), never the wrong bin.
+Fixed video layouts: seeds 13 (yellow), 11 (blue), 10 (orange). Starts from the v11 brain.
+
+First design (dropped after 5 imitation rounds): bins coloured like the blocks, at random places.
+The student alone solved 0 % and got worse each round (imitation loss 0.04 -> 0.13): there was
+always a big bin of the block's own colour, so "find the yellow thing" no longer found the block.
 
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
