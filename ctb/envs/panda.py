@@ -108,6 +108,10 @@ ROBOT = np.array([0.80, 0.70, 0.80])     # white-grey robot
 WALLS = np.array([0.55, 0.60, 0.50])     # background (no hit): pale, a bit UV
 TARGET = np.array([1.0, 0.05, 1.0])      # yellow block: green, almost no UV (unique)
 DECOY = np.array([0.75, 0.90, 0.15])     # blue-violet decoy block
+# eye_adapt: each receptor type scales its output so its average over the eye is ADAPT_REF (about the
+# average under normal light without adaptation), moving ADAPT_RATE of the way per step (25 Hz)
+ADAPT_REF = np.array([0.45, 0.45, 0.45])
+ADAPT_RATE = 0.3
 BIN = np.array([0.20, 0.65, 0.05])       # red bin: dark, some UV, no green (unlike table, block, decoys)
 # sort: block colours (photoreceptor view: brightness, UV, green; render colour), and their bins.
 # The bins all look the same (red, as in place), so a bin never looks like a block: where each
@@ -200,7 +204,8 @@ class FlyPandaEnv(gym.Env):
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
-                 grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, **_):
+                 grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
+                 light_gradient=0.0, light_tint=None, **_):
         assert task in ("reach", "lift", "place", "sort"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -291,6 +296,17 @@ class FlyPandaEnv(gym.Env):
         # exp(uniform(-light_log, light_log)), e.g. ln 2 = anything from half to double. light_choices
         # (tests): brightness is one of these factors, picked at random each episode.
         self.light_log, self.light_choices = light_log, light_choices
+        # eye_adapt: photoreceptor light adaptation (robot property, training and evaluation). Each
+        # photoreceptor type of each eye scales its gain to the average light it currently receives, so
+        # the brain gets contrast rather than absolute brightness (fly photoreceptors adapt like this).
+        # Photon noise is added BEFORE adaptation and grows like sqrt(light), so dim scenes are noisier.
+        self.eye_adapt = eye_adapt
+        self._adapt = None
+        # tests only: uneven light, brighter towards one side of each eye's view and dimmer towards the
+        # other (x exp(+-light_gradient) at the edges, side random per episode), and tinted light
+        # (each receptor type gets its own factor, e.g. (0.7, 1.4, 1.0) = less broadband, more UV)
+        self.light_gradient, self.light_tint = light_gradient, light_tint
+        self._grad_sign = 1.0
         # hand commands are averaged over the last few steps (like a real arm controller):
         # 1.0 = no smoothing, 0.3 = each step moves 30 % towards the new command
         self.cmd_smooth = cmd_smooth
@@ -305,7 +321,7 @@ class FlyPandaEnv(gym.Env):
         return [(d.xpos[self.head].copy(), d.xmat[self.head].reshape(3, 3), self.head),
                 (d.site_xpos[self.wrist_eye].copy(), d.site_xmat[self.wrist_eye].reshape(3, 3), self.hand)]
 
-    def eye_image(self):
+    def eye_image(self, update=True):
         """(2 * n_facets, 3): right eye (head) then left eye (wrist); per facet the light
         seen by R1-6 (brightness), R7 (UV) and R8 (green)."""
         m, d = self.model, self.data
@@ -350,7 +366,25 @@ class FlyPandaEnv(gym.Env):
                 wgt = amp * np.exp(-theta ** 2 / (2 * (s2 + alpha ** 2 / 4)))
                 img[sl] = img[sl] * (1 - wgt[:, None]) + wgt[:, None] * spec
         self._world_dirs = world_center
-        return np.clip(img * self._light, 0, 1.5)
+        if self.light_gradient:
+            az = self.facet_az
+            u = (az - az.mean()) / (np.ptp(az) / 2 + 1e-9)
+            img = img * np.exp(self._grad_sign * self.light_gradient * u)[:, None]
+        if self.light_tint is not None:
+            img = img * np.asarray(self.light_tint)[None, :]
+        if not self.eye_adapt:
+            return np.clip(img * self._light, 0, 1.5)
+        lit = img * self._light
+        if update and self.eye_noise > 0:              # photon (shot) noise, before adaptation
+            lit = np.maximum(lit + self.rng.normal(0, 1, lit.shape) * self.eye_noise * np.sqrt(np.maximum(lit, 0) / ADAPT_REF), 0)
+        F = self.n_facets
+        mean = np.stack([lit[:F].mean(0), lit[F:].mean(0)])             # (eye, receptor type)
+        state = mean if self._adapt is None else self._adapt + ADAPT_RATE * (mean - self._adapt)
+        if update:
+            self._adapt = state
+        gain = ADAPT_REF / (state + 1e-3)                                # per eye and receptor type
+        out = np.concatenate([lit[:F] * gain[0], lit[F:] * gain[1]])
+        return np.clip(out, 0, 1.5)
 
     # ------------------------------------------------------------------ helpers
     def tcp_pos(self):
@@ -453,7 +487,7 @@ class FlyPandaEnv(gym.Env):
 
     def _get_obs(self):
         img = self.eye_image()
-        if self.eye_noise > 0:
+        if self.eye_noise > 0 and not self.eye_adapt:     # (adapting eyes add photon noise inside eye_image)
             img = img + self.rng.normal(0, self.eye_noise, img.shape)
         img = img.ravel()
         d_img = img - (self._prev_img if self._prev_img is not None else img)
@@ -509,6 +543,8 @@ class FlyPandaEnv(gym.Env):
         else:
             self._light = 1 + self.rng.uniform(-self.light_jitter, self.light_jitter)
         self._tile = self.rng.uniform(0.06, 0.14)
+        if self.light_gradient:                         # (drawn only then: other layouts stay as before)
+            self._grad_sign = 1.0 if self.rng.random() < 0.5 else -1.0
         target = self.rng.uniform(BLOCK_LO, BLOCK_HI)
         if self.edge_bias > 0 and self.rng.random() < self.edge_bias:
             # practise the weak spots: a 7 cm band along one edge, and half the time a corner
@@ -587,6 +623,7 @@ class FlyPandaEnv(gym.Env):
         self._last_action = np.zeros(4)
         self._steps = 0
         self._prev_img = None
+        self._adapt = None                                  # eyes adapt to this scene from the first look
         return self._get_obs(), {}
 
     def _reward(self):
@@ -685,7 +722,7 @@ class FlyPandaEnv(gym.Env):
 
     # ------------------------------------------------------------------ rendering
     def eye_view(self, size=190):
-        img = self.eye_image()
+        img = self.eye_image(update=False)
         F = self.n_facets
         h = size // 2
         out = np.zeros((h + 4, 2 * size + 6, 3))

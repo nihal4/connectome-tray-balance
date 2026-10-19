@@ -64,6 +64,8 @@ TESTS_PANDA = {
     "eye_noise_x3": {"eye_noise": 0.03},
     "dim_or_bright_x2": {"light_jitter": 0.4},          # brightness x 0.6 .. 1.4 (training default x 0.8 .. 1.2)
     "light_0.4x_or_2.5x": {"light_choices": (0.4, 2.5)},  # beyond even the wide-light training (x 0.5 .. 2)
+    "uneven_light": {"light_gradient": 0.69},            # one side of the view x2, the other x0.5
+    "tinted_light": {"light_tint": (0.7, 1.4, 1.0)},     # a colour cast: less broadband, more UV
     "target_hidden": {"target_visible": False},
 }
 
@@ -90,6 +92,8 @@ def run_env_kw(run):
         kw["grip_mode"] = cfg["grip_mode"]
     if cfg.get("privileged"):               # obs layout the policy expects (critic part; the brain ignores it)
         kw["privileged"] = True
+    if cfg.get("eye_adapt"):                # robot property: photoreceptor light adaptation
+        kw["eye_adapt"] = True
     if cfg["env"].startswith(("drone", "panda")):
         import numpy as np
         brain = os.path.join(run, "subset.npz")

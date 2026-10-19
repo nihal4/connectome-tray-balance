@@ -272,6 +272,18 @@ near the brightness it practised under. Fix: `--light_log 0.69` practises at any
 double brightness (training only), and a new test `light_0.4x_or_2.5x` checks brightness beyond even
 that range.
 
+### Light-adapting eyes (`--eye_adapt`)
+
+Fly photoreceptors adapt to the light level: each receptor type scales its gain to the light it
+currently receives, so the brain gets contrast rather than absolute brightness. With `--eye_adapt`
+each receptor type (R1-6, R7, R8) of each eye divides by its own running average over the eye
+(30 % of the way per step, 25 Hz), scaled to the old normal-light average; photon noise is added before
+adaptation and grows like sqrt(light), so dim scenes are noisier. A global brightness change is then
+cancelled (the eye output at x0.4 and x2.5 differs from x1 by < 0.003 without noise), so two new tests
+check what adaptation cannot simply cancel: `uneven_light` (one side of each eye's view x2, the other
+x0.5) and `tinted_light` (receptor types x0.7 / x1.4 / x1.0). Training uses the normal x0.8-1.2 light
+only, so every other brightness is a test it never practised.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;

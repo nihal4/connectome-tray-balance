@@ -83,6 +83,8 @@ def parse():
                          "the fly brain never receives it")
     ap.add_argument("--grip_mode", choices=["delta", "absolute"], default=None,
                     help="panda: 'absolute' = the grip command IS the finger target (closed stays closed)")
+    ap.add_argument("--eye_adapt", action="store_true", default=None,
+                    help="panda: photoreceptor light adaptation in the eyes (training AND evaluation; saved in config)")
     ap.add_argument("--set_std", type=float, default=None,
                     help="resumed run: reset the exploration noise (action std) to this value, ONCE "
                          "(remembered in the run folder, so a later restart does not reset it again)")
@@ -143,7 +145,7 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -152,6 +154,9 @@ def main():
     if args.privileged:           # critic input (training only); the fly brain never sees it
         env_kw["privileged"] = True
         print("[train] critic gets the true simulator state (asymmetric actor-critic); the fly brain does not")
+    if args.eye_adapt:            # robot property: applies to training and evaluation
+        env_kw["eye_adapt"] = True
+        print("[train] eyes adapt to the light level (photoreceptor gain control)")
     if args.lift_reward:          # task definition: applies to training and evaluation
         env_kw["lift_reward"] = args.lift_reward
         print(f"[train] lift reward: {args.lift_reward}")
@@ -208,6 +213,7 @@ def main():
         mask = [n_brain - 13 + 7] + list(range(n_brain - 4, n_brain))
         parent.update(mask_inputs=mask)
         parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
+                      eye_adapt=bool(args.eye_adapt),
                       n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
                       edge_bias=args.edge_bias, random_start=args.random_start, eval_episodes=cfg["eval_episodes"],
                       light_log=args.light_log, imitation={"rounds": args.imitate, "steps_per_round": args.imitate_steps,
