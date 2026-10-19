@@ -856,6 +856,22 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
         failed in the teacher rounds (0 %): a big yellow bin looked like "the yellow thing" too, so the
         brain could no longer find the block.</p>
     </details>
+    <details open>
+      <summary>Changing light: practising under x0.5 to x2 brightness (v13)</summary>
+      <table>
+        <thead><tr><th>Fixed brightness (40 layouts each)</th><th>×0.4</th><th>×0.5</th><th>×0.7</th><th>×1</th><th>×1.4</th><th>×2</th><th>×2.5</th></tr></thead>
+        <tbody>
+          <tr><td>Before (practised ×0.8–1.2)</td><td class="num no">0 %</td><td class="num no">0 %</td><td class="num">15 %</td><td class="num yes">90 %</td><td class="num no">0 %</td><td class="num no">0 %</td><td class="num no">0 %</td></tr>
+          <tr><td>After (practised ×0.5–2)</td><td class="num">5 %</td><td class="num">42 %</td><td class="num yes">92 %</td><td class="num yes">82 %</td><td class="num">70 %</td><td class="num">62 %</td><td class="num no">0 %</td></tr>
+        </tbody>
+      </table>
+      <p>Before, the brain only worked at the brightness it had practised under. Practising under a wide
+        range made it work across most of that range, at a small cost at normal light (91 % instead of 95 %
+        on 300 layouts, 5 blocks in a wrong bin instead of 0). Beyond the practised range it still fails: it
+        learned the brightness levels it saw rather than to ignore brightness. Real fly photoreceptors
+        <em>adapt</em> to the light level and pass on mostly contrast; adding that to the eye model is the
+        next step.</p>
+    </details>
   </section>
 
   <!-- roadmap ------------------------------------------------------------- -->
@@ -863,7 +879,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Robust to lighting</b><span class="why">lift, pick-and-place and sorting drop to 50–60 % when brightness varies ±40 % instead of ±20 %; practise under much wider lighting</span></li>
+    <li><b>Light adaptation in the eye</b><span class="why">practising under ×0.5–2 brightness helped inside that range only; fly photoreceptors adapt to the light level and pass on contrast, so the eye model will too</span></li>
     <li><b>Add smell</b><span class="why">wire in the fly's olfactory receptor neurons, antennal lobe, mushroom body and lateral horn from FlyWire; receptor responses to each chemical from measured fly data (DoOR, Hallem &amp; Carlson 2006); two antennae near the gripper</span></li>
     <li><b>Ripe or rotten, by smell alone</b><span class="why">the same fruit, looking identical: ripe smells of fruity esters, rotten of fermentation (ethanol, acetic acid, ethyl acetate), a fly's natural strength</span></li>
     <li><b>Real fruit</b><span class="why">real sizes that fit the gripper, colours from measured reflectance spectra as the fly's photoreceptors see them, rot patches; eyes only vs smell only vs both, and a conflict test (looks ripe, smells rotten)</span></li>

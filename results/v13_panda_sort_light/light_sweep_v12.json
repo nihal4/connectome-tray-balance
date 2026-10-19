@@ -1,0 +1,13 @@
+{
+ "run": "/tmp/claude-0/-home-claude/82f463f2-26ec-5188-bdf8-d3c632529db8/scratchpad/plrun/panda_sort-v12",
+ "episodes": 40,
+ "solved": {
+  "0.4": 0.0,
+  "0.5": 0.0,
+  "0.7": 0.15,
+  "1.0": 0.9,
+  "1.4": 0.0,
+  "2.0": 0.0,
+  "2.5": 0.0
+ }
+}

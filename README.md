@@ -477,6 +477,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v10, Panda grasp and lift, teacher then PPO** (`results/v10_panda_lift_imitate/`): ~90 % solved alone by eye, block ends 1.3 cm from the target point; 60 % under +-40 % brightness changes.
 - **v11, Panda pick and place into a bin** (`results/v11_panda_place/`): ~90 % solved alone by eye (84-92 %), block lands 1.0 cm from the bin centre; 58 % under +-40 % brightness changes.
 - **v12, Panda sort by colour** (`results/v12_panda_sort/`): 95 % of 300 new layouts sorted, none into a wrong bin; 50 % under +-40 % brightness changes.
+- **v13, sorting under changing light** (`results/v13_panda_sort_light/`): practising at x0.5-2 brightness; fixed-brightness success x0.7 92 %, x1.4 70 %, x2 62 % (v12: 15 / 0 / 0 %), still 0 % at x2.5; 91 % at normal light (v12 95 %).
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 

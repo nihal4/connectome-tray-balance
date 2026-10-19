@@ -1,0 +1,32 @@
+{
+  "clean": {
+    "return": 82.2,
+    "length": 150.0,
+    "success_rate": 0.78
+  },
+  "no_decoys": {
+    "return": 82.2,
+    "length": 150.0,
+    "success_rate": 0.78
+  },
+  "eye_noise_x3": {
+    "return": 86.6,
+    "length": 150.0,
+    "success_rate": 0.8
+  },
+  "dim_or_bright_x2": {
+    "return": 84.8,
+    "length": 150.0,
+    "success_rate": 0.82
+  },
+  "light_0.4x_or_2.5x": {
+    "return": 17.3,
+    "length": 150.0,
+    "success_rate": 0.04
+  },
+  "target_hidden": {
+    "return": 6.2,
+    "length": 150.0,
+    "success_rate": 0.0
+  }
+}
