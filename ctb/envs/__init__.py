@@ -12,6 +12,7 @@
     panda_reach   Franka Panda arm + gripper, hand-space control, two compound eyes (head + wrist):
                   bring the gripper to the yellow block (pre-grasp pose) and hold still
     panda_lift    same robot + touch: grasp the yellow block and lift it 8 cm
+    panda_place   pick and place: carry the yellow block into a red bin and let go
 """
 import numpy as np
 
@@ -30,6 +31,7 @@ for _name in ["maze_fixed3", "maze3", "maze3h"]:
 ENVS["drone_reach"] = (FlyDroneEnv, {"task": "reach"})
 ENVS["panda_reach"] = (FlyPandaEnv, {"task": "reach"})
 ENVS["panda_lift"] = (FlyPandaEnv, {"task": "lift"})
+ENVS["panda_place"] = (FlyPandaEnv, {"task": "place"})
 
 
 def build_env(name: str = "tray", seed: int | None = None, **overrides):

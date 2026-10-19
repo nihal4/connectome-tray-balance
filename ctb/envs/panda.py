@@ -22,6 +22,9 @@ Tasks (task=...):
     lift    grasp the yellow block between the two fingers and lift it 8 cm off the table,
             holding it there for 0.2 s (100 steps = 4 s). Same eyes, decoys and body sense,
             plus TOUCH: the brain feels whether each finger presses on something.
+    place   pick and place: grasp the yellow block, carry it into a shallow red bin (new place
+            every episode, seen by the eyes) and let go; success = block resting inside the bin,
+            released, for 0.2 s (150 steps = 6 s).
 
 Needs the Panda model: python scripts/download_panda.py
 """
@@ -69,7 +72,24 @@ LIFT_HOLD = 5                # ... while held, for 5 steps (0.2 s)
 # point in the air LIFT_GOAL straight above where it started (2 x (1 - tanh(10 d))), so going
 # up pays and carrying it sideways costs. Success = held within GOAL_DIST of that point, 0.2 s.
 GOAL_DIST = 0.025
-N_PRIV = 17                  # size of privileged_state()
+N_PRIV = 17                  # size of privileged_state() (reach, lift)
+# task (place): a shallow open box, 14 x 14 cm outside, 1 cm floor, 1.5 cm high rim
+BIN_HALF = 0.07              # outer half size
+BIN_WALL = 0.01              # rim thickness
+BIN_FLOOR = 0.01             # floor thickness (its top is the block's resting surface)
+BIN_RIM_H = 0.015            # rim height above the floor
+BIN_IN = 0.045               # block centre within this of the bin centre (x and y) = inside
+BIN_LO = np.array([0.38, -0.19])   # where bins appear
+BIN_HI = np.array([0.62, 0.19])
+BIN_MIN_GAP = 0.15           # block starts at least this far from the bin centre
+PLACE_CARRY = 0.08           # teacher: carry the block this high above the bin floor
+REST_Z = BIN_FLOOR + BLOCK_H # block centre height when resting in the bin
+
+
+def n_priv(task):
+    """Size of privileged_state() for a task (place adds the bin position and block-to-bin)."""
+    return N_PRIV + (6 if task == "place" else 0)
+
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
 TABLE = np.array([0.35, 0.30, 0.35])     # grey
@@ -77,6 +97,7 @@ ROBOT = np.array([0.80, 0.70, 0.80])     # white-grey robot
 WALLS = np.array([0.55, 0.60, 0.50])     # background (no hit): pale, a bit UV
 TARGET = np.array([1.0, 0.05, 1.0])      # yellow block: green, almost no UV (unique)
 DECOY = np.array([0.75, 0.90, 0.15])     # blue-violet decoy block
+BIN = np.array([0.20, 0.65, 0.05])       # red bin: dark, some UV, no green (unlike table, block, decoys)
 
 
 def _turn(u, v):
@@ -88,7 +109,7 @@ def _turn(u, v):
     return np.array([np.cos(ang / 2), *(np.sin(ang / 2) * ax)])
 
 
-def _build_model(n_decoys, n_facets):
+def _build_model(n_decoys, n_facets, with_bin=False):
     spec = mujoco.MjSpec.from_file(PANDA_XML)
     wb = spec.worldbody
     light = wb.add_light()
@@ -113,6 +134,18 @@ def _build_model(n_decoys, n_facets):
         return b
 
     block("block", [0.95, 0.85, 0.1, 1])
+    if with_bin:                                  # a shallow box the eyes see by ray (group 0), moved per episode
+        bn = wb.add_body()
+        bn.name, bn.mocap, bn.pos = "bin", True, [0.5, 0.2, 0]
+        h, w, f, rim = BIN_HALF, BIN_WALL, BIN_FLOOR, BIN_RIM_H
+        parts = [("bin_floor", [h, h, f / 2], [0, 0, f / 2])]
+        zc, hz = f + rim / 2, rim / 2
+        parts += [("bin_n", [h, w / 2, hz], [0, h - w / 2, zc]), ("bin_s", [h, w / 2, hz], [0, -h + w / 2, zc]),
+                  ("bin_e", [w / 2, h - w, hz], [h - w / 2, 0, zc]), ("bin_w", [w / 2, h - w, hz], [-h + w / 2, 0, zc])]
+        for nm, size, pos in parts:
+            bg = bn.add_geom()
+            bg.name, bg.type, bg.size, bg.pos = nm, mujoco.mjtGeom.mjGEOM_BOX, size, pos
+            bg.rgba, bg.group, bg.friction = [0.75, 0.12, 0.1, 1], 0, [1.0, 0.005, 0.0001]
     for i in range(n_decoys):
         block(f"decoy{i}", [0.3, 0.3, 0.95, 1])
     right, _, _, _ = eye_facets(n_facets)
@@ -151,16 +184,18 @@ class FlyPandaEnv(gym.Env):
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
                  grip_mode="delta", privileged=False, **_):
-        assert task in ("reach", "lift"), task
+        assert task in ("reach", "lift", "place"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
+        if task == "place" and max_steps == 60:
+            max_steps = 150                      # + carry, lower and let go
         if not os.path.exists(PANDA_XML):
             raise FileNotFoundError(f"{PANDA_XML} not found. Run: python scripts/download_panda.py")
         self.task, self.max_steps, self.render_mode = task, max_steps, render_mode
         self.eye_noise, self.body_noise, self.light_jitter = eye_noise, body_noise, light_jitter
         self.max_dist, self.target_visible = max_distractors, target_visible
         self.n_decoys = 2
-        self.model = _build_model(self.n_decoys, n_facets)
+        self.model = _build_model(self.n_decoys, n_facets, with_bin=task == "place")
         self.data = mujoco.MjData(self.model)
         self._ik = mujoco.MjData(self.model)
         m = self.model
@@ -201,10 +236,15 @@ class FlyPandaEnv(gym.Env):
         self.spectrum = np.tile(ROBOT, (m.ngeom, 1))
         self.spectrum[m.geom("table").id] = TABLE
         self.table_id = m.geom("table").id
+        if task == "place":
+            self.bin_mocap = m.body_mocapid[m.body("bin").id]
+            for nm in ("bin_floor", "bin_n", "bin_s", "bin_e", "bin_w"):
+                self.spectrum[m.geom(nm).id] = BIN
+        self.n_priv = n_priv(task)
 
         self.n_vis = 2 * n_facets * N_CH
         self.n_brain_obs = 2 * self.n_vis + 13              # what the fly brain sees
-        self.observation_space = spaces.Box(-np.inf, np.inf, (self.n_brain_obs + (N_PRIV if privileged else 0),),
+        self.observation_space = spaces.Box(-np.inf, np.inf, (self.n_brain_obs + (self.n_priv if privileged else 0),),
                                             np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (4,), np.float32)
         self.random_start = random_start
@@ -300,7 +340,27 @@ class FlyPandaEnv(gym.Env):
 
     def teacher_action(self):
         """The imitation teacher's move for the current situation (called across processes)."""
-        return lift_teacher(self)
+        return place_teacher(self) if self.task == "place" else lift_teacher(self)
+
+    def bin_pos(self):
+        """Centre of the bin floor (on the table)."""
+        return self.data.mocap_pos[self.bin_mocap].copy()
+
+    def block_touched(self):
+        """Any finger touching the block."""
+        d = self.data
+        for i in range(d.ncon):
+            c = d.contact[i]
+            if self.block_geom in (c.geom1, c.geom2):
+                other = c.geom2 if c.geom1 == self.block_geom else c.geom1
+                if other in self.finger_geoms[0] or other in self.finger_geoms[1]:
+                    return True
+        return False
+
+    def in_bin(self):
+        """Block resting inside the bin (centre within BIN_IN in x and y, down on the floor)."""
+        b, c = self.block_pos(), self.bin_pos()
+        return bool(np.all(np.abs(b[:2] - c[:2]) < BIN_IN) and b[2] < REST_Z + 0.012)
 
     def finger_touch(self):
         """(left touching anything, right touching anything, both fingers on the block)."""
@@ -378,9 +438,13 @@ class FlyPandaEnv(gym.Env):
         tcp, blk = self.tcp_pos(), self.block_pos()
         goal = getattr(self, "_goal", blk + np.array([0, 0, LIFT_GOAL]))
         l, r, _ = self.finger_touch()
-        return np.concatenate([tcp, blk, blk - tcp, goal - blk,
-                               [float(self.is_grasped()), self.lift_height() if hasattr(self, "_block_z0") else 0.0,
-                                self.gripper_width(), float(l), float(r)]])
+        out = [tcp, blk, blk - tcp, goal - blk,
+               [float(self.is_grasped()), self.lift_height() if hasattr(self, "_block_z0") else 0.0,
+                self.gripper_width(), float(l), float(r)]]
+        if self.task == "place":
+            c = self.bin_pos()
+            out += [c, blk - (c + np.array([0, 0, REST_Z]))]
+        return np.concatenate(out)
 
     def _touch_obs(self):
         """Touch: 0 none, 0.5 one finger, 1 both fingers press on something (reach: unused, 0)."""
@@ -412,14 +476,21 @@ class FlyPandaEnv(gym.Env):
             for ax in axes:
                 target[ax] = (BLOCK_HI[ax] - self.rng.uniform(0, band)) if self.rng.random() < 0.5 \
                     else (BLOCK_LO[ax] + self.rng.uniform(0, band))
+        placed = [target]
+        if self.task == "place":                        # the bin: somewhere else on the table
+            for _ in range(200):
+                binc = self.rng.uniform(BIN_LO, BIN_HI)
+                if np.linalg.norm(binc - target) > BIN_MIN_GAP:
+                    break
+            d.mocap_pos[self.bin_mocap] = [binc[0], binc[1], 0.0]
+            placed.append(binc)
         self._place(self.block_q, target)
         n_d = self.rng.integers(0, self.max_dist + 1) if self.max_dist > 0 else 0
-        placed = [target]
         for i, qa in enumerate(self.decoy_q):
             if i < n_d:
                 for _ in range(100):
                     xy = self.rng.uniform(BLOCK_LO, BLOCK_HI)
-                    if min(np.linalg.norm(xy - p) for p in placed) > 0.1:
+                    if min(np.linalg.norm(xy - p) for p in placed) > (0.13 if self.task == "place" else 0.1):
                         break
                 placed.append(xy)
                 self._place(qa, xy)
@@ -430,7 +501,7 @@ class FlyPandaEnv(gym.Env):
         if self.random_start > 0 and self.rng.random() < self.random_start:
             start = np.array([*target, 0.0]) + self.rng.uniform([-0.08, -0.08, 0.05], [0.08, 0.08, 0.12])
         mid = held = False
-        if self.task == "lift" and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
+        if self.task in ("lift", "place") and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
             mid, held = True, self.rng.random() < 0.5
             start = np.array([target[0], target[1], BLOCK_H]) + self.rng.uniform([-0.008, -0.008, -0.004],
                                                                                    [0.008, 0.008, 0.006])
@@ -455,6 +526,8 @@ class FlyPandaEnv(gym.Env):
             mujoco.mj_forward(m, d)
         self._block_z0 = float(self.block_pos()[2])
         self._goal = self.block_pos() + np.array([0, 0, LIFT_GOAL])     # straight above the start
+        if self.task == "place":                                         # where the block should end up
+            self._goal = self.bin_pos() + np.array([0, 0, REST_Z])
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
         self._hold = 0
@@ -466,6 +539,8 @@ class FlyPandaEnv(gym.Env):
     def _reward(self):
         if self.task == "lift":
             return self._reward_lift()
+        if self.task == "place":
+            return self._reward_place()
         d_t = float(np.linalg.norm(self.tcp_pos() - self.reach_point()))
         inside = d_t < SOLVE_DIST
         self._hold = self._hold + 1 if inside else 0
@@ -497,6 +572,30 @@ class FlyPandaEnv(gym.Env):
             r = 5.0
         return r / 5.0, success, d_t
 
+    def _reward_place(self):
+        """Staged (ManiSkill style), every stage pays more than the one before:
+        reach the block (0..1) -> hold it (+1) -> carry it over the bin (+2 x closeness in x/y)
+        -> lower it over the bin (+0.5) -> resting in the bin, still held (4.5) -> let go (5)
+        -> stays there, released, 0.2 s: success (6). Divided by 6."""
+        tcp, blk, c = self.tcp_pos(), self.block_pos(), self.bin_pos()
+        d_t = float(np.linalg.norm(tcp - blk))
+        held = self.is_grasped()
+        dxy = float(np.linalg.norm(blk[:2] - c[:2]))
+        r = 1 - np.tanh(5 * d_t)
+        if held:
+            r += 1.0 + 2.0 * (1 - np.tanh(5 * dxy))
+            if dxy < 0.03:
+                r += 0.5 * (1 - np.tanh(10 * max(0.0, blk[2] - REST_Z)))
+        inside = self.in_bin()
+        released = inside and not self.block_touched()
+        if inside:
+            r = 5.0 if released else 4.5
+        self._hold = self._hold + 1 if released else 0
+        success = self._hold >= LIFT_HOLD
+        if success:
+            r = 6.0
+        return r / 6.0, success, d_t
+
     def step(self, action):
         a = np.clip(np.asarray(action, dtype=np.float64), -1, 1)
         m, d = self.model, self.data
@@ -522,9 +621,11 @@ class FlyPandaEnv(gym.Env):
         r, success, d_t = self._reward()
         truncated = self._steps >= self.max_steps
         info = {"is_success": success, "dist": d_t}
-        if self.task == "lift":
+        if self.task in ("lift", "place"):
             info.update(grasped=self.is_grasped(), lift=self.lift_height(),
                         goal_dist=float(np.linalg.norm(self.block_pos() - self._goal)))
+        if self.task == "place":
+            info.update(in_bin=self.in_bin())
         return self._get_obs(), float(r), False, truncated, info
 
     # ------------------------------------------------------------------ rendering
@@ -566,6 +667,8 @@ class FlyPandaEnv(gym.Env):
 
 def panda_controller(env, obs=None):
     """Hand-written solution using the TRUE block position (the brain never gets it)."""
+    if env.task == "place":
+        return place_teacher(env)
     if env.task == "lift":
         return _lift_controller(env)
     err = env.reach_point() - env.tcp_pos()
@@ -622,5 +725,34 @@ def lift_teacher(env):
         else:                                             # level with the block: close
             target = blk.copy()
             a[3] = -1.0
+    a[:3] = np.clip((target - tcp) / STEP * 0.6, -1, 1)
+    return a
+
+
+def place_teacher(env):
+    """Pick-and-place teacher (TRUE block and bin positions; training targets only). Stateless:
+    not holding -> grasp as in lift_teacher; holding -> lift to carry height, move over the bin,
+    lower onto its floor, open; block in the bin and released -> move the hand up, open."""
+    tcp, blk, c = env.tcp_pos(), env.block_pos(), env.bin_pos()
+    a = np.zeros(4)
+    if env.is_grasped():
+        a[3] = -1.0
+        dxy = float(np.linalg.norm(blk[:2] - c[:2]))
+        carry = REST_Z + PLACE_CARRY
+        if dxy > 0.012:
+            if blk[2] < REST_Z + 0.05:                    # low: lift first (clear the rim)
+                want = np.array([blk[0], blk[1], carry])
+            else:                                         # carry over the bin
+                want = np.array([c[0], c[1], max(blk[2], carry)])
+        else:
+            want = np.array([c[0], c[1], REST_Z])         # straight down onto the floor
+            if blk[2] < REST_Z + 0.008:
+                a[3] = 1.0                                # down: let go
+        target = want - (blk - tcp)                       # move the hand, keep the hold offset
+    elif env.in_bin():
+        target = np.array([tcp[0], tcp[1], REST_Z + 0.15])   # done: hand up and away, open
+        a[3] = 1.0
+    else:
+        return lift_teacher(env)
     a[:3] = np.clip((target - tcp) / STEP * 0.6, -1, 1)
     return a

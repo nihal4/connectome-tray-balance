@@ -84,9 +84,9 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         # brain inputs: keep the parent's normalisation (the brain was trained with it)
         with open(os.path.join(parent_dir, "vecnormalize.pkl"), "rb") as f:
             parent = pickle.load(f)
-        m = len(parent.obs_rms.mean)
-        assert m == nb, f"parent brain has {m} inputs, this one {nb}"
-        norm.obs_rms.mean[:nb], norm.obs_rms.var[:nb] = parent.obs_rms.mean, parent.obs_rms.var
+        m = len(parent.obs_rms.mean)              # parent may itself have had privileged inputs after the brain's
+        assert m >= nb, f"parent brain has {m} inputs, this one {nb}"
+        norm.obs_rms.mean[:nb], norm.obs_rms.var[:nb] = parent.obs_rms.mean[:nb], parent.obs_rms.var[:nb]
         norm.obs_rms.count = parent.obs_rms.count
         norm.ret_rms = parent.ret_rms
     norm.training = False                          # frozen while imitating (the student's inputs stay fixed)
@@ -187,7 +187,9 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         np.savez(ev_file, **hist)
         if rets.mean() > state["best"]:
             state["best"] = float(rets.mean())
+            state["best_round"] = k + 1
             model.save(os.path.join(out, "best_model.zip"))
+            torch.save(model.policy.state_dict(), os.path.join(out, "imitate_best_policy.pt"))
         log(f"[progress] {state['steps']:,} steps | training episodes: return {np.mean(ep_r) if ep_r else 0:.2f} | "
             f"solved {100 * np.mean(ep_s) if ep_s else 0:.0f}%")
         log(f"Eval num_timesteps={state['steps']}, episode_reward={rets.mean():.2f} +/- {rets.std():.2f}")
@@ -206,7 +208,12 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             json.dump(state, f)
         os.replace(ckpt + ".tmp", ckpt)
 
-    # hand over to PPO: modest exploration noise, normalisation learns again
+    # hand over to PPO from the BEST round (later rounds can be worse: once the student drives
+    # itself, the data fills with its own near-misses), modest exploration noise, normalisation learns again
+    best_f = os.path.join(out, "imitate_best_policy.pt")
+    if os.path.exists(best_f):
+        model.policy.load_state_dict(torch.load(best_f))
+        log(f"[imitate] PPO starts from the best round ({state.get('best_round', '?')}), not the last")
     with torch.no_grad():
         model.policy.log_std.fill_(float(np.log(final_std)))
     model.num_timesteps = state["steps"]

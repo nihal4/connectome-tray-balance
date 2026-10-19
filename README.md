@@ -220,6 +220,23 @@ with noise 78 %). Switching a resumed run keeps the old evaluation history and b
 `*_height_until_<N>k*` and starts new ones; the choice is saved in the run's config and used by
 training, the evaluation chart, the videos and `fly eval`.
 
+### Task `panda_place`: pick and place into a bin
+
+Same robot, eyes, body sense and touch. A shallow red bin (14 x 14 cm, 1.5 cm rim) appears at a new
+place every episode, at least 15 cm from the yellow block; the eyes see it as a dark patch with some
+UV and no green, unlike the table, the block and the blue decoys. Grasp the block, carry it over the
+bin, lower it onto the floor and let go. Success = block resting inside the bin (centre within
+4.5 cm of the bin centre, down on its floor), touched by neither finger, for 0.2 s. 150 steps (6 s).
+Staged reward, every stage pays more than the one before (divided by 6): reach the block (0..1) ->
+held (+1) -> carried over the bin (+2 x closeness in x/y) -> lowered over it (+0.5) -> in the bin,
+still held (4.5) -> released (5) -> success (6).
+
+Teacher (`place_teacher`, true block and bin positions; training targets only): grasp as in lift,
+lift 8 cm, carry over the bin, lower, open, hand up. Solves 100 % of 40 episodes (median 2.8 s),
+95 % with action noise 0.15, 90 % with 0.3. Training plan: start from the v10 lift brain, 10
+DAgger rounds, then PPO with the asymmetric critic (23 true-state numbers: + bin position and
+block-to-bin); PPO now starts from the best imitation round, not the last.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
