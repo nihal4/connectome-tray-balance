@@ -98,20 +98,26 @@ def run_env_kw(run):
     return kw
 
 
-def make_norm(run, env_kw, seed=0):
+def make_norm(run, env_kw, seed=0, best=False):
+    """Input normalisation for a run. best=True: the statistics saved together with best_model.zip
+    (best_vecnormalize.pkl), so the best brain sees its inputs scaled as when it was chosen; runs from
+    before that file existed fall back to the latest statistics (vecnormalize.pkl)."""
     env_name = run_config(run)["env"]
     env_kw = {**run_env_kw(run), **env_kw}
     venv = DummyVecEnv([lambda: build_env(env_name, seed, **env_kw)])
-    vn = VecNormalize.load(os.path.join(run, "vecnormalize.pkl"), venv)
+    f = os.path.join(run, "best_vecnormalize.pkl")
+    if not (best and os.path.exists(f)):
+        f = os.path.join(run, "vecnormalize.pkl")
+    vn = VecNormalize.load(f, venv)
     vn.training = False
     vn.norm_reward = False
     return vn
 
 
-def run_episodes(model, run, env_kw, episodes, seed=123):
+def run_episodes(model, run, env_kw, episodes, seed=123, best=False):
     rets, lens, succ = [], [], []
     for ep in range(episodes):
-        vn = make_norm(run, env_kw, seed + ep)
+        vn = make_norm(run, env_kw, seed + ep, best=best)
         obs = vn.reset()
         done, ret, n, info = False, 0.0, 0, {}
         while not done:
@@ -140,11 +146,11 @@ def add_eye_view(frame, cam_img, size=144):
     return out
 
 
-def record(model, run, path, seed=7):
+def record(model, run, path, seed=7, best=False):
     import imageio.v2 as imageio
     env_name = run_config(run)["env"]
     raw = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
-    vn = make_norm(run, {})
+    vn = make_norm(run, {}, best=best)
     raw_obs, _ = raw.reset(seed=seed)
     frames = []
     for _ in range(raw.max_steps):
@@ -184,14 +190,14 @@ def main():
     if args.episodes > 1 or not os.path.exists(res_path):
         print(f"{cfg['env']} / {cfg['policy']} / {cfg.get('wiring', '-')}")
         for name, kw in tests.items():
-            r = run_episodes(model, args.run, kw, args.episodes)
+            r = run_episodes(model, args.run, kw, args.episodes, best=not args.last)
             results[name] = r
             print(f"  {name:13s} success {r['success_rate'] * 100:5.1f}%   return {r['return']:8.1f}   "
                   f"length {r['length']:7.1f}")
         with open(res_path, "w") as f:
             json.dump(results, f, indent=2)
     if args.video:
-        record(model, args.run, args.video)
+        record(model, args.run, args.video, best=not args.last)
 
 
 if __name__ == "__main__":

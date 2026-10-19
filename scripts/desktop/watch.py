@@ -70,7 +70,7 @@ def record_tests(run, out, seeds=None, best=False):
     from scripts.evaluate import add_eye_view, load, make_norm, run_config, run_env_kw
     model = load(run, best=best)
     env_name = run_config(run)["env"]
-    vn = make_norm(run, {})
+    vn = make_norm(run, {}, best=best)
     frames, results = [], []
     for seed in (seeds or TEST_SEEDS_BY_ENV.get(env_name, TEST_SEEDS)):
         env = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))

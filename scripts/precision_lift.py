@@ -13,7 +13,7 @@ from scripts.evaluate import load, make_norm, run_env_kw
 run, out, mode = sys.argv[1], sys.argv[2], sys.argv[3]
 N = int(sys.argv[4]) if len(sys.argv) > 4 else 100
 model = load(run, best=True)
-vn = make_norm(run, {})
+vn = make_norm(run, {}, best=True)
 env = build_env('panda_lift', 0, **run_env_kw(run))
 
 

@@ -22,7 +22,7 @@ from scripts.evaluate import load, make_norm, run_env_kw  # noqa: E402
 run, out = sys.argv[1], sys.argv[2]
 N = int(sys.argv[3]) if len(sys.argv) > 3 else 300
 model = load(run, best=True)
-vn = make_norm(run, {})
+vn = make_norm(run, {}, best=True)
 env = build_env('panda_sort', 0, **run_env_kw(run))
 BINS = ['left', 'centre', 'right']
 

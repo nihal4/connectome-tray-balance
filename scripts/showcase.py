@@ -30,7 +30,7 @@ def main():
     from scripts.desktop.watch import record_tests
     run = os.path.abspath(os.path.expanduser(args.run))
     model = load(run, best=True)
-    vn = make_norm(run, {})
+    vn = make_norm(run, {}, best=True)
     env_name = run_config(run)["env"]
     solved, missed = [], []
     for i in range(args.episodes):

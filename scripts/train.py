@@ -388,9 +388,22 @@ def main():
             eval_env.close()
             return
 
+    from stable_baselines3.common.callbacks import BaseCallback
+
+    class SaveBestNorm(BaseCallback):
+        """With every new best_model.zip, also save the input normalisation as it was at that moment
+        (best_vecnormalize.pkl): the statistics keep moving during training, and evaluating the best
+        brain with later statistics feeds it slightly differently scaled inputs."""
+        def _on_step(self):
+            vn = self.model.get_vec_normalize_env()
+            if vn is not None:
+                vn.save(os.path.join(out, "best_vecnormalize.pkl"))
+            return True
+
     eval_cb = EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
                            eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
-                           log_path=out, best_model_save_path=out, deterministic=True, verbose=1)
+                           log_path=out, best_model_save_path=out, deterministic=True, verbose=1,
+                           callback_on_new_best=SaveBestNorm())
     ev_file = os.path.join(out, "evaluations.npz")
     old = None
     if not reset and os.path.exists(ev_file):

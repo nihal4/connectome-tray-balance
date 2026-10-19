@@ -189,6 +189,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             state["best"] = float(rets.mean())
             state["best_round"] = k + 1
             model.save(os.path.join(out, "best_model.zip"))
+            norm.save(os.path.join(out, "best_vecnormalize.pkl"))    # the inputs' scaling at this moment
             torch.save(model.policy.state_dict(), os.path.join(out, "imitate_best_policy.pt"))
         log(f"[progress] {state['steps']:,} steps | training episodes: return {np.mean(ep_r) if ep_r else 0:.2f} | "
             f"solved {100 * np.mean(ep_s) if ep_s else 0:.0f}%")
