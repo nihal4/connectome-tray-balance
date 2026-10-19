@@ -254,6 +254,11 @@ Colours as the fly eye sees them (brightness, UV, green): yellow (1, 0.05, 1), b
 block's colour (one-hot). Teacher: 100 % solved (98 % with action noise 0.3), never the wrong bin.
 Fixed video layouts: seeds 13 (yellow), 11 (blue), 10 (orange). Starts from the v11 brain.
 
+**Result (v12, `results/v12_panda_sort/`, one seed, 0.5M steps, ~3 h):** 98 % solved at 515k;
+`fly eval 50`: clean 92 %, eye noise x3 84 %, light x2 50 %, block hidden 0 %. On 300 new layouts:
+95 % solved (yellow 98, blue 92, orange 97 %) and **0 blocks in a wrong bin**; misses never reached any
+bin.
+
 First design (dropped after 5 imitation rounds): bins coloured like the blocks, at random places.
 The student alone solved 0 % and got worse each round (imitation loss 0.04 -> 0.13): there was
 always a big bin of the block's own colour, so "find the yellow thing" no longer found the block.
@@ -462,6 +467,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v9, Panda grasp and lift, PPO only** (`results/v9_panda_lift/`): first lifts at 2.15M, ~20 % solved, block carried ~20 cm sideways.
 - **v10, Panda grasp and lift, teacher then PPO** (`results/v10_panda_lift_imitate/`): ~90 % solved alone by eye, block ends 1.3 cm from the target point; 60 % under 2x light changes.
 - **v11, Panda pick and place into a bin** (`results/v11_panda_place/`): ~90 % solved alone by eye (84-92 %), block lands 1.0 cm from the bin centre; 58 % under 2x light changes.
+- **v12, Panda sort by colour** (`results/v12_panda_sort/`): 95 % of 300 new layouts sorted, none into a wrong bin; 50 % under 2x light changes.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 
