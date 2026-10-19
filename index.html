@@ -160,7 +160,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
   color: var(--ink); background: color-mix(in oklab, var(--body) var(--p), var(--panel)); }
 .c.hi { color: var(--panel); }
 @media (prefers-color-scheme: dark) { .c.v5 { color: var(--panel); } }
-.v1 { --p: 14%; } .v2 { --p: 26%; } .v3 { --p: 40%; } .v4 { --p: 55%; } .v5 { --p: 72%; } .v6 { --p: 90%; }
+.v0 { --p: 4%; } .v1 { --p: 14%; } .v2 { --p: 26%; } .v3 { --p: 40%; } .v4 { --p: 55%; } .v5 { --p: 72%; } .v6 { --p: 90%; }
 .maps .key { flex-basis: 100%; font-size: 0.82rem; color: var(--muted); margin: 0; }
 
 /* pathway diagram */
@@ -209,7 +209,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t4"><span class="n">4</span><span class="t">Tilt maze by camera</span><span class="tag done">Done</span></a></li>
     <li><a href="#t5"><span class="n">5</span><span class="t">Drone with compound eyes</span><span class="tag hold">On hold</span></a></li>
     <li><a href="#t6"><span class="n">6</span><span class="t">Panda arm: reach a block</span><span class="tag done">Done</span></a></li>
-    <li><a href="#t7"><span class="n">7</span><span class="t">Panda arm: grasp and lift</span><span class="tag part">First lifts</span></a></li>
+    <li><a href="#t7"><span class="n">7</span><span class="t">Panda arm: grasp and lift</span><span class="tag done">Done</span></a></li>
     <li><a href="#roadmap"><span class="n">8+</span><span class="t">Sorting, smell, fruit</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
@@ -544,18 +544,112 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
 
   <!-- 7 ------------------------------------------------------------------ -->
   <section class="task" id="t7">
-    <div class="task-head"><span class="num">7</span><h3>Franka Panda arm: grasp the block and lift it</h3><span class="tag part">First lifts</span></div>
+    <div class="task-head"><span class="num">7</span><h3>Franka Panda arm: grasp the block and lift it</h3><span class="tag done">Done</span></div>
     <p>Same robot, eyes and brain, plus <strong>touch</strong>: the brain feels whether each finger
       presses on something, like a fly's mechanosensors. It must close both fingers on the yellow
-      block and lift it 8 cm. The reward comes in stages (reach, hold, lift), and lifting only counts
-      while the block is held, so pushing or flicking it earns nothing. Training starts from the
-      reaching brain.</p>
-    <p>Result, by trial and error alone: for 2 million steps it found the block, went down to it and
-      learned to close its fingers, but never completed a lift. Then, at 2.15 million steps, the first
-      full lifts appeared, and by 3.2 million it found, grasped, lifted and held the block on its own in
-      about one attempt in five. With the block made invisible it never succeeds, so it works by eye.
-      Its lifts are not yet clean: it often swings the block sideways while raising it.</p>
-    <ul class="facts"><li>Solved alone: <b>~20 %</b> (16–38 %)</li><li>No decoys: <b>24 %</b></li><li>3× eye noise: <b>8 %</b></li><li>Block invisible: <b>0 %</b></li></ul>
+      block, lift it to a point 8 cm straight above where it lay, and hold it there.</p>
+    <p><strong>Trial and error alone</strong> (v9) got the first lifts after 2 million steps and about one
+      success in five by 3.2 million, but the lifts were sloppy: the block was typically carried about
+      20 cm sideways while going up.</p>
+    <p><strong>Teacher, then practice</strong> (v10): a scripted teacher that knows where the block is
+      showed the fly brain the right move in the situations the brain itself got into (10 short
+      rounds, 165k steps, the method called DAgger). Then the brain practised on its own with trial and
+      error. The teacher only supplied training targets: the fly brain never receives the block's
+      position, and every test, map and video below is the brain alone, using its eyes. Within 0.6
+      million practice steps it solved 84 %, and around 90 % from then on.</p>
+    <ul class="facts"><li>Solved alone: <b>90 %</b> (was ~20 %)</li><li>Off target at the end: <b>1.3 cm</b> (was ~20 cm)</li><li>3× eye noise: <b>96 %</b></li><li>Block invisible: <b>0 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v10_panda_lift_imitate/showcase_best_brain.mp4" poster="results/v10_panda_lift_imitate/poster_showcase.jpg" controls muted loop playsinline preload="none"
+               aria-label="The fly-brain arm grasps the yellow block and lifts it straight up in three new layouts (green border), and misses once next to a blue decoy (red border)"></video>
+        <figcaption><b>Clean lifts, straight up</b>: 3 solved and 1 miss on new layouts, best brain.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v10_panda_lift_imitate/progress_2100k_fixed_layouts.mp4" poster="results/v10_panda_lift_imitate/poster_progress.jpg" controls muted loop playsinline preload="none"
+               aria-label="The three fixed test layouts, left, centre and far right: all three grasped, lifted and held (green borders)"></video>
+        <figcaption><b>The three fixed test layouts</b> at 2.1M steps, including the far right: all solved.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v10_panda_lift_imitate/progress_0100k_after_imitation.mp4" poster="results/v10_panda_lift_imitate/poster_0100k.jpg" controls muted loop playsinline preload="none"
+               aria-label="Right after the teacher rounds: the arm reaches and grasps cleanly in all three layouts but keeps the block on the table (red borders)"></video>
+        <figcaption><b>Right after the teacher</b>: clean reach and grasp, but no lift yet; practice added that.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v10_panda_lift_imitate/curves.png"><img src="results/v10_panda_lift_imitate/curves.png" alt="Learning curves of the teacher-then-practice run: solved rate rises from 0 to about 90 percent within 0.7 million steps and stays between 84 and 96 percent" loading="lazy"></a>
+        <figcaption><b>Learning curves</b>: 50 test episodes per point, 84–96 % from 0.6M steps on.</figcaption>
+      </figure>
+    </div>
+
+    <div class="maps" role="group" aria-label="Success maps across the table, before and after the teacher">
+      <div class="map">
+        <h4>Before: trial and error only (v9) <span>· 52/200 (26 %)</span></h4>
+        <div class="grid5">
+          <span></span><span class="col">right</span><span class="col"></span><span class="col">centre</span><span class="col"></span><span class="col">left</span>
+          <span class="lab">near</span><span class="c v0" title="0 of 8">0</span><span class="c v1" title="1 of 8">1</span><span class="c v3" title="4 of 8">4</span><span class="c v1" title="1 of 8">1</span><span class="c v0" title="0 of 8">0</span>
+          <span class="lab"></span><span class="c v0" title="0 of 8">0</span><span class="c v2" title="3 of 8">3</span><span class="c v1" title="1 of 8">1</span><span class="c v1" title="1 of 8">1</span><span class="c v2" title="2 of 8">2</span>
+          <span class="lab"></span><span class="c v2" title="2 of 8">2</span><span class="c v2" title="2 of 8">2</span><span class="c v2" title="3 of 8">3</span><span class="c v4" title="5 of 8">5</span><span class="c v2" title="3 of 8">3</span>
+          <span class="lab"></span><span class="c v0" title="0 of 8">0</span><span class="c v2" title="3 of 8">3</span><span class="c v4" title="6 of 8">6</span><span class="c v2" title="2 of 8">2</span><span class="c v2" title="3 of 8">3</span>
+          <span class="lab">far</span><span class="c v0" title="0 of 8">0</span><span class="c v2" title="2 of 8">2</span><span class="c v2" title="3 of 8">3</span><span class="c v2" title="3 of 8">3</span><span class="c v2" title="2 of 8">2</span>
+        </div>
+      </div>
+      <div class="map">
+        <h4>After: teacher, then practice (v10) <span>· 180/200 (90 %)</span></h4>
+        <div class="grid5">
+          <span></span><span class="col">right</span><span class="col"></span><span class="col">centre</span><span class="col"></span><span class="col">left</span>
+          <span class="lab">near</span><span class="c v4" title="6 of 8">6</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v5" title="7 of 8">7</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v5" title="7 of 8">7</span>
+          <span class="lab"></span><span class="c v6 hi" title="8 of 8">8</span><span class="c v5" title="7 of 8">7</span><span class="c v5" title="7 of 8">7</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v6 hi" title="8 of 8">8</span>
+          <span class="lab"></span><span class="c v4" title="6 of 8">6</span><span class="c v5" title="7 of 8">7</span><span class="c v4" title="6 of 8">6</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v6 hi" title="8 of 8">8</span>
+          <span class="lab"></span><span class="c v4" title="6 of 8">6</span><span class="c v5" title="7 of 8">7</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v6 hi" title="8 of 8">8</span>
+          <span class="lab">far</span><span class="c v4" title="6 of 8">6</span><span class="c v4" title="6 of 8">6</span><span class="c v4" title="6 of 8">6</span><span class="c v6 hi" title="8 of 8">8</span><span class="c v6 hi" title="8 of 8">8</span>
+        </div>
+      </div>
+      <p class="key">Each cell: a block position on the table (5 × 5 grid, seen from the robot, decoys
+        removed), number of successes out of 8 tries with different starts. Before: block at least 7.5 cm
+        up at the end (v9's own, looser rule). After: block held within 2.5 cm of the point straight above
+        its start (the stricter rule). The right edge is still the weakest.</p>
+    </div>
+
+    <details open>
+      <summary>Precision, before and after (200 new layouts each)</summary>
+      <table>
+        <thead><tr><th>Measure</th><th>Trial and error (v9)</th><th>Teacher, then practice (v10)</th></tr></thead>
+        <tbody>
+          <tr><td>Grasped the block</td><td class="num">85 %</td><td class="num yes">100 %</td></tr>
+          <tr><td>Block 7.5 cm or more up at the end</td><td class="num">29 %</td><td class="num yes">98 %</td></tr>
+          <tr><td>Held at the target point at the end (within 2.5 cm)</td><td class="num no">0 %</td><td class="num yes">94 %</td></tr>
+          <tr><td>Distance from the target point at the end (median)</td><td class="num">20.4 cm</td><td class="num yes">1.3 cm</td></tr>
+          <tr><td>Largest sideways drift while in the air (median)</td><td class="num">23.4 cm</td><td class="num yes">1.1 cm</td></tr>
+          <tr><td>Time to finish (median, of 4 s)</td><td class="num">–</td><td class="num">1.5 s</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Test (best brain, 50 episodes)</th><th>v9</th><th>v10</th></tr></thead>
+        <tbody>
+          <tr><td>Normal conditions</td><td class="num">16 %</td><td class="num yes">90 %</td></tr>
+          <tr><td>No decoy blocks</td><td class="num">24 %</td><td class="num yes">90 %</td></tr>
+          <tr><td>Three times more noise in the eyes</td><td class="num">8 %</td><td class="num yes">96 %</td></tr>
+          <tr><td>Light twice as dim or bright</td><td class="num">20 %</td><td class="num">60 %</td></tr>
+          <tr><td>Yellow block made invisible</td><td class="num no">0 %</td><td class="num no">0 %</td></tr>
+        </tbody>
+      </table>
+      <p>It still works only by eye (0 % with the block invisible). Lighting is the weak spot: it never
+        saw lighting changes while practising. One training run.</p>
+    </details>
+    <details>
+      <summary>How the teacher rounds went</summary>
+      <p>Round 1 the teacher drives every step; then the brain drives more and more (50 %, 25 % …) while
+        the teacher keeps saying what it would do. The brain alone solved 0 % after rounds 1–2, up to 56 %
+        after round 7, then fell to 4 % by round 10: once the brain drove almost all the time, the
+        examples filled with its own near-misses, and it lost the final lift while keeping a clean reach
+        and grasp. Practice with trial and error then took it from 4 % to about 90 %. During practice a
+        second network that judges how well things are going (the critic) saw the true positions; it is
+        used only for learning, never for acting.</p>
+    </details>
+    <details>
+      <summary>Before: trial and error alone (v9)</summary>
+      <p>For 2 million steps it found the block, went down to it and learned to close its fingers, but
+        never completed a lift. At 2.15 million steps the first full lifts appeared, and by 3.2 million it
+        solved about one attempt in five, often swinging the block sideways while raising it.</p>
     <div class="gallery">
       <figure>
         <video src="results/v9_panda_lift/showcase_best_brain.mp4" poster="results/v9_panda_lift/poster_showcase.jpg" controls muted loop playsinline preload="none"
@@ -602,6 +696,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
       <p>One training run; 50-episode tests swing by about ±10 points. Videos and tests always start
         from scratch (no help), unlike some practice episodes.</p>
     </details>
+    </details>
     <details>
       <summary>Checks before training</summary>
       <table>
@@ -624,6 +719,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
+    <li><b>Robust to lighting</b><span class="why">the lift drops to 60 % under 2× dimmer or brighter light; practise under varied lighting</span></li>
     <li><b>Pick and place</b><span class="why">carry the block into a bin</span></li>
     <li><b>Sort by colour</b><span class="why">three colours, three bins</span></li>
     <li><b>Add smell</b><span class="why">wire in the fly's antennal lobe and mushroom body, the circuits flies use to judge fruit; real odour-response data for fly smell neurons exists</span></li>

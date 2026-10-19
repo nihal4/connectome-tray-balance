@@ -252,6 +252,18 @@ error, still falling after 20 passes); a pure imitation student (30k teacher ste
 0 % -> 7 % -> 7 % solved alone. A first attempt failed for a known reason: too little training
 per round (sideways errors larger than the teacher's own spread).
 
+**Result (v10, `results/v10_panda_lift_imitate/`, one seed, 2.12M steps):** started from the v9
+brain; 10 DAgger rounds (165k steps), then PPO with the asymmetric critic, goal reward, absolute
+gripper. The student alone solved 0 % -> 56 % (round 7) -> 4 % (round 10: once it drove itself, the
+data filled with its own near-misses and it lost the final lift, keeping a clean reach and grasp).
+PPO then took it to 84 % by 0.6M and 84-96 % on every evaluation after 0.7M (mean 91 % from 1.5M).
+Best brain, `fly eval 50`: clean 90 %, no decoys 90 %, eye noise x3 96 %, light x2 60 %, block
+hidden 0 % (v9: 16 / 24 / 8 / 20 / 0 %). Precision on 200 new layouts, same rule for both: held
+within 2.5 cm of the point 8 cm above the start at the end 94 % (v9 0 %); median distance from that
+point at the end 1.3 cm (v9 20.4 cm); median largest sideways drift in the air 1.1 cm (v9 23.4 cm).
+Success map (5 x 5 block positions, 8 starts each, decoys removed): 180/200, weakest along the
+right edge (6/8). Weak spot: lighting changes (never varied in training).
+
 Planned ladder: reach -> grasp and lift -> pick and place into a bin -> sort by colour into
 3 bins -> add the fly's smell pathway (antennal lobe, mushroom body) and sort fruits by smell
 -> colour + smell, conflicting cues -> taste by touch -> ripe vs rotten -> formalin-treated vs
@@ -408,6 +420,9 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v6, camera maze, first run** (`results/v6_maze_vision_kaggle/`, Kaggle, one seed): 0 % solved, return flat at about +5.3 from 1.05M steps. The video shows why: the brain rolls the ball through the whole maze to the goal in under a second, then pins it in the corner of the goal cell instead of stopping it in the middle. Navigation learned, final stop not. Fixes: start-position curriculum and a stronger pull to the goal centre (success rule unchanged).
   Resumed with both fixes from 1.65M to ~2M steps: eval return rose from ~5 to 7.7–11.2 (the ball now comes off the wall towards the centre) but still 0 % solved; the arm and ball move too fast to stop the ball on the spot.
 - **v7, camera maze solved with slow motors** (`results/v7_maze_vision_slow_kaggle/`, Kaggle, 2M steps, one seed): fresh run with `--action_rate 0.1 --random_start 0.5`, brain unchanged. First solve at 350k, 100 % from 1.1M, 100 % on every eval from 1.65M; solves in ~130 steps and stops the ball in the goal centre. Robustness: heavy ball 100 %, pushes 60 %, camera noise 0 %, ball hidden 0 %, **unseen mazes 0 %** (memorised this maze).
+- **v8, Panda reach by fly eyes** (`results/v8_panda_reach/`): 94 % across the table after edge practice.
+- **v9, Panda grasp and lift, PPO only** (`results/v9_panda_lift/`): first lifts at 2.15M, ~20 % solved, block carried ~20 cm sideways.
+- **v10, Panda grasp and lift, teacher then PPO** (`results/v10_panda_lift_imitate/`): ~90 % solved alone by eye, block ends 1.3 cm from the target point; 60 % under 2x light changes.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 
