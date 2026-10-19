@@ -329,6 +329,8 @@ def main():
                 ev = last_eval(run)
                 if not ev or not os.path.exists(os.path.join(run, "model.zip")):
                     continue
+                if not os.path.exists(os.path.join(args.root, "logs", os.path.basename(run) + ".log")):
+                    continue                    # a copied brain (e.g. panda_sort-v12), not a training run
                 mark = ev["steps"] // args.every * args.every
                 if mark >= args.every and mark > state.get(run, 0):
                     if make_video(run, mark // 1000, sys.executable):
