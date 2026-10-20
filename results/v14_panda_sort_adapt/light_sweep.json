@@ -1,0 +1,13 @@
+{
+ "run": "/tmp/claude-0/-home-claude/82f463f2-26ec-5188-bdf8-d3c632529db8/scratchpad/v14x/panda_sort-connectome-real-s0-adapt",
+ "episodes": 40,
+ "solved": {
+  "0.4": 1.0,
+  "0.5": 1.0,
+  "0.7": 1.0,
+  "1.0": 1.0,
+  "1.4": 1.0,
+  "2.0": 1.0,
+  "2.5": 1.0
+ }
+}

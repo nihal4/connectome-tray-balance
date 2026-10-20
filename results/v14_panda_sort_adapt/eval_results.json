@@ -1,0 +1,42 @@
+{
+  "clean": {
+    "return": 106.4,
+    "length": 150.0,
+    "success_rate": 0.98
+  },
+  "no_decoys": {
+    "return": 106.4,
+    "length": 150.0,
+    "success_rate": 0.98
+  },
+  "eye_noise_x3": {
+    "return": 106.1,
+    "length": 150.0,
+    "success_rate": 0.98
+  },
+  "dim_or_bright_x2": {
+    "return": 106.9,
+    "length": 150.0,
+    "success_rate": 0.96
+  },
+  "light_0.4x_or_2.5x": {
+    "return": 110.1,
+    "length": 150.0,
+    "success_rate": 1.0
+  },
+  "uneven_light": {
+    "return": 70.2,
+    "length": 150.0,
+    "success_rate": 0.6
+  },
+  "tinted_light": {
+    "return": 107.7,
+    "length": 150.0,
+    "success_rate": 0.98
+  },
+  "target_hidden": {
+    "return": 6.5,
+    "length": 150.0,
+    "success_rate": 0.0
+  }
+}

@@ -806,7 +806,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
       is to see its colour, through the fly's photoreceptors (brightness, UV and green channels).</p>
     <p>Started from the pick-and-place brain: 10 teacher rounds, then practice. In 0.5 million steps
       (about 3 hours) it solved 98 % of the evaluation episodes.</p>
-    <ul class="facts"><li>Solved alone: <b>92–98 %</b></li><li>Wrong bin: <b>0 of 300</b></li><li>3× eye noise: <b>84 %</b></li><li>Block invisible: <b>0 %</b></li></ul>
+    <ul class="facts"><li>Solved alone: <b>98 %</b> of 300</li><li>Wrong bin: <b>0 of 300</b></li><li>Any brightness ×0.4–2.5: <b>100 %</b></li><li>Block invisible: <b>0 %</b></li></ul>
     <div class="gallery">
       <figure>
         <video src="results/v12_panda_sort/showcase_best_brain.mp4" poster="results/v12_panda_sort/poster_showcase_best_brain.jpg" controls muted loop playsinline preload="none"
@@ -857,20 +857,43 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
         brain could no longer find the block.</p>
     </details>
     <details open>
-      <summary>Changing light: practising under x0.5 to x2 brightness (v13)</summary>
+      <summary>Changing light: fly-like light adaptation in the eyes (v14)</summary>
+      <p>Real fly photoreceptors adapt to the light level: each receptor type adjusts its sensitivity to
+        the light it currently receives, so the brain gets contrast rather than absolute brightness. The
+        eye model now does the same (with photon noise that grows in dim light). The brain then practised
+        under <strong>normal light only</strong>, so every other lighting below is new to it.</p>
+      <div class="gallery">
+        <figure>
+          <video src="results/v14_panda_sort_adapt/showcase_best_brain.mp4" poster="results/v14_panda_sort_adapt/poster_showcase_best_brain.jpg" controls muted loop playsinline preload="none"
+                 aria-label="Adapting eyes: a blue block into the centre bin, an orange block into the right bin, a blue block into the centre bin, and one miss where a yellow block lies just in front of the bins"></video>
+          <figcaption><b>Adapting eyes</b>: 3 sorted on new layouts, 1 miss (block right in front of the bins).</figcaption>
+        </figure>
+        <figure>
+          <a class="plot" href="results/v14_panda_sort_adapt/curves.png"><img src="results/v14_panda_sort_adapt/curves.png" alt="Learning curves with adapting eyes: 72 to 98 percent during the teacher rounds, then 90 to 100 percent throughout practice" loading="lazy"></a>
+          <figcaption><b>Learning curves</b>: 90–100 % throughout practice.</figcaption>
+        </figure>
+      </div>
       <table>
         <thead><tr><th>Fixed brightness (40 layouts each)</th><th>×0.4</th><th>×0.5</th><th>×0.7</th><th>×1</th><th>×1.4</th><th>×2</th><th>×2.5</th></tr></thead>
         <tbody>
-          <tr><td>Before (practised ×0.8–1.2)</td><td class="num no">0 %</td><td class="num no">0 %</td><td class="num">15 %</td><td class="num yes">90 %</td><td class="num no">0 %</td><td class="num no">0 %</td><td class="num no">0 %</td></tr>
-          <tr><td>After (practised ×0.5–2)</td><td class="num">5 %</td><td class="num">42 %</td><td class="num yes">92 %</td><td class="num yes">82 %</td><td class="num">70 %</td><td class="num">62 %</td><td class="num no">0 %</td></tr>
+          <tr><td>v12: practised ×0.8–1.2</td><td class="num no">0 %</td><td class="num no">0 %</td><td class="num">15 %</td><td class="num yes">90 %</td><td class="num no">0 %</td><td class="num no">0 %</td><td class="num no">0 %</td></tr>
+          <tr><td>v13: practised ×0.5–2</td><td class="num">5 %</td><td class="num">42 %</td><td class="num yes">92 %</td><td class="num yes">82 %</td><td class="num">70 %</td><td class="num">62 %</td><td class="num no">0 %</td></tr>
+          <tr><td><b>v14: adapting eyes</b>, practised ×0.8–1.2</td><td class="num yes">100 %</td><td class="num yes">100 %</td><td class="num yes">100 %</td><td class="num yes">100 %</td><td class="num yes">100 %</td><td class="num yes">100 %</td><td class="num yes">100 %</td></tr>
         </tbody>
       </table>
-      <p>Before, the brain only worked at the brightness it had practised under. Practising under a wide
-        range made it work across most of that range, at a small cost at normal light (91 % instead of 95 %
-        on 300 layouts, 5 blocks in a wrong bin instead of 0). Beyond the practised range it still fails: it
-        learned the brightness levels it saw rather than to ignore brightness. Real fly photoreceptors
-        <em>adapt</em> to the light level and pass on mostly contrast; adding that to the eye model is the
-        next step.</p>
+      <table>
+        <thead><tr><th>Lighting adaptation cannot simply cancel</th><th>v12</th><th>v13</th><th>v14</th></tr></thead>
+        <tbody>
+          <tr><td>Uneven: one side of the view ×2, the other ×0.5</td><td class="num no">3 %</td><td class="num no">3 %</td><td class="num">48–60 %</td></tr>
+          <tr><td>Uneven, milder: ×1.4 / ×0.7</td><td class="num">–</td><td class="num">–</td><td class="num yes">88 %</td></tr>
+          <tr><td>Tinted: receptor types ×0.7 / ×1.4 / ×1.0</td><td class="num no">15 %</td><td class="num">30 %</td><td class="num yes">98 %</td></tr>
+        </tbody>
+      </table>
+      <p>Practising under many brightness levels (v13) only helped inside the practised range. Adapting
+        eyes made overall brightness irrelevant (largely by design: adaptation cancels a global change),
+        corrected a colour cast (like colour constancy), and handled moderately uneven light it never saw.
+        At normal light it also sorted better than ever: <strong>98 % of 300 new layouts, none in a wrong
+        bin</strong>. Strongly uneven light remains the weak spot.</p>
     </details>
   </section>
 
@@ -879,8 +902,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Light adaptation in the eye</b><span class="why">practising under ×0.5–2 brightness helped inside that range only; fly photoreceptors adapt to the light level and pass on contrast, so the eye model will too</span></li>
-    <li><b>Add smell</b><span class="why">wire in the fly's olfactory receptor neurons, antennal lobe, mushroom body and lateral horn from FlyWire; receptor responses to each chemical from measured fly data (DoOR, Hallem &amp; Carlson 2006); two antennae near the gripper</span></li>
+        <li><b>Add smell</b><span class="why">wire in the fly's olfactory receptor neurons, antennal lobe, mushroom body and lateral horn from FlyWire; receptor responses to each chemical from measured fly data (DoOR, Hallem &amp; Carlson 2006); two antennae near the gripper</span></li>
     <li><b>Ripe or rotten, by smell alone</b><span class="why">the same fruit, looking identical: ripe smells of fruity esters, rotten of fermentation (ethanol, acetic acid, ethyl acetate), a fly's natural strength</span></li>
     <li><b>Real fruit</b><span class="why">real sizes that fit the gripper, colours from measured reflectance spectra as the fly's photoreceptors see them, rot patches; eyes only vs smell only vs both, and a conflict test (looks ripe, smells rotten)</span></li>
     <li><b>Taste by touch</b><span class="why">flies taste with their feet; taste sensors on the gripper fingers</span></li>
