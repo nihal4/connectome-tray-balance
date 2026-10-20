@@ -340,6 +340,12 @@ fruit otherwise creeps out of the fingers); the gripper squeezes x4 harder than 
 a real Panda manages 70 N); elliptic friction cones. Approximate photoreceptor colours: flies see little
 beyond ~600 nm, so a red tomato is dark to them and stands out from the plant by its lack of green.
 
+What the videos show is a full greenhouse tomato plant (crooked main stem on a support string, compound leaves
+from 14 cm up, green and young fruit clusters, flowers, a harvested stub, grow slab, white ground cover) with
+its two neighbours in the row, filmed from the aisle. All of that is drawn for people only: the fly eyes and
+the physics see just the working parts (stem, branch, stalk, three leaves, tomato), so it does not change
+the task (checked: identical brain inputs).
+
 Teacher (`harvest_teacher`, true positions, training targets only): line up behind the tomato on the
 approach line, go in, close, pull back and down until it snaps, carry gently, drop into the basket:
 99 % of 100 layouts, median 76 steps (3 s) of the 200 allowed.

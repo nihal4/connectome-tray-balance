@@ -181,6 +181,117 @@ def _turn(u, v):
     return np.array([np.cos(ang / 2), *(np.sin(ang / 2) * ax)])
 
 
+def _vis_geom(body, gtype, rgba, size=None, pos=None, quat=None, fromto=None, material=None):
+    """A geom for people watching only: drawn (group 2), never touched, never seen by the fly eyes."""
+    g = body.add_geom()
+    g.type, g.rgba, g.group, g.contype, g.conaffinity, g.density = gtype, rgba, 2, 0, 0, 0
+    if fromto is not None:
+        g.fromto = fromto
+        g.size = [size[0], 0, 0]
+    else:
+        g.size = list(size) + [0] * (3 - len(size))
+        g.pos = pos
+        if quat is not None:
+            g.quat = quat
+    if material:
+        g.material = material
+    return g
+
+
+def _axes_quat(x, z_hint=(0, 0, 1.0)):
+    """Quaternion of a frame whose x axis is x and whose z axis is as close to z_hint as possible."""
+    x = np.asarray(x, float) / np.linalg.norm(x)
+    y = np.cross(np.asarray(z_hint, float), x)
+    y = y / (np.linalg.norm(y) + 1e-9)
+    z = np.cross(x, y)
+    q = np.zeros(4)
+    mujoco.mju_mat2Quat(q, np.stack([x, y, z], 1).ravel())
+    return q
+
+
+def _tomato_plant_look(body, seed, y0=0.0, ripe_truss=False, back_only=False):
+    """A greenhouse tomato plant for the videos (visual only), stem base at (0, y0, 0) of body: a slightly
+    crooked main stem on a support string, compound leaves (rachis + leaflet pairs + end leaflet) from 14 cm
+    up (lower leaves removed, as growers do), a cluster of green fruit, small young fruit, yellow flowers
+    and the stub of a harvested truss."""
+    rng = np.random.default_rng(seed)
+    STEM, LEAF, STRING = [0.30, 0.47, 0.17, 1], [0.17, 0.40, 0.12, 1], [0.85, 0.80, 0.62, 1]
+    pts = [np.array([0, y0, 0.06])]
+    for z in np.arange(0.14, 0.86, 0.08):
+        pts.append(np.array([rng.uniform(-0.004, 0.004), y0 + rng.uniform(-0.007, 0.007), z]))
+    for k in range(len(pts) - 1):                         # main stem, thinner towards the top
+        r = 0.010 - 0.005 * k / (len(pts) - 1)
+        _vis_geom(body, mujoco.mjtGeom.mjGEOM_CAPSULE, STEM, size=[r], fromto=[*pts[k], *pts[k + 1]], material="plant")
+    _vis_geom(body, mujoco.mjtGeom.mjGEOM_CAPSULE, STRING, size=[0.0012], fromto=[*pts[-1], 0, y0, 1.9])
+
+    def stem_at(z):
+        k = min(int((z - 0.06) / 0.08), len(pts) - 2)
+        f = np.clip((z - pts[k][2]) / (pts[k + 1][2] - pts[k][2]), 0, 1)
+        return pts[k] + f * (pts[k + 1] - pts[k])
+
+    lo, hi = (-80, 80) if back_only else (-115, 115)
+    for k, z in enumerate([0.14, 0.22, 0.30, 0.38, 0.46, 0.54, 0.62, 0.70, 0.78]):
+        a = np.radians(((35 + 137.5 * k + 180) % 360) - 180)
+        a = np.radians(np.clip(np.degrees(a), lo, hi))
+        L = (0.24 if z < 0.6 else 0.17) * rng.uniform(0.85, 1.1)
+        d = np.array([np.cos(a), np.sin(a), 0])
+        p0 = stem_at(z)
+        p1 = p0 + 0.5 * L * (d + np.array([0, 0, 0.45]))
+        p2 = p1 + 0.5 * L * (d + np.array([0, 0, -0.55]))
+        for u, v in ((p0, p1), (p1, p2)):                    # rachis
+            _vis_geom(body, mujoco.mjtGeom.mjGEOM_CAPSULE, STEM, size=[0.0024], fromto=[*u, *v], material="plant")
+        col = [c * rng.uniform(0.9, 1.1) for c in LEAF[:3]] + [1]
+        for f, sc in ((0.22, 1.0), (0.42, 1.3), (0.62, 1.4), (0.82, 1.2)):   # leaflet pairs
+            seg = (p0, p1) if f < 0.5 else (p1, p2)
+            g = f / 0.5 if f < 0.5 else (f - 0.5) / 0.5
+            c = seg[0] + g * (seg[1] - seg[0])
+            t = (seg[1] - seg[0]) / np.linalg.norm(seg[1] - seg[0])
+            side = np.cross(t, [0, 0, 1.0])
+            side /= np.linalg.norm(side) + 1e-9
+            for sgn in (1, -1):
+                ax = sgn * side + 0.6 * t
+                _vis_geom(body, mujoco.mjtGeom.mjGEOM_ELLIPSOID, col, size=[0.030 * sc, 0.016 * sc, 0.0015],
+                          pos=c + sgn * side * 0.026 * sc + t * 0.012 + [0, 0, -0.004],
+                          quat=_axes_quat(ax, [0, 0, 1] + 0.3 * sgn * side), material="plant")
+                _vis_geom(body, mujoco.mjtGeom.mjGEOM_ELLIPSOID, col, size=[0.013, 0.008, 0.0012],   # small leaflets
+                          pos=c - t * 0.025 + sgn * side * 0.014, quat=_axes_quat(sgn * side + 0.3 * t), material="plant")
+        t = (p2 - p1) / np.linalg.norm(p2 - p1)
+        _vis_geom(body, mujoco.mjtGeom.mjGEOM_ELLIPSOID, col, size=[0.042, 0.022, 0.0015], pos=p2 + t * 0.034,
+                  quat=_axes_quat(t), material="plant")
+
+    def truss(z, az, n, r, rgba, flowers=False):
+        d = np.array([np.cos(np.radians(az)), np.sin(np.radians(az)), 0])
+        p0 = stem_at(z)
+        p1 = p0 + d * 0.05 + [0, 0, 0.015]
+        p2 = p1 + d * 0.06 + [0, 0, -0.03]
+        for u, v in ((p0, p1), (p1, p2)):
+            _vis_geom(body, mujoco.mjtGeom.mjGEOM_CAPSULE, STEM, size=[0.0022], fromto=[*u, *v], material="plant")
+        for i in range(n):
+            q = p1 + (p2 - p1) * (i + 0.5) / n
+            off = np.cross(d, [0, 0, 1]) * (0.012 if i % 2 else -0.012)
+            c = q + off + [0, 0, -0.012 - r]
+            _vis_geom(body, mujoco.mjtGeom.mjGEOM_CAPSULE, STEM, size=[0.0012], fromto=[*q, *(c + [0, 0, r])], material="plant")
+            if flowers:
+                for j in range(5):
+                    ang = 2 * np.pi * j / 5
+                    pv = np.array([np.cos(ang), np.sin(ang), -0.6])
+                    _vis_geom(body, mujoco.mjtGeom.mjGEOM_ELLIPSOID, [0.98, 0.85, 0.15, 1], size=[0.008, 0.003, 0.001],
+                              pos=c + pv * 0.007, quat=_axes_quat(pv))
+            else:
+                _vis_geom(body, mujoco.mjtGeom.mjGEOM_SPHERE, rgba, size=[r * rng.uniform(0.85, 1.1)], pos=c,
+                          material="fruit")
+
+    g_az, f_az = (60, -70) if not back_only else (40, -40)
+    truss(0.44, g_az, 4, 0.015, [0.42, 0.62, 0.18, 1])                       # green fruit
+    if ripe_truss:
+        truss(0.34, -g_az, 3, 0.016, [0.78, 0.30, 0.08, 1])                  # turning (orange-red)
+    truss(0.60, f_az, 4, 0.007, [0.45, 0.68, 0.22, 1])                       # young fruit
+    truss(0.74, 100 if not back_only else 30, 4, 0.0, None, flowers=True)    # flowers
+    p0 = stem_at(0.10)                                                        # harvested truss: a bare stub
+    _vis_geom(body, mujoco.mjtGeom.mjGEOM_CAPSULE, [0.45, 0.42, 0.22, 1], size=[0.0025],
+              fromto=[*p0, *(p0 + [0.03, -0.02, -0.005])])
+
+
 def _build_model(n_decoys, n_facets, bins=(), harvest=False):
     spec = mujoco.MjSpec.from_file(PANDA_XML)
     wb = spec.worldbody
@@ -213,7 +324,7 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False):
         tg.solref, tg.priority = [0.005, 1.0], 1          # firm contact (a light fruit otherwise creeps out)
         pl = wb.add_body()                       # origin: where the branch leaves the main stem
         pl.name, pl.mocap, pl.pos = "plant", True, [0.65, 0, 0.2]
-        green, leaf = [0.25, 0.5, 0.15, 1], [0.2, 0.55, 0.2, 1]
+        green, leaf = [0.30, 0.47, 0.17, 1], [0.17, 0.40, 0.12, 1]
         parts = [("stem", mujoco.mjtGeom.mjGEOM_CYLINDER, [0.007, 0.33, 0], [0, 0, -0.17], [1, 0, 0, 0], green),
                  ("branch", mujoco.mjtGeom.mjGEOM_CAPSULE, [0.003, BRANCH_LEN / 2, 0], [-BRANCH_LEN / 2, 0, 0],
                   [np.cos(np.pi / 4), 0, np.sin(np.pi / 4), 0], green),
@@ -226,6 +337,24 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False):
             g = pl.add_geom()
             g.name, g.type, g.size, g.pos, g.quat, g.rgba = f"plant_{nm}", typ, size, pos, quat, rgba
             g.group = 0
+        # what people see in the videos (visual only: the brain's eyes and the physics ignore it): a real-looking
+        # plant around the working parts above, its neighbours in the row, the grow slab and white ground cover
+        for nm, rgba, spec_ in (("plant", [0.3, 0.5, 0.2, 1], 0.15), ("fruit", [0.8, 0.1, 0.05, 1], 0.7)):
+            mt = spec.add_material()
+            mt.name, mt.specular, mt.shininess, mt.rgba = nm, spec_, 0.6 if nm == "fruit" else 0.1, rgba
+        look = wb.add_body()
+        look.name, look.mocap, look.pos = "plant_look", True, [0.65, 0, 0]
+        _tomato_plant_look(look, 1, ripe_truss=True)
+        _tomato_plant_look(look, 2, y0=0.42, back_only=True)
+        _tomato_plant_look(look, 3, y0=-0.42, back_only=True)
+        _vis_geom(look, mujoco.mjtGeom.mjGEOM_BOX, [0.93, 0.93, 0.9, 1], size=[0.07, 0.75, 0.03], pos=[0.02, 0, 0.03])
+        _vis_geom(look, mujoco.mjtGeom.mjGEOM_BOX, [0.86, 0.87, 0.84, 1], size=[0.22, 1.0, 0.0012], pos=[0.11, 0, 0.0012])
+        tg.material = "fruit"
+        for j in range(5):                       # the tomato's calyx (green star of sepals on top)
+            ang = 2 * np.pi * j / 5 + 0.3
+            v = np.array([np.cos(ang), np.sin(ang), -0.35])
+            _vis_geom(blk, mujoco.mjtGeom.mjGEOM_ELLIPSOID, [0.22, 0.45, 0.12, 1], size=[0.009, 0.0035, 0.001],
+                      pos=[0, 0, TOM_R * 0.93] + v * 0.006, quat=_axes_quat(v))
         eq = spec.add_equality()                 # the stalk: the tomato's top hangs at the pedicel tip until picked
         eq.name, eq.type, eq.objtype = "stalk", mujoco.mjtEq.mjEQ_CONNECT, mujoco.mjtObj.mjOBJ_BODY
         eq.name1, eq.name2 = "block", "plant"
@@ -260,6 +389,8 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False):
     ws.quat = _turn(c_left, np.array([0, 0, 1.0]))                     # field centred along the fingers
     hg = head.add_geom()
     hg.type, hg.size, hg.rgba = mujoco.mjtGeom.mjGEOM_SPHERE, [0.04, 0, 0], [0.6, 0.15, 0.1, 1]
+    if harvest:                                  # (dark grey here: a red ball would look like a tomato)
+        hg.rgba = [0.18, 0.18, 0.22, 1]
     hg.contype = hg.conaffinity = 0
     hg.group = 5
     sky = spec.add_texture()
@@ -272,6 +403,11 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False):
     cam.mode = mujoco.mjtCamLight.mjCAMLIGHT_TARGETBODY
     cam.targetbody = "ws_centre"
     cam.fovy = 48
+    if harvest:                                  # videos: from the aisle beside the robot, facing the plant row
+        hc = wb.add_camera()
+        hc.name, hc.pos, hc.fovy = "aisle", [-0.15, -1.30, 0.90], 46
+        hc.mode = mujoco.mjtCamLight.mjCAMLIGHT_TARGETBODY
+        hc.targetbody = "ws_centre"
     site = spec.body("hand").add_site()
     site.name, site.pos = "tcp", [0, 0, 0.1034]
     return spec.compile()
@@ -371,6 +507,7 @@ class FlyPandaEnv(gym.Env):
             self._home = HOME_HARVEST
             self._null_gain = 0.05                       # (the tilted hand lets joints 1 and 3 drift apart)
             self.plant_mocap = m.body_mocapid[m.body("plant").id]
+            self.look_mocap = m.body_mocapid[m.body("plant_look").id]
             self.plant_geoms = {g for g in range(m.ngeom) if m.geom_bodyid[g] == m.body("plant").id}
             for g in self.plant_geoms:
                 self.spectrum[g] = PLANT
@@ -434,6 +571,7 @@ class FlyPandaEnv(gym.Env):
         self.cmd_smooth = cmd_smooth
         self.rng = np.random.default_rng(seed)
         self._renderer = None
+        self._cam = "aisle" if self.harvest else "overview"
         self._light, self._tile = 1.0, 0.1
 
     # ------------------------------------------------------------------ eye
@@ -767,6 +905,7 @@ class FlyPandaEnv(gym.Env):
             d.mocap_pos[self.bin_mocap] = [c[0], c[1], 0.0]
             tom = self.rng.uniform(TOM_LO, TOM_HI)
             d.mocap_pos[self.plant_mocap] = tom + np.array([BRANCH_LEN, 0, PED_LEN + TOM_R])
+            d.mocap_pos[self.look_mocap] = [tom[0] + BRANCH_LEN, tom[1], 0.0]
             d.eq_active[self.stalk] = 1
             self.attached = True
             target = tom[:2]
@@ -1002,7 +1141,7 @@ class FlyPandaEnv(gym.Env):
             self._renderer = mujoco.Renderer(self.model, 480, 640)
             self._vopt = mujoco.MjvOption()
             self._vopt.geomgroup[:] = [1, 1, 1, 0, 1, 1]
-        self._renderer.update_scene(self.data, camera="overview", scene_option=self._vopt)
+        self._renderer.update_scene(self.data, camera=self._cam, scene_option=self._vopt)
         frame = self._renderer.render().copy()
         eye = self.eye_view()
         frame[6:6 + eye.shape[0], 6:6 + eye.shape[1]] = eye
@@ -1032,7 +1171,7 @@ class FlyPandaEnv(gym.Env):
 
     def _project(self, p):
         """Pixel (x, y) of world point p in the overview camera image (640 x 480)."""
-        cam = self.model.camera("overview").id
+        cam = self.model.camera(self._cam).id
         pos, R = self.data.cam_xpos[cam], self.data.cam_xmat[cam].reshape(3, 3)
         v = R.T @ (np.asarray(p) - pos)                      # camera frame: x right, y up, -z forward
         f = 240 / np.tan(np.radians(self.model.cam_fovy[cam]) / 2)
