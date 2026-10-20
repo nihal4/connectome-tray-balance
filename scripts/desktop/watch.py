@@ -45,15 +45,18 @@ def last_eval(run):
     return out
 
 
-def make_video(run, step_k, py):
+def start_video(run, step_k, py):
+    """Record a progress video in the background (the dashboard keeps updating meanwhile).
+    Returns (process, output path, start time)."""
     os.makedirs(os.path.join(run, "progress"), exist_ok=True)
     out = os.path.join(run, "progress", f"step_{step_k:05d}k.mp4")
     code = ("import sys; sys.path.insert(0, %r)\n"
             "from scripts.desktop.watch import record_tests\n"
             "record_tests(%r, %r)\n") % (ROOT_REPO, run, out)
-    subprocess.run([py, "-c", code], cwd=ROOT_REPO, timeout=900, capture_output=True,
-                   env=dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl")))
-    return out if os.path.exists(out) else None
+    proc = subprocess.Popen([py, "-c", code], cwd=ROOT_REPO, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            env=dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl")),
+                            preexec_fn=lambda: os.nice(10))
+    return proc, out, time.time()
 
 
 TEST_SEEDS = (7, 8, 9)      # the same three test rooms / mazes in every video, so videos compare
@@ -320,9 +323,21 @@ def main():
     state_f = os.path.join(args.root, "watch_state.json")
     dash = Dashboard(args.root)
     last_video_check = 0.0
+    pending = None                          # (process, out, started, run, mark): one video at a time
     while True:
         runs = find_runs(args.root)
-        if time.time() - last_video_check >= 60:
+        if pending is not None:
+            proc, out, t0, run, mark = pending
+            if proc.poll() is None and time.time() - t0 > 1800:
+                proc.kill()                 # stuck: give up on this one, try again at the next mark
+            if proc.poll() is not None:
+                state = json.load(open(state_f)) if os.path.exists(state_f) else {}
+                state[run + "|tried"] = mark            # never retry the same mark over and over
+                if os.path.exists(out):
+                    state[run] = mark
+                json.dump(state, open(state_f, "w"))
+                pending = None
+        if pending is None and time.time() - last_video_check >= 60:
             last_video_check = time.time()
             state = json.load(open(state_f)) if os.path.exists(state_f) else {}
             for run in runs:
@@ -332,10 +347,9 @@ def main():
                 if not os.path.exists(os.path.join(args.root, "logs", os.path.basename(run) + ".log")):
                     continue                    # a copied brain (e.g. panda_sort-v12), not a training run
                 mark = ev["steps"] // args.every * args.every
-                if mark >= args.every and mark > state.get(run, 0):
-                    if make_video(run, mark // 1000, sys.executable):
-                        state[run] = mark
-                        json.dump(state, open(state_f, "w"))
+                if mark >= args.every and mark > max(state.get(run, 0), state.get(run + "|tried", 0)):
+                    pending = (*start_video(run, mark // 1000, sys.executable), run, mark)
+                    break
         dash.write(runs)
         if args.once:
             break

@@ -1142,6 +1142,8 @@ class FlyPandaEnv(gym.Env):
             self._vopt = mujoco.MjvOption()
             self._vopt.geomgroup[:] = [1, 1, 1, 0, 1, 1]
         self._renderer.update_scene(self.data, camera=self._cam, scene_option=self._vopt)
+        if self.harvest:                    # no shadows: hundreds of leaves made each frame ~5x slower to draw
+            self._renderer.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
         frame = self._renderer.render().copy()
         eye = self.eye_view()
         frame[6:6 + eye.shape[0], 6:6 + eye.shape[1]] = eye
