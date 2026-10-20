@@ -212,7 +212,8 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t7"><span class="n">7</span><span class="t">Panda arm: grasp and lift</span><span class="tag done">Done</span></a></li>
     <li><a href="#t8"><span class="n">8</span><span class="t">Panda arm: pick and place</span><span class="tag done">Done</span></a></li>
     <li><a href="#t9"><span class="n">9</span><span class="t">Panda arm: sort by colour</span><span class="tag done">Done</span></a></li>
-    <li><a href="#roadmap"><span class="n">10+</span><span class="t">Smell, ripe or rotten, fruit</span><span class="tag next">Planned</span></a></li>
+    <li><a href="#t10"><span class="n">10</span><span class="t">Ripe or rotten by smell</span><span class="tag done">Done</span></a></li>
+    <li><a href="#roadmap"><span class="n">11+</span><span class="t">Real fruit, conveyor, formalin</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
 
@@ -897,16 +898,69 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     </details>
   </section>
 
+  <!-- 10 ----------------------------------------------------------------- -->
+  <section class="task" id="t10">
+    <div class="task-head"><span class="num">10</span><h3>Ripe or rotten, by smell alone</h3><span class="tag done">Done</span></div>
+    <p><strong>The brain grows a sense.</strong> The trained 4,000-neuron brain was kept exactly, and the fly's
+      smell pathway from the FlyWire map was added to it: 106 olfactory receptor neurons (53 receptor types,
+      two antennae) and 370 neurons on their routes into the existing brain, mostly antennal-lobe projection
+      and local neurons. How each receptor type responds to each chemical comes from measured fly data
+      (the DoOR database). Two antennae sit beside the gripper.</p>
+    <p><strong>The task.</strong> One fruit, ripe or rotten, looking exactly the same. Ripe goes left, rotten
+      right. Ripe fruit smells of fruity esters; rotten fruit of fermentation (ethanol, acetic acid, ethyl
+      acetate, diacetyl), which mainly drives the fly's acid-sensing receptors. The videos show the true
+      fruit and what the antennae report; the brain only gets the smell.</p>
+    <ul class="facts"><li>Sorted: <b>98 %</b> of 300</li><li>Wrong bin: <b>0</b></li><li>Antennae silenced: <b>50 %</b> (chance)</li><li>3× smell noise: <b>100 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v15_panda_smell/showcase_best_brain.mp4" poster="results/v15_panda_smell/poster_showcase_best_brain.jpg" controls muted loop playsinline preload="none"
+               aria-label="Identical-looking fruit: the arm picks each up and puts ripe ones in the left bin and rotten ones in the right bin; a panel shows the fruit label and the live antenna responses"></video>
+        <figcaption><b>Sorting by smell</b>, new layouts, with the live antenna panel.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v15_panda_smell/progress_fixed_layouts.mp4" poster="results/v15_panda_smell/poster_progress_fixed_layouts.jpg" controls muted loop playsinline preload="none"
+               aria-label="The three fixed test layouts: ripe, rotten, rotten, each into its own bin"></video>
+        <figcaption><b>Fixed test layouts</b>: ripe, rotten, rotten, each into its own bin.</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v15_panda_smell/teacher_scripted.mp4" poster="results/v15_panda_smell/poster_teacher_scripted.jpg" controls muted loop playsinline preload="none"
+               aria-label="The scripted teacher doing the task, with the panel: the acid-sensor bar rises only for the rotten fruit"></video>
+        <figcaption><b>How to read the panel</b>: the acid-sensor bar rises only for rotten fruit.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v15_panda_smell/curves.png"><img src="results/v15_panda_smell/curves.png" alt="Learning curves: 82 to 100 percent during the teacher rounds, then 90 to 100 percent throughout practice" loading="lazy"></a>
+        <figcaption><b>Learning curves</b>: the grown brain kept its arm skills and learned to read smell fast.</figcaption>
+      </figure>
+    </div>
+    <details open>
+      <summary>Does it really decide by smell?</summary>
+      <table>
+        <thead><tr><th></th><th>Fruit</th><th>Solved</th><th>Ripe bin</th><th>Rotten bin</th><th>No bin</th></tr></thead>
+        <tbody>
+          <tr><td>With smell (300)</td><td>Ripe</td><td class="num yes">99 %</td><td class="num yes">166</td><td class="num">0</td><td class="num">1</td></tr>
+          <tr><td></td><td>Rotten</td><td class="num yes">97 %</td><td class="num">0</td><td class="num yes">129</td><td class="num">4</td></tr>
+          <tr><td>Antennae silenced (100)</td><td>Ripe</td><td class="num">97 %</td><td class="num">60</td><td class="num">0</td><td class="num">2</td></tr>
+          <tr><td></td><td>Rotten</td><td class="num no">0 %</td><td class="num no">37</td><td class="num">0</td><td class="num">1</td></tr>
+        </tbody>
+      </table>
+      <p>Without smell it still picks up and carries every fruit, but always to the ripe bin: "ripe" is its
+        default, and the smell of rot is what sends a fruit to the other bin. Nothing else in the scene gives
+        the answer away. Honest limits: the fruit recipes are simplified, some receptor responses were never
+        measured (counted as none), the odour plume is smooth rather than turbulent, and the mushroom body
+        (odour learning) is not included yet.</p>
+    </details>
+  </section>
+
   <!-- roadmap ------------------------------------------------------------- -->
   <h2 id="roadmap">What's next</h2>
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-        <li><b>Add smell</b><span class="why">wire in the fly's olfactory receptor neurons, antennal lobe, mushroom body and lateral horn from FlyWire; receptor responses to each chemical from measured fly data (DoOR, Hallem &amp; Carlson 2006); two antennae near the gripper</span></li>
-    <li><b>Ripe or rotten, by smell alone</b><span class="why">the same fruit, looking identical: ripe smells of fruity esters, rotten of fermentation (ethanol, acetic acid, ethyl acetate), a fly's natural strength</span></li>
-    <li><b>Real fruit</b><span class="why">real sizes that fit the gripper, colours from measured reflectance spectra as the fly's photoreceptors see them, rot patches; eyes only vs smell only vs both, and a conflict test (looks ripe, smells rotten)</span></li>
-    <li><b>Taste by touch</b><span class="why">flies taste with their feet; taste sensors on the gripper fingers</span></li>
+    <li><b>Real fruit</b><span class="why">real mango shape, size and weight; colours from measured reflectance spectra as fly photoreceptors see them, rot spots; suction or pushing instead of a two-finger grasp; eyes only vs smell only vs both, and a conflict test (looks ripe, smells rotten)</span></li>
+    <li><b>Conveyor sorting station</b><span class="why">a single lane of fruit moving past the arm (as on real graders), then a random crowd: remove only the bad fruit without disturbing the rest, with mixed smells; find the fastest belt speed it can handle</span></li>
+    <li><b>Mushroom body</b><span class="why">add the fly's odour-learning centre and test whether the brain can learn a new smell rule</span></li>
     <li><b>Formalin-treated or natural fruit</b><span class="why">reject adulterated fruit; there is no published data on how fly smell neurons respond to formaldehyde, so the fly response would be an assumption</span></li>
+    <li><b>Real arm</b><span class="why">test the vision part on a low-cost real arm with real fruit; smell stays in simulation (no sensor matches fly receptors)</span></li>
   </ol>
 
   <h2>What is biological here, and what is not</h2>
