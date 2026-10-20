@@ -296,6 +296,9 @@ class FlyPandaEnv(gym.Env):
             self.smell_recipes = t["recipes"]                      # (fruit, odorant)
             self.smell_drive = self.smell_recipes @ self.smell_resp.T   # (fruit, glomerulus) at full strength
             self.n_smell = 2 * self.smell_resp.shape[0]
+            glo = list(t["glomeruli"])                              # for the video panel only
+            self._smell_groups = ([glo.index(g) for g in ("DM2", "DM3", "VM5v", "VM2") if g in glo],
+                                  [glo.index(g) for g in ("DC4", "DP1l", "DP1m") if g in glo])
         self.smell_off, self.smell_noise_x = smell_off, smell_noise_x
         self._fruit = 0
         self.n_brain_obs = 2 * self.n_vis + 13 + self.n_smell   # what the fly brain sees
@@ -524,7 +527,8 @@ class FlyPandaEnv(gym.Env):
                                [float(self._grip_ctrl > 127)], [self._touch_obs()], self._last_action])
         out = [img, d_img, body]
         if self.n_smell:
-            out.append(self.smell_obs())
+            self._last_smell = self.smell_obs()
+            out.append(self._last_smell)
         if self.privileged:
             out.append(self.privileged_state())
         return np.concatenate(out).astype(np.float32)
@@ -800,7 +804,55 @@ class FlyPandaEnv(gym.Env):
         frame = self._renderer.render().copy()
         eye = self.eye_view()
         frame[6:6 + eye.shape[0], 6:6 + eye.shape[1]] = eye
+        if self.task == "smell":
+            frame = self._smell_overlay(frame)
         return frame
+
+    def _project(self, p):
+        """Pixel (x, y) of world point p in the overview camera image (640 x 480)."""
+        cam = self.model.camera("overview").id
+        pos, R = self.data.cam_xpos[cam], self.data.cam_xmat[cam].reshape(3, 3)
+        v = R.T @ (np.asarray(p) - pos)                      # camera frame: x right, y up, -z forward
+        f = 240 / np.tan(np.radians(self.model.cam_fovy[cam]) / 2)
+        return int(320 + f * v[0] / -v[2]), int(240 - f * v[1] / -v[2])
+
+    def _smell_overlay(self, frame):
+        """For people watching (the brain never sees this): which fruit it is, which bin is which, and
+        what the two antennae report right now."""
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.fromarray(frame)
+        dr = ImageDraw.Draw(img)
+        try:
+            font, small = ImageFont.load_default(15), ImageFont.load_default(11)
+        except TypeError:                                      # older Pillow
+            font = small = ImageFont.load_default()
+        for k, (name, col) in enumerate((("RIPE", (60, 170, 60)), ("ROTTEN", (150, 90, 40)))):
+            x, y = self._project(self.data.mocap_pos[self.bin_mocaps[k]] + np.array([0, 0, 0.03]))
+            dr.text((x - 22, y - 26), name, fill=col, font=small, stroke_width=2, stroke_fill=(255, 255, 255))
+        fruit = ("RIPE", "ROTTEN")[self._fruit]
+        dest = ("left", "right")[self._fruit]
+        x0, y0 = 8, 480 - 112
+        dr.rectangle((x0 - 4, y0 - 4, x0 + 318, 480 - 4), fill=(20, 22, 28))
+        dr.text((x0, y0), f"fruit: {fruit}  (-> {dest} bin)   looks identical", fill=(240, 240, 240), font=font)
+        s = getattr(self, "_last_smell", None)
+        G = self.smell_resp.shape[0]
+        dr.text((x0, y0 + 22), "what the antennae smell (53 receptor types)", fill=(170, 170, 170), font=small)
+        if s is not None:
+            for a in range(2):                                 # one row per antenna, one cell per receptor type
+                for g in range(G):
+                    v = float(np.clip(s[a * G + g], -1, 1))
+                    c = (int(40 + 200 * v), int(40 + 120 * v), 50) if v >= 0 else (60, 50, int(40 - 200 * v))
+                    dr.rectangle((x0 + 18 + g * 5.6, y0 + 38 + a * 9, x0 + 22 + g * 5.6, y0 + 45 + a * 9), fill=c)
+                dr.text((x0, y0 + 36 + a * 9), "LR"[a], fill=(170, 170, 170), font=small)
+            ester = float(np.mean([s[a * G + g] for a in range(2) for g in self._smell_groups[0]]))
+            acid = float(np.mean([s[a * G + g] for a in range(2) for g in self._smell_groups[1]]))
+            for k, (lab, v, col) in enumerate((("fruity-ester sensors", ester, (90, 200, 90)),
+                                              ("acid sensors (rot)", acid, (210, 140, 60)))):
+                y = y0 + 62 + k * 18
+                dr.text((x0, y), lab, fill=(200, 200, 200), font=small)
+                dr.rectangle((x0 + 140, y + 2, x0 + 300, y + 11), outline=(90, 90, 90))
+                dr.rectangle((x0 + 140, y + 2, x0 + 140 + int(160 * max(0.0, min(1.0, v))), y + 11), fill=col)
+        return np.asarray(img)
 
     def close(self):
         if self._renderer is not None:
