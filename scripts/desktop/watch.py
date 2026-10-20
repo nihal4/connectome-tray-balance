@@ -74,28 +74,35 @@ def record_tests(run, out, seeds=None, best=False):
     model = load(run, best=best)
     env_name = run_config(run)["env"]
     vn = make_norm(run, {}, best=best)
-    frames, results = [], []
+    results = []
+    tmp = out[:-4] + ".part.mp4"            # written frame by frame (little memory), renamed when complete
+    writer = None
     for seed in (seeds or TEST_SEEDS_BY_ENV.get(env_name, TEST_SEEDS)):
         env = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
+        if writer is None:
+            writer = imageio.get_writer(tmp, fps=env.metadata.get("render_fps", 50))
         obs, _ = env.reset(seed=seed)
-        info = {}
+        info, f = {}, None
         for _ in range(env.max_steps):
             a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
             obs, _, te, tr, info = env.step(a[0])
             f = env.render()
             if getattr(env, "vision", False):
                 f = add_eye_view(f, env.camera_frame())
-            frames.append(f)
+            writer.append_data(f)
             if te or tr:
                 break
         ok = bool(info.get("is_success", False))
         results.append(ok)
-        mark = frames[-1].copy()                   # last frame: green border = solved, red = not
+        mark = f.copy()                            # last frame: green border = solved, red = not
         mark[:10] = mark[-10:] = mark[:, :10] = mark[:, -10:] = (40, 180, 60) if ok else (200, 50, 50)
-        frames += [mark] * 25 + [mark // 4] * 8
+        for _ in range(25):
+            writer.append_data(mark)
+        for _ in range(8):
+            writer.append_data(mark // 4)
         env.close()
-    fps = env.metadata.get("render_fps", 50)
-    imageio.mimsave(out, frames, fps=fps)
+    writer.close()
+    os.replace(tmp, out)
     print(f"{out}: solved {sum(results)}/{len(results)}")
 
 
@@ -264,7 +271,9 @@ class Dashboard:
                 except Exception:
                     pass
         ev = self.cache[run][1]
-        vids = sorted(glob.glob(os.path.join(run, "progress", "*.mp4")), key=os.path.getmtime, reverse=True)
+        vids = sorted((v for v in glob.glob(os.path.join(run, "progress", "*.mp4"))
+                       if ".part." not in v and os.path.getsize(v) > 10_000),   # unfinished / broken: hidden
+                      key=os.path.getmtime, reverse=True)
         log = os.path.join(self.root, "logs", name + ".log")
         train = {"t": [], "r": [], "s": []}
         if os.path.exists(log):
