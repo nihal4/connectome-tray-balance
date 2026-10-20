@@ -15,6 +15,7 @@
     panda_place   pick and place: carry the yellow block into a red bin and let go
     panda_sort    sort by colour: a yellow, blue or red block into the bin of its colour
     panda_smell   ripe or rotten by smell alone: identical-looking fruit, ripe -> left bin, rotten -> right
+    panda_harvest greenhouse phase 1: pick a cherry tomato off a plant (hand sideways) into the basket
 """
 import numpy as np
 
@@ -36,6 +37,7 @@ ENVS["panda_lift"] = (FlyPandaEnv, {"task": "lift"})
 ENVS["panda_place"] = (FlyPandaEnv, {"task": "place"})
 ENVS["panda_sort"] = (FlyPandaEnv, {"task": "sort"})
 ENVS["panda_smell"] = (FlyPandaEnv, {"task": "smell"})
+ENVS["panda_harvest"] = (FlyPandaEnv, {"task": "harvest"})
 
 
 def build_env(name: str = "tray", seed: int | None = None, **overrides):

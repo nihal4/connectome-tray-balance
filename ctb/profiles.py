@@ -3,7 +3,7 @@
 # Kept here (not imported from ctb.envs) so scripts can parse arguments before
 # numpy/torch load, which lets the thread limits take effect.
 ENV_NAMES = ["tray", "maze_fixed3", "maze3", "maze3h", "maze4", "maze5",
-             "tray_vision", "maze_fixed3_vision", "maze3_vision", "maze3h_vision", "drone_reach", "panda_reach", "panda_lift", "panda_place", "panda_sort", "panda_smell"]
+             "tray_vision", "maze_fixed3_vision", "maze3_vision", "maze3h_vision", "drone_reach", "panda_reach", "panda_lift", "panda_place", "panda_sort", "panda_smell", "panda_harvest"]
 
 PROFILES = {
     # Mac M1 8 GB: small, slow, cool. Meant for checking that things learn, not final results.

@@ -321,6 +321,29 @@ action noise 0.3), never the wrong bin. Tests add `no_smell` (antennae silenced:
 bin choice comes from smell. `fly eval 50`: clean 100 %, smell noise x3 100 %, brightness x0.4/x2.5 98 %,
 uneven light 48 %.
 
+### Greenhouse, phase 1: pick a tomato off the plant (`panda_harvest`)
+
+First step of the greenhouse harvesting project (a fly-brain arm on a cart that drives a loop through
+tomato rows, picks ripe fruit into a basket and removes rotten ones). One cherry tomato (3.2 cm, 15 g) hangs
+from a tomato plant on its pedicel; plant somewhere along the far side, tomato at 13-25 cm height. Done the
+way greenhouse harvesting robots work: the hand comes at the fruit from the front and above (fingers tilted
+30 deg from straight down towards the plant; a horizontal hand is out of the Panda's comfortable reach this
+low and close), closes on the tomato and pulls it off: the stalk snaps at its joint when the held tomato is
+pulled or bent with more than 1.5 N (pushing it up into the stalk does not snap it). Then it carries the
+tomato to a basket beside the robot (on the cart, later) and drops it in. Touching the plant costs reward
+(a broken stem costs a grower weeks of fruit). The tomato smells ripe (same smell inputs as v15), so the
+grown brain carries over and rotten fruit can be added in phase 3.
+
+Physics notes: the stalk is a soft ball-joint constraint between the tomato's top and the pedicel tip,
+switched off when it snaps; tomato skin has torsional and rolling friction and a firm contact (a light round
+fruit otherwise creeps out of the fingers); the gripper squeezes x4 harder than the model's default (~6 N,
+a real Panda manages 70 N); elliptic friction cones. Approximate photoreceptor colours: flies see little
+beyond ~600 nm, so a red tomato is dark to them and stands out from the plant by its lack of green.
+
+Teacher (`harvest_teacher`, true positions, training targets only): line up behind the tomato on the
+approach line, go in, close, pull back and down until it snaps, carry gently, drop into the basket:
+99 % of 100 layouts, median 76 steps (3 s) of the 200 allowed.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
