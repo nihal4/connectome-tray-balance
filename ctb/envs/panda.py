@@ -29,6 +29,10 @@ Tasks (task=...):
             random, on the near half of the table; three identical red bins in a row along the far
             side (left, centre, right, a little jitter). Yellow goes left, blue centre, orange right.
             No decoys. Success as in place, but only in the block's own bin (150 steps).
+    smell   ripe or rotten, by smell alone: ONE fruit (the yellow block) per episode, ripe or rotten at
+            random, looking exactly the same; two identical bins, ripe -> left, rotten -> right. The
+            brain smells with two antennae beside the gripper (fly olfactory receptor responses from DoOR,
+            data/smell_door.npz). Success as in sort (150 steps).
 
 Needs the Panda model: python scripts/download_panda.py
 """
@@ -93,13 +97,22 @@ REST_Z = BIN_FLOOR + BLOCK_H # block centre height when resting in the bin
 def n_priv(task):
     """Size of privileged_state() for a task (place adds the bin position and block-to-bin;
     sort also the block's colour, one-hot)."""
-    return N_PRIV + {"place": 6, "sort": 9}.get(task, 0)
+    return N_PRIV + {"place": 6, "sort": 9, "smell": 8}.get(task, 0)
 
 
 SORT_BINS = np.array([[0.60, 0.17], [0.60, 0.0], [0.60, -0.17]])   # sort: left, centre, right bin
 SORT_JITTER = 0.015          # sort: each bin moves up to this much per episode
 SORT_BLOCK_LO = np.array([0.35, -0.22])   # sort: blocks appear on the near half
 SORT_BLOCK_HI = np.array([0.47, 0.22])
+# smell: the fly's olfactory receptor responses to each fruit (one value per glomerulus type), two
+# antennae beside the gripper. Concentration falls off with distance (Gaussian, SMELL_SIGMA), with
+# turbulence-like flicker (log-normal per step) and a faint background; receptor output saturates.
+SMELL_TABLE = os.path.join(ROOT, "data", "smell_door.npz")
+SMELL_SIGMA = 0.10           # m
+SMELL_ANTENNAE = np.array([[0.0, 0.04, 0.06], [0.0, -0.04, 0.06]])   # left, right: beside / above the TCP
+SMELL_FLICKER = 0.25         # log-normal sd of the concentration, per step and antenna
+SMELL_NOISE = 0.03           # receptor noise
+SMELL_BINS = SORT_BINS[[0, 2]]   # ripe -> left bin, rotten -> right bin
 
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
@@ -205,13 +218,13 @@ class FlyPandaEnv(gym.Env):
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
-                 light_gradient=0.0, light_tint=None, **_):
-        assert task in ("reach", "lift", "place", "sort"), task
+                 light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, **_):
+        assert task in ("reach", "lift", "place", "sort", "smell"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
-        if task in ("place", "sort") and max_steps == 60:
+        if task in ("place", "sort", "smell") and max_steps == 60:
             max_steps = 150                      # + carry, lower and let go
-        if task == "sort":
+        if task in ("sort", "smell"):
             max_distractors = 0                  # the other two bins are the clutter
         if not os.path.exists(PANDA_XML):
             raise FileNotFoundError(f"{PANDA_XML} not found. Run: python scripts/download_panda.py")
@@ -220,7 +233,8 @@ class FlyPandaEnv(gym.Env):
         self.max_dist, self.target_visible = max_distractors, target_visible
         self.n_decoys = 2
         bins = [("bin", [0.75, 0.12, 0.1, 1])] if task == "place" else \
-            [(f"bin_{n}", [0.75, 0.12, 0.1, 1]) for n in ("left", "centre", "right")] if task == "sort" else []
+            [(f"bin_{n}", [0.75, 0.12, 0.1, 1]) for n in ("left", "centre", "right")] if task == "sort" else \
+            [(f"bin_{n}", [0.75, 0.12, 0.1, 1]) for n in ("ripe", "rotten")] if task == "smell" else []
         self.model = _build_model(self.n_decoys, n_facets, bins=bins)
         self.data = mujoco.MjData(self.model)
         self._ik = mujoco.MjData(self.model)
@@ -274,7 +288,17 @@ class FlyPandaEnv(gym.Env):
         self.n_priv = n_priv(task)
 
         self.n_vis = 2 * n_facets * N_CH
-        self.n_brain_obs = 2 * self.n_vis + 13              # what the fly brain sees
+        # smell (task smell): per antenna and glomerulus type, the receptor response (left antenna first)
+        self.n_smell = 0
+        if task == "smell":
+            t = np.load(SMELL_TABLE)
+            self.smell_resp = t["response"]                        # (glomerulus, odorant)
+            self.smell_recipes = t["recipes"]                      # (fruit, odorant)
+            self.smell_drive = self.smell_recipes @ self.smell_resp.T   # (fruit, glomerulus) at full strength
+            self.n_smell = 2 * self.smell_resp.shape[0]
+        self.smell_off, self.smell_noise_x = smell_off, smell_noise_x
+        self._fruit = 0
+        self.n_brain_obs = 2 * self.n_vis + 13 + self.n_smell   # what the fly brain sees
         self.observation_space = spaces.Box(-np.inf, np.inf, (self.n_brain_obs + (self.n_priv if privileged else 0),),
                                             np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (4,), np.float32)
@@ -404,7 +428,7 @@ class FlyPandaEnv(gym.Env):
 
     def teacher_action(self):
         """The imitation teacher's move for the current situation (called across processes)."""
-        return place_teacher(self) if self.task in ("place", "sort") else lift_teacher(self)
+        return place_teacher(self) if self.task in ("place", "sort", "smell") else lift_teacher(self)
 
     def bin_pos(self):
         """Centre of the bin floor (on the table)."""
@@ -499,9 +523,24 @@ class FlyPandaEnv(gym.Env):
         body = np.concatenate([(p - 0.5 * (WS_LO + WS_HI)) * 4, v * 2, [self.gripper_width() * 25 - 1],
                                [float(self._grip_ctrl > 127)], [self._touch_obs()], self._last_action])
         out = [img, d_img, body]
+        if self.n_smell:
+            out.append(self.smell_obs())
         if self.privileged:
             out.append(self.privileged_state())
         return np.concatenate(out).astype(np.float32)
+
+    def smell_obs(self):
+        """Two antennae x glomerulus types: the fly's receptor responses to the fruit's smell here."""
+        if self.smell_off:
+            return np.zeros(self.n_smell)
+        tcp, blk = self.tcp_pos(), self.block_pos()
+        out = []
+        for a in SMELL_ANTENNAE:
+            d2 = float(np.sum((tcp + a - blk) ** 2))
+            conc = np.exp(-d2 / (2 * SMELL_SIGMA ** 2)) * np.exp(self.rng.normal(0, SMELL_FLICKER)) + 0.02
+            drive = conc * self.smell_drive[self._fruit]
+            out.append(np.tanh(2.0 * drive) + self.rng.normal(0, SMELL_NOISE * self.smell_noise_x, drive.shape))
+        return np.concatenate(out)
 
     def privileged_state(self):
         """True state for the training-only critic (never given to the fly brain)."""
@@ -511,9 +550,11 @@ class FlyPandaEnv(gym.Env):
         out = [tcp, blk, blk - tcp, goal - blk,
                [float(self.is_grasped()), self.lift_height() if hasattr(self, "_block_z0") else 0.0,
                 self.gripper_width(), float(l), float(r)]]
-        if self.task in ("place", "sort"):
+        if self.task in ("place", "sort", "smell"):
             c = self.bin_pos()
             out += [c, blk - (c + np.array([0, 0, REST_Z]))]
+        if self.task == "smell":
+            out += [np.eye(2)[self._fruit]]
         if self.task == "sort":
             out += [np.eye(3)[self._colour]]
         return np.concatenate(out)
@@ -566,6 +607,14 @@ class FlyPandaEnv(gym.Env):
             for mc, c in zip(self.bin_mocaps, cs):
                 d.mocap_pos[mc] = [c[0], c[1], 0.0]
             placed += cs
+        if self.task == "smell":                        # ripe or rotten; two bins; the fruit on the near half
+            self._fruit = int(self.rng.integers(2))
+            self.bin_mocap = self.bin_mocaps[self._fruit]
+            cs = [c + self.rng.uniform(-SORT_JITTER, SORT_JITTER, 2) for c in SMELL_BINS]
+            target = self.rng.uniform(SORT_BLOCK_LO, SORT_BLOCK_HI)
+            for mc, c in zip(self.bin_mocaps, cs):
+                d.mocap_pos[mc] = [c[0], c[1], 0.0]
+            placed += cs
         if self.task == "place":                        # the bin: somewhere else on the table
             for _ in range(200):
                 binc = self.rng.uniform(BIN_LO, BIN_HI)
@@ -590,7 +639,7 @@ class FlyPandaEnv(gym.Env):
         if self.random_start > 0 and self.rng.random() < self.random_start:
             start = np.array([*target, 0.0]) + self.rng.uniform([-0.08, -0.08, 0.05], [0.08, 0.08, 0.12])
         mid = held = False
-        if self.task in ("lift", "place", "sort") and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
+        if self.task in ("lift", "place", "sort", "smell") and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
             mid, held = True, self.rng.random() < 0.5
             start = np.array([target[0], target[1], BLOCK_H]) + self.rng.uniform([-0.008, -0.008, -0.004],
                                                                                    [0.008, 0.008, 0.006])
@@ -615,7 +664,7 @@ class FlyPandaEnv(gym.Env):
             mujoco.mj_forward(m, d)
         self._block_z0 = float(self.block_pos()[2])
         self._goal = self.block_pos() + np.array([0, 0, LIFT_GOAL])     # straight above the start
-        if self.task in ("place", "sort"):                               # where the block should end up
+        if self.task in ("place", "sort", "smell"):                      # where the block should end up
             self._goal = self.bin_pos() + np.array([0, 0, REST_Z])
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
@@ -629,7 +678,7 @@ class FlyPandaEnv(gym.Env):
     def _reward(self):
         if self.task == "lift":
             return self._reward_lift()
-        if self.task in ("place", "sort"):
+        if self.task in ("place", "sort", "smell"):
             return self._reward_place()
         d_t = float(np.linalg.norm(self.tcp_pos() - self.reach_point()))
         inside = d_t < SOLVE_DIST
@@ -711,11 +760,13 @@ class FlyPandaEnv(gym.Env):
         r, success, d_t = self._reward()
         truncated = self._steps >= self.max_steps
         info = {"is_success": success, "dist": d_t}
-        if self.task in ("lift", "place", "sort"):
+        if self.task in ("lift", "place", "sort", "smell"):
             info.update(grasped=self.is_grasped(), lift=self.lift_height(),
                         goal_dist=float(np.linalg.norm(self.block_pos() - self._goal)))
-        if self.task in ("place", "sort"):
+        if self.task in ("place", "sort", "smell"):
             info.update(in_bin=self.in_bin())
+        if self.task == "smell":
+            info.update(fruit=("ripe", "rotten")[self._fruit], wrong_bin=self.in_wrong_bin())
         if self.task == "sort":
             info.update(colour=SORT_COLOURS[self._colour][0], wrong_bin=self.in_wrong_bin())
         return self._get_obs(), float(r), False, truncated, info
@@ -759,7 +810,7 @@ class FlyPandaEnv(gym.Env):
 
 def panda_controller(env, obs=None):
     """Hand-written solution using the TRUE block position (the brain never gets it)."""
-    if env.task in ("place", "sort"):
+    if env.task in ("place", "sort", "smell"):
         return place_teacher(env)
     if env.task == "lift":
         return _lift_controller(env)

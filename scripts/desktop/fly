@@ -12,6 +12,7 @@ case "${1:-help}" in
     ENV="$2"; STEPS="${3:-2000000}"
     case "$ENV" in
       drone*)    BRAIN=data/flybrain_eye160_N4000.npz; EXTRA="${4:---random_start 0.5}"; NAME="$ENV-connectome-real-s0" ;;
+      panda_smell) BRAIN=data/flybrain_eye160_smell_N4476.npz; EXTRA="${4:---random_start 0.3}"; NAME="$ENV-connectome-real-s0" ;;
       panda*)    BRAIN=data/flybrain_eye160_N4000.npz; EXTRA="${4:---random_start 0.3}"; NAME="$ENV-connectome-real-s0" ;;
       *_vision)  BRAIN=data/flybrain_cam16_N2500.npz;  EXTRA="${4:---action_rate 0.1 --random_start 0.5}"; NAME="$ENV-connectome-real-s0-slow" ;;
       *)         BRAIN=data/subset_flywire783_N1000.npz; EXTRA="${4:-}"; NAME="$ENV-connectome-real-s0" ;;

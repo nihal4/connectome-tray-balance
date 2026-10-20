@@ -67,6 +67,8 @@ TESTS_PANDA = {
     "uneven_light": {"light_gradient": 0.69},            # one side of the view x2, the other x0.5
     "tinted_light": {"light_tint": (0.7, 1.4, 1.0)},     # a colour cast: less broadband, more UV
     "target_hidden": {"target_visible": False},
+    "no_smell": {"smell_off": True},                     # panda_smell: antennae silenced (chance = 50 %)
+    "smell_noise_x3": {"smell_noise_x": 3.0},
 }
 
 

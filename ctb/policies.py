@@ -143,7 +143,16 @@ class ConnectomeCore(nn.Module):
             if self.vis_dyn:
                 self.pix_gain_change = nn.Parameter(torch.ones(self.n_vis))
             self.n_eye = n_eye
-            self.w_body = nn.Linear(obs_dim - n_eye, len(self.asc_idx))
+            # smell (grown brain, grow_smell_brain.py): the LAST n_smell brain inputs are the two
+            # antennae's receptor responses, one per olfactory receptor neuron (gain + bias each, like
+            # the photoreceptors); the body sense sits between the eyes and the smell inputs
+            self.n_smell = 0
+            if "smell_idx" in d.files:
+                self.register_buffer("smell_idx", torch.as_tensor(d["smell_idx"], dtype=torch.long))
+                self.n_smell = len(self.smell_idx)
+                self.smell_gain = nn.Parameter(torch.ones(self.n_smell))
+                self.smell_bias = nn.Parameter(torch.zeros(self.n_smell))
+            self.w_body = nn.Linear(obs_dim - n_eye - self.n_smell, len(self.asc_idx))
         else:
             self.w_in = nn.Linear(obs_dim, len(self.input_idx))
 
@@ -174,7 +183,10 @@ class ConnectomeCore(nn.Module):
             if self.vis_dyn:
                 x = x + obs[:, self.n_vis:self.n_eye] * self.pix_gain_change
             u[:, self.vis_idx] = x
-            u[:, self.asc_idx] = self.w_body(obs[:, self.n_eye:])
+            end = obs.shape[1] - self.n_smell
+            u[:, self.asc_idx] = self.w_body(obs[:, self.n_eye:end])
+            if self.n_smell:
+                u[:, self.smell_idx] = obs[:, end:] * self.smell_gain + self.smell_bias
         else:
             u[:, self.input_idx] = self.w_in(obs)
         h = obs.new_zeros(b, self.n)

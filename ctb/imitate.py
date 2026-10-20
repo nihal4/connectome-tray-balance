@@ -68,6 +68,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     n_envs = venv.num_envs
     ext = model.policy.mlp_extractor
     nb = ext.n_brain
+    n_smell = getattr(ext.core, "n_smell", 0)
     rng = np.random.default_rng(seed)
     ckpt = os.path.join(out, "imitate_state.json")
     ev_file = os.path.join(out, "evaluations.npz")
@@ -84,9 +85,12 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         # brain inputs: keep the parent's normalisation (the brain was trained with it)
         with open(os.path.join(parent_dir, "vecnormalize.pkl"), "rb") as f:
             parent = pickle.load(f)
-        m = len(parent.obs_rms.mean)              # parent may itself have had privileged inputs after the brain's
-        assert m >= nb, f"parent brain has {m} inputs, this one {nb}"
-        norm.obs_rms.mean[:nb], norm.obs_rms.var[:nb] = parent.obs_rms.mean[:nb], parent.obs_rms.var[:nb]
+        # eyes + body sense: the parent's statistics (the parent may have had privileged inputs after
+        # them; a grown brain has new smell inputs after them, measured in round 1 like the critic's)
+        kb = nb - n_smell
+        assert len(parent.obs_rms.mean) >= kb, f"parent brain has {len(parent.obs_rms.mean)} inputs, this one {kb}+{n_smell}"
+        norm.obs_rms.mean[:kb], norm.obs_rms.var[:kb] = parent.obs_rms.mean[:kb], parent.obs_rms.var[:kb]
+        norm.obs_rms.mean[kb:], norm.obs_rms.var[kb:] = 0.0, 1.0
         norm.obs_rms.count = parent.obs_rms.count
         norm.ret_rms = parent.ret_rms
     norm.training = False                          # frozen while imitating (the student's inputs stay fixed)
@@ -132,7 +136,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             teacher = np.array(venv.env_method("teacher_action"), dtype=np.float32)
             nobs = norm.normalize_obs(obs)
             if k == 0:
-                priv_raw.append(obs[:, nb:].copy())
+                priv_raw.append(obs[:, nb - n_smell:].copy())
             with torch.no_grad():
                 student = _actor_mean(model.policy, torch.as_tensor(nobs[:, :nb], dtype=torch.float32)).clamp(-1, 1).numpy()
             use_teacher = rng.random(n_envs) < beta
@@ -145,9 +149,9 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             cur += r
             for i in np.where(done)[0]:
                 ep_r.append(cur[i]); ep_s.append(float(info[i].get("is_success", False))); cur[i] = 0
-        if k == 0:                                 # critic inputs: statistics of the true state
+        if k == 0:                                 # critic inputs (and new smell inputs): statistics measured now
             pr = np.concatenate(priv_raw)
-            norm.obs_rms.mean[nb:], norm.obs_rms.var[nb:] = pr.mean(0), pr.var(0) + 1e-6
+            norm.obs_rms.mean[nb - n_smell:], norm.obs_rms.var[nb - n_smell:] = pr.mean(0), pr.var(0) + 1e-6
         state["steps"] += n_steps
         X = np.concatenate([X] + xs)
         Y = np.concatenate([Y] + ys)

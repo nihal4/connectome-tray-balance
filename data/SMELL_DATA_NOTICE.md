@@ -1,0 +1,1 @@
+smell_door.npz is derived from DoOR.data (https://github.com/ropensci/DoOR.data), Muench D, Galizia CG (2016) DoOR 2.0 - Comprehensive Mapping of Drosophila melanogaster Odorant Responses. Sci Rep 6:21841. Licensed CC BY-SA 4.0; the derived table is shared under the same licence. Built by scripts/build_smell_table.py.

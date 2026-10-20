@@ -288,6 +288,34 @@ only, so every other brightness is a test it never practised.
 x0.4-2.5: 100 % at every level (v12: 0-90 %, v13: 0-92 %); tinted light 98 % (v12 15 %, v13 30 %); uneven light
 x2/x0.5 48-60 %, x1.4/x0.7 88 % (v12 and v13: 3 % at x2/x0.5); normal light 98 % of 300 layouts, no wrong bin.
 
+### Smell: ripe or rotten (`panda_smell`)
+
+**The brain grows a sense.** `scripts/grow_smell_brain.py` keeps the trained 4,000-neuron brain exactly
+(same neurons and synapses in the same order, so learned strengths carry over one to one) and appends the
+fly's smell pathway from FlyWire: one olfactory receptor neuron per glomerulus type and antenna (53 types x
+2 = 106, `ORN_<glomerulus>`), and the strongest pathways from them into the existing brain (164 projection
+neurons, 128 antennal-lobe local neurons, lateral-horn and other neurons): 4,476 neurons, 65,568 synapses.
+Every command neuron is 3 synapses (median) from a smell receptor. (The mushroom body, the fly's odour
+learning centre, is not on these shortest routes and is not included yet.)
+
+**Smell from measured fly data.** `scripts/build_smell_table.py` takes, for the receptor of each glomerulus,
+its response to each chemical from DoOR (Database of Odor Responses; Muench & Galizia 2016; CC BY-SA 4.0;
+consensus response minus spontaneous rate; 49 of 53 glomeruli have data, 279 of 424 pairs measured, the rest
+count as 0). Fruit recipes (simplified): ripe = fruity esters (isopentyl acetate, ethyl butyrate, hexyl
+acetate, ethyl hexanoate) + a little ethanol; rotten = fermentation (ethanol, acetic acid, ethyl acetate,
+diacetyl) + a little ester. Ripe drives mostly DM2, DM3, VM5v, VM2; rotten mostly the acid sensors DC4,
+DP1l, DP1m.
+
+**The sense.** Two antennae beside the gripper. Concentration = Gaussian fall-off with distance (sigma 10 cm)
+x turbulence flicker (log-normal, sd 0.25 per step) + faint background; receptor output tanh(2 x drive) +
+noise. From the start position the fruit is too far to smell (signal at noise level); close up, the
+receptor pattern differs clearly between ripe and rotten.
+
+**The task.** One fruit (the yellow block) per episode, ripe or rotten at random, looking exactly the same.
+Two identical bins: ripe -> left, rotten -> right. Only smell can tell them apart. Teacher: 100 % (92 % with
+action noise 0.3), never the wrong bin. Tests add `no_smell` (antennae silenced: chance is 50 %) and
+`smell_noise_x3`.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;

@@ -204,13 +204,25 @@ def main():
         from ctb.envs.panda import n_priv as _n_priv
         N_PRIV = _n_priv(args.env.split("_", 1)[1])   # privileged inputs of this task (critic only)
         from ctb.policies import load_ppo
-        shutil.copy(os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
+        # the parent's brain, or a GROWN version of it (grow_smell_brain.py: same neurons and synapses first,
+        # new ones appended), given with --subset
+        grown = False
+        if os.path.exists(args.subset):
+            with np.load(args.subset) as _d:
+                grown = "grown_from" in _d.files
+        shutil.copy(args.subset if grown else os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
+        if grown:
+            print(f"[train] brain grown from the parent's: {args.subset}")
         parent = json.load(open(os.path.join(init, "config.json")))
+        if grown:
+            parent["subset"] = os.path.abspath(args.subset)
         # brain body-sense layout (last 13 of the brain inputs): hand position (3), velocity (3), finger
         # opening, gripper-closed flag, touch, previous command (4). Hide the flag and the previous
         # command from the student: copying them is the "copycat" shortcut of imitation learning.
         n_brain = venv.observation_space.shape[0] - N_PRIV
-        mask = [n_brain - 13 + 7] + list(range(n_brain - 4, n_brain))
+        n_smell = int(venv.get_attr("n_smell")[0])                 # smell inputs come after the body sense
+        body_end = n_brain - n_smell
+        mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
         parent.update(mask_inputs=mask)
         parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
                       eye_adapt=bool(args.eye_adapt),
@@ -234,6 +246,15 @@ def main():
                 and not k.startswith(("mlp_extractor.critic", "value_net"))]
         for k in same:
             dst[k] = src[k]
+        # grown brain: the old synapses / neurons come first, so their learned values carry over one to one
+        grew = []
+        for k in ("mlp_extractor.core.theta", "mlp_extractor.core.bias"):
+            if k in src and k in dst and src[k].shape != dst[k].shape and src[k].shape[0] < dst[k].shape[0]:
+                dst[k][:src[k].shape[0]] = src[k]
+                grew.append(f"{k.split('.')[-1]} {src[k].shape[0]}/{dst[k].shape[0]}")
+        if grew:
+            print("[train] grown brain: learned values copied for " + ", ".join(grew))
+            same += grew
         model.policy.load_state_dict(dst)
         venv = norm
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)

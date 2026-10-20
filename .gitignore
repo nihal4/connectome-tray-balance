@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 data/raw/
 data/*.npz
+!data/smell_door.npz
+!data/flybrain_eye160_smell_N4476.npz
 runs/
 *.mp4
 !results/**/*.mp4
