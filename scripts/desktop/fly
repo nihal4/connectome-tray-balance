@@ -18,6 +18,7 @@ case "${1:-help}" in
       *)         BRAIN=data/subset_flywire783_N1000.npz; EXTRA="${4:-}"; NAME="$ENV-connectome-real-s0" ;;
     esac
     case "$EXTRA" in
+      *--wrist_cam*) NAME="$NAME-cam" ;;                           # wrist depth camera: its own run
       *--eye_adapt*) NAME="$NAME-adapt" ;;                         # light-adapting eyes: its own run
       *--light_log*) NAME="$NAME-light" ;;                         # wide-light retraining: its own run
       *--imitate*)   NAME="$NAME-imitate" ;;                       # teacher -> student: its own run

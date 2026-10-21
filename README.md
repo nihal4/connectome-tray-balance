@@ -383,6 +383,18 @@ model hid an object whenever its single test ray (eye to centre) hit anything fi
 always crosses the tomato's own stalk. Thin plant parts (stem, branch, stalks) no longer hide tomatoes in
 phase 2: wrist eye 92 % at 8 cm (all senses 87 %), smell alone 65-67 %. (Phase 1 keeps the old rule, so its
 results stay reproducible; there the tomato was found from the plant and smell anyway.)
+Third try with the fly eye: 34 % at best while copying the teacher, again falling as the student drove.
+
+**Wrist depth camera (`--wrist_cam rgbd`).** Harvesting robots carry a close-range depth camera on the hand
+(e.g. Intel RealSense D405: 7-50 cm, global shutter; one study used it on a Franka Panda to grasp tomato
+trusses) plus a wider camera for finding plants. Here the wrist eye is replaced by such a camera: 16 x 10
+pixels of (red, nearness, green) over a 50 x 73 deg view (5 deg per pixel; the fly eye: 11 deg per facet),
+rendered by MuJoCo, binned from 64 x 40, with auto exposure, colour noise, 1 % depth noise, 3 % missing depth
+pixels and no depth closer than 7 cm. It goes into the SAME 480 wrist-eye input neurons of the fly brain,
+each pixel to the facet pointing the same way (one-to-one assignment by layout), so the brain and its visual
+pathways stay as they are; the head keeps the fly eye. Ripeness read-out from the wrist (8 and 12 cm in
+front of the truss, `scripts/info_pickripe.py 160 400 rgbd`): 100 % (fly eye: 85-92 %, head eye 53 %,
+smell 66 %). The imitation step measures the new inputs' statistics on a short teacher-driven warm-up.
 
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 

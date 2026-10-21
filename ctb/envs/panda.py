@@ -76,6 +76,14 @@ BLOCK_H = 0.025              # half size of the 5 cm blocks (the gripper opens t
 HEAD_POS = np.array([0.50, -0.55, 0.45])
 HEAD_LOOK_AT = np.array([0.50, 0.0, 0.03])
 WRIST_EYE_POS = np.array([0.06, 0.0, 0.07])    # in the hand frame, beside the fingers
+# wrist_cam="rgbd": the wrist eye is replaced by a close-range depth camera like the Intel RealSense D405 that
+# harvesting robots carry on the hand (ideal range 7-50 cm, about +-2 % at 50 cm, global shutter). Its image,
+# 16 x 10 pixels of (red, distance, green), goes into the SAME 480 wrist-eye input neurons of the fly brain:
+# each pixel to the facet that points the same way, so the visual pathways keep their layout.
+CAM_W, CAM_H, CAM_FOVY, CAM_OVERSAMPLE = 16, 10, 50.0, 4    # 50 x 73 deg view (D405: 58 x 87), 5 deg per pixel
+                                                            # (the fly eye: ~11 deg per facet)
+CAM_MIN, CAM_MAX = 0.07, 0.50                               # m: closer = no depth (hole), further = "far"
+CAM_DEPTH_NOISE, CAM_HOLES = 0.01, 0.03                     # depth noise (x distance), share of missing pixels
 HOME = np.array([0, 0, 0, -1.57079, 0, 1.57079, -0.7853])
 
 # task (reach): success = gripper within 3 cm of the target for 5 steps in a row (0.2 s).
@@ -428,6 +436,13 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False, n_tom=1):
     head.quat = _turn(c_right, look / np.linalg.norm(look))
     ws = spec.body("hand").add_site()
     ws.name, ws.pos = "wrist_eye", WRIST_EYE_POS
+    wc = spec.body("hand").add_camera()          # (used only with wrist_cam="rgbd") beside the fingers, aimed at a
+    look = np.array([0, 0, 0.13]) - WRIST_EYE_POS    # point 3 cm beyond the fingertips: sees between the fingers too
+    zc = -look / np.linalg.norm(look)
+    xc = np.array([0, 1.0, 0])
+    qc = np.zeros(4)
+    mujoco.mju_mat2Quat(qc, np.stack([xc, np.cross(zc, xc), zc], 1).ravel())
+    wc.name, wc.pos, wc.quat, wc.fovy = "wrist_cam", WRIST_EYE_POS, qc, CAM_FOVY
     ws.quat = _turn(c_left, np.array([0, 0, 1.0]))                     # field centred along the fingers
     hg = head.add_geom()
     hg.type, hg.size, hg.rgba = mujoco.mjtGeom.mjGEOM_SPHERE, [0.04, 0, 0], [0.6, 0.15, 0.1, 1]
@@ -464,7 +479,8 @@ class FlyPandaEnv(gym.Env):
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
-                 light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None, **_):
+                 light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
+                 wrist_cam=None, **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -594,6 +610,18 @@ class FlyPandaEnv(gym.Env):
         self.smell_off, self.smell_noise_x = smell_off, smell_noise_x
         # tests only (pickripe): every tomato looks ripe to the eyes ("all_ripe"), so only smell can tell
         self.tomato_look = tomato_look
+        assert wrist_cam in (None, "rgbd"), wrist_cam
+        self.wrist_cam = wrist_cam
+        self._cam_r, self._cam_gain, self._cam_last = None, None, None
+        if wrist_cam:                           # which wrist-eye facet each camera pixel feeds (one to one, by layout)
+            from scipy.optimize import linear_sum_assignment
+            F = self.n_facets
+            assert F == CAM_W * CAM_H, "wrist_cam needs 160 facets per eye (16 x 10 pixels)"
+            az, el = self.facet_az[F:], self.facet_el[F:]
+            fa = np.stack([(az - az.mean()) / np.ptp(az), (el - el.mean()) / np.ptp(el)], 1)
+            cc, rr = np.meshgrid(np.arange(CAM_W), np.arange(CAM_H))
+            px = np.stack([(cc.ravel() / (CAM_W - 1) - 0.5), (0.5 - rr.ravel() / (CAM_H - 1))], 1)
+            _, self._cam_pix = linear_sum_assignment(((fa[:, None, :] - px[None, :, :]) ** 2).sum(-1))
         self._fruit = 0
         self.n_brain_obs = 2 * self.n_vis + 13 + self.n_smell   # what the fly brain sees
         self.observation_space = spaces.Box(-np.inf, np.inf, (self.n_brain_obs + (self.n_priv if privileged else 0),),
@@ -652,6 +680,8 @@ class FlyPandaEnv(gym.Env):
         img = np.zeros((n_f, N_CH))
         world_center = np.zeros((n_f, 3))
         for e, (origin, R, skip) in enumerate(self._eyes()):
+            if e == 1 and self.wrist_cam:            # (filled in by the camera below)
+                continue
             idx = self._eye_rays[e]
             world = self.rays[idx] @ R.T
             n = len(idx)
@@ -700,7 +730,10 @@ class FlyPandaEnv(gym.Env):
         if self.light_tint is not None:
             img = img * np.asarray(self.light_tint)[None, :]
         if not self.eye_adapt:
-            return np.clip(img * self._light, 0, 1.5)
+            out = np.clip(img * self._light, 0, 1.5)
+            if self.wrist_cam:
+                out[self.n_facets:] = self.camera_image(update)
+            return out
         lit = img * self._light
         if update and self.eye_noise > 0:              # photon (shot) noise, before adaptation
             lit = np.maximum(lit + self.rng.normal(0, 1, lit.shape) * self.eye_noise * np.sqrt(np.maximum(lit, 0) / ADAPT_REF), 0)
@@ -711,7 +744,48 @@ class FlyPandaEnv(gym.Env):
             self._adapt = state
         gain = ADAPT_REF / (state + 1e-3)                                # per eye and receptor type
         out = np.concatenate([lit[:F] * gain[0], lit[F:] * gain[1]])
-        return np.clip(out, 0, 1.5)
+        out = np.clip(out, 0, 1.5)
+        if self.wrist_cam:
+            out[F:] = self.camera_image(update)
+        return out
+
+    def camera_image(self, update=True):
+        """wrist_cam: (160, 3) wrist-eye inputs from the depth camera: per facet (red, nearness, green) of its pixel.
+        Colour: the rendered image (scene light x brightness / tint / uneven light of the episode), auto exposure
+        (overall gain towards a mean of ADAPT_REF, colour ratios kept), noise. Distance: metric depth with noise and
+        missing pixels, nearness = 1 at 7 cm .. 0 at 50 cm, 0 where missing or nearer than 7 cm."""
+        if not update and self._cam_last is not None:
+            return self._cam_last
+        if self._cam_r is None:
+            self._cam_r = mujoco.Renderer(self.model, CAM_H * CAM_OVERSAMPLE, CAM_W * CAM_OVERSAMPLE)
+            self._cam_opt = mujoco.MjvOption()
+            self._cam_opt.geomgroup[:] = [1, 1, 0, 1, 1, 0]     # what the fly eye's rays see: plant, robot shapes, fruit
+        r, k = self._cam_r, CAM_OVERSAMPLE
+        r.update_scene(self.data, camera="wrist_cam", scene_option=self._cam_opt)
+        r.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
+        rgb = r.render().astype(np.float64) / 255.0
+        r.enable_depth_rendering()
+        r.update_scene(self.data, camera="wrist_cam", scene_option=self._cam_opt)
+        z = r.render().astype(np.float64)
+        r.disable_depth_rendering()
+        rgb = rgb.reshape(CAM_H, k, CAM_W, k, 3).mean((1, 3))           # pixel binning
+        z = z.reshape(CAM_H, k, CAM_W, k).mean((1, 3))
+        light = self._light * (np.ones(3) if self.light_tint is None else np.asarray(self.light_tint))
+        rgb = rgb * light
+        if self.light_gradient:
+            u = np.linspace(-1, 1, CAM_W)[None, :, None]
+            rgb = rgb * np.exp(self._grad_sign * self.light_gradient * u)
+        lum = float(rgb.mean()) + 1e-3
+        gain = ADAPT_REF[0] / lum if self._cam_gain is None else self._cam_gain + ADAPT_RATE * (ADAPT_REF[0] / lum - self._cam_gain)
+        self._cam_gain = gain
+        rgb = rgb * gain + self.rng.normal(0, self.eye_noise, rgb.shape)
+        z = z * (1 + self.rng.normal(0, CAM_DEPTH_NOISE, z.shape))
+        near = np.clip((CAM_MAX - z) / (CAM_MAX - CAM_MIN), 0, 1)
+        near[(z < CAM_MIN) | (self.rng.random(z.shape) < CAM_HOLES)] = 0.0
+        pix = np.stack([rgb[..., 0], near, rgb[..., 1]], -1).reshape(-1, 3)
+        self._cam_last = np.clip(pix[self._cam_pix], 0, 1.5)
+        self._cam_rgb, self._cam_near = rgb, near                       # (for the video panel)
+        return self._cam_last
 
     # ------------------------------------------------------------------ helpers
     def tcp_pos(self):
@@ -1122,6 +1196,7 @@ class FlyPandaEnv(gym.Env):
         self._steps = 0
         self._prev_img = None
         self._adapt = None                                  # eyes adapt to this scene from the first look
+        self._cam_gain, self._cam_last = None, None
         return self._get_obs(), {}
 
     def _reward(self):
@@ -1327,6 +1402,13 @@ class FlyPandaEnv(gym.Env):
         h = size // 2
         out = np.zeros((h + 4, 2 * size + 6, 3))
         for e, x0 in ((1, 0), (0, size + 6)):
+            if e == 1 and self.wrist_cam and getattr(self, "_cam_rgb", None) is not None:
+                q = 6                                    # the camera: colour image and distance (white = near)
+                cam = np.repeat(np.repeat(np.clip(self._cam_rgb, 0, 1), q, 0), q, 1)
+                dep = np.repeat(np.repeat(np.repeat(self._cam_near[..., None], 3, 2), q, 0), q, 1)
+                out[2:2 + CAM_H * q, 2:2 + CAM_W * q] = cam
+                out[2:2 + CAM_H * q, 4 + CAM_W * q:4 + 2 * CAM_W * q] = dep
+                continue
             sl = slice(e * F, (e + 1) * F)
             az, el, val = self.facet_az[sl], self.facet_el[sl], img[sl]
             u = (az - az.min()) / (np.ptp(az) + 1e-9)
@@ -1434,6 +1516,9 @@ class FlyPandaEnv(gym.Env):
         return np.asarray(img)
 
     def close(self):
+        if self._cam_r is not None:
+            self._cam_r.close()
+            self._cam_r = None
         if self._renderer is not None:
             self._renderer.close()
             self._renderer = None

@@ -1,6 +1,6 @@
 """Is ripeness visible in what the brain gets? Drive the hand to 12 and 8 cm in front of the truss on N layouts
 and fit a linear read-out (logistic regression, 5-fold) of "is this tomato ripe" from each sense.
-Usage: python scripts/info_pickripe.py FACETS N"""
+Usage: python scripts/info_pickripe.py FACETS N [rgbd]   (rgbd: the wrist depth camera instead of the wrist eye)"""
 import sys, numpy as np, time
 sys.path.insert(0,'.')
 from ctb.envs import build_env
@@ -8,7 +8,7 @@ import ctb.envs.panda as P
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 nf=int(sys.argv[1]); N=int(sys.argv[2])
-env=build_env('panda_pickripe',0,grip_mode='absolute',eye_adapt=True,n_facets=nf)
+env=build_env('panda_pickripe',0,grip_mode='absolute',eye_adapt=True,n_facets=nf,**({'wrist_cam':sys.argv[3]} if len(sys.argv)>3 else {}))
 res={0.12:[[],[]],0.08:[[],[]]}
 t0=time.time()
 for i in range(N):

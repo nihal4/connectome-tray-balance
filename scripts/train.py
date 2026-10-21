@@ -28,6 +28,8 @@ import json
 import os
 import sys
 
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (only used by camera robots, --wrist_cam)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
@@ -85,6 +87,9 @@ def parse():
                     help="panda: 'absolute' = the grip command IS the finger target (closed stays closed)")
     ap.add_argument("--eye_adapt", action="store_true", default=None,
                     help="panda: photoreceptor light adaptation in the eyes (training AND evaluation; saved in config)")
+    ap.add_argument("--wrist_cam", choices=["rgbd"], default=None,
+                    help="panda: the wrist eye is a close-range depth camera (D405-like) feeding the same wrist-eye "
+                         "input neurons (training AND evaluation; saved in config)")
     ap.add_argument("--set_std", type=float, default=None,
                     help="resumed run: reset the exploration noise (action std) to this value, ONCE "
                          "(remembered in the run folder, so a later restart does not reset it again)")
@@ -145,7 +150,7 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -157,6 +162,9 @@ def main():
     if args.eye_adapt:            # robot property: applies to training and evaluation
         env_kw["eye_adapt"] = True
         print("[train] eyes adapt to the light level (photoreceptor gain control)")
+    if args.wrist_cam:            # robot property: applies to training and evaluation
+        env_kw["wrist_cam"] = args.wrist_cam
+        print("[train] wrist eye -> depth camera (16 x 10 pixels of red, distance, green into the wrist-eye neurons)")
     if args.lift_reward:          # task definition: applies to training and evaluation
         env_kw["lift_reward"] = args.lift_reward
         print(f"[train] lift reward: {args.lift_reward}")
@@ -225,7 +233,7 @@ def main():
         mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
         parent.update(mask_inputs=mask)
         parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
-                      eye_adapt=bool(args.eye_adapt),
+                      eye_adapt=bool(args.eye_adapt), wrist_cam=args.wrist_cam,
                       n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
                       edge_bias=args.edge_bias, random_start=args.random_start, eval_episodes=cfg["eval_episodes"],
                       light_log=args.light_log, imitation={"rounds": args.imitate, "steps_per_round": args.imitate_steps,
@@ -405,7 +413,12 @@ def main():
 
     if do_imitate:
         from ctb.imitate import run_dagger
-        run_dagger(model, venv, eval_env, out, init, iters=args.imitate, steps=args.imitate_steps,
+        remeasure = None
+        if args.wrist_cam:                  # the wrist-eye inputs (image and its change) now come from the camera
+            F = env_kw["n_facets"]
+            nv = 2 * F * 3
+            remeasure = np.r_[F * 3:2 * F * 3, nv + F * 3:nv + 2 * F * 3]
+        run_dagger(model, venv, eval_env, out, init, iters=args.imitate, steps=args.imitate_steps, remeasure=remeasure,
                    eval_episodes=cfg["eval_episodes"], seed=args.seed, final_std=args.std or 0.15,
                    epochs=args.imitate_epochs, first_steps=args.imitate_first_steps,
                    log=lambda m: print(m, flush=True), save_fn=save)

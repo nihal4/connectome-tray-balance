@@ -22,6 +22,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.environ.setdefault("MUJOCO_GL", "egl")
 sys.path.insert(0, ROOT)
 
 from ctb.safety import limit_threads  # noqa: E402
@@ -97,6 +98,8 @@ def run_env_kw(run):
         kw["privileged"] = True
     if cfg.get("eye_adapt"):                # robot property: photoreceptor light adaptation
         kw["eye_adapt"] = True
+    if cfg.get("wrist_cam"):                # robot property: the wrist eye is a depth camera
+        kw["wrist_cam"] = cfg["wrist_cam"]
     if cfg["env"].startswith(("drone", "panda")):
         import numpy as np
         brain = os.path.join(run, "subset.npz")

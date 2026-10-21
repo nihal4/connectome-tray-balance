@@ -61,7 +61,7 @@ def _load_stats(norm, path):
 
 def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, cap=120_000, epochs=6,
                batch=256, lr=1e-3, eval_episodes=50, seed=0, log=print, final_std=0.15, save_fn=None,
-               first_steps=30_000, first_epochs=15, max_updates=2000, teacher_noise=0.15):
+               first_steps=30_000, first_epochs=15, max_updates=2000, teacher_noise=0.15, remeasure=None):
     """model: PPO whose policy has n_priv = N_PRIV; norm / eval_norm: VecNormalize around the
     training / evaluation envs (privileged obs). Writes the run folder and returns the model."""
     venv = norm.venv
@@ -93,6 +93,18 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         norm.obs_rms.mean[kb:], norm.obs_rms.var[kb:] = 0.0, 1.0
         norm.obs_rms.count = parent.obs_rms.count
         norm.ret_rms = parent.ret_rms
+        if remeasure is not None and len(remeasure):
+            # inputs whose meaning changed from the parent (e.g. a camera instead of the wrist eye): their
+            # statistics from a short teacher-driven warm-up, before any example is stored
+            obs = venv.reset()
+            raw = []
+            for _ in range(max(1, 4000 // n_envs)):
+                t_act = np.array(venv.env_method("teacher_action"), dtype=np.float32)
+                obs, _, _, _ = venv.step(np.clip(t_act + rng.normal(0, teacher_noise, t_act.shape), -1, 1))
+                raw.append(obs[:, remeasure].copy())
+            raw = np.concatenate(raw)
+            norm.obs_rms.mean[remeasure], norm.obs_rms.var[remeasure] = raw.mean(0), raw.var(0) + 1e-6
+            log(f"[imitate] statistics of {len(remeasure)} changed inputs measured on {len(raw):,} teacher steps")
     norm.training = False                          # frozen while imitating (the student's inputs stay fixed)
     eval_norm.obs_rms = norm.obs_rms
 
