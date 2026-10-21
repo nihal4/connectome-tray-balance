@@ -402,6 +402,11 @@ nearest one, i.e. from anything the memoryless brain could infer from what it se
 a function of the present state only (the ripe tomato nearest the hand). (2) A step in between:
 `--ripe_max 1`, exactly one ripe tomato among three (choose, pick, done), before two.
 
+**Result (v17, `results/v17_panda_pickripe_cam/`):** with one ripe tomato among three, 98 % of 200 new layouts
+picked correctly, and not one of the 400 unripe tomatoes picked (median 3.0 s). It chooses mainly by colour
+(every tomato looking ripe: 54 %, one in three would be guessing) and still needs smell to grasp (antennae
+silenced: 0 %). Weak spots: tinted light 12 % (no white balance in the camera model) and uneven light 0 %.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
@@ -611,6 +616,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v14, sorting with light-adapting fly eyes** (`results/v14_panda_sort_adapt/`): photoreceptor adaptation in the eye model, practised at normal light only; 100 % at every fixed brightness x0.4-2.5, tinted light 98 %, uneven light 48-60 % (v12/v13: 3 %); 98 % of 300 new layouts sorted, none into a wrong bin.
 - **v15, ripe or rotten by smell** (`results/v15_panda_smell/`): brain grown with the fly's smell pathway; 98 % of 300 identical-looking fruits sorted, none into the wrong bin; antennae silenced: 50 % (always the ripe bin).
 - **v16, greenhouse phase 1: pick a tomato off the plant** (`results/v16_panda_harvest/`): 98 % of 200 layouts into the basket in 2.4 s; finds the tomato by sight, times the grasp by smell strength.
+- **v17, greenhouse phase 2a: pick only the ripe tomato** (`results/v17_panda_pickripe_cam/`): wrist depth camera into the fly's wrist-eye neurons; 98 % of 200 layouts, 0 of 400 unripe picked.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 

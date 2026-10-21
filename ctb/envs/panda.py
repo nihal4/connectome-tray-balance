@@ -762,6 +762,10 @@ class FlyPandaEnv(gym.Env):
             self._cam_opt = mujoco.MjvOption()
             self._cam_opt.geomgroup[:] = [1, 1, 0, 1, 1, 0]     # what the fly eye's rays see: plant, robot shapes, fruit
         r, k = self._cam_r, CAM_OVERSAMPLE
+        saved = None
+        if self.harvest and (self.tomato_look == "all_ripe" or not self.target_visible):   # tests: the camera too
+            saved = self.model.geom_rgba[self.tom_geoms].copy()
+            self.model.geom_rgba[self.tom_geoms] = RIPE_RGBA[2] if self.target_visible else [0, 0, 0, 0]
         r.update_scene(self.data, camera="wrist_cam", scene_option=self._cam_opt)
         r.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
         rgb = r.render().astype(np.float64) / 255.0
@@ -769,6 +773,8 @@ class FlyPandaEnv(gym.Env):
         r.update_scene(self.data, camera="wrist_cam", scene_option=self._cam_opt)
         z = r.render().astype(np.float64)
         r.disable_depth_rendering()
+        if saved is not None:
+            self.model.geom_rgba[self.tom_geoms] = saved
         rgb = rgb.reshape(CAM_H, k, CAM_W, k, 3).mean((1, 3))           # pixel binning
         z = z.reshape(CAM_H, k, CAM_W, k).mean((1, 3))
         light = self._light * (np.ones(3) if self.light_tint is None else np.asarray(self.light_tint))

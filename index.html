@@ -214,7 +214,8 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t9"><span class="n">9</span><span class="t">Panda arm: sort by colour</span><span class="tag done">Done</span></a></li>
     <li><a href="#t10"><span class="n">10</span><span class="t">Ripe or rotten by smell</span><span class="tag done">Done</span></a></li>
     <li><a href="#t11"><span class="n">11</span><span class="t">Greenhouse: pick a tomato off the plant</span><span class="tag done">Done</span></a></li>
-    <li><a href="#roadmap"><span class="n">12+</span><span class="t">Full greenhouse harvesting robot</span><span class="tag next">Planned</span></a></li>
+    <li><a href="#t12"><span class="n">12</span><span class="t">Greenhouse: pick only the ripe tomato</span><span class="tag done">Done</span></a></li>
+    <li><a href="#roadmap"><span class="n">13+</span><span class="t">Full greenhouse harvesting robot</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
 
@@ -998,12 +999,53 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     </details>
   </section>
 
+  <!-- 12 ----------------------------------------------------------------- -->
+  <section class="task" id="t12">
+    <div class="task-head"><span class="num">12</span><h3>Greenhouse, phase 2a: pick only the ripe tomato</h3><span class="tag done">Done</span></div>
+    <p><strong>Choosing.</strong> Three cherry tomatoes hang side by side on a truss; one is ripe, the others
+      green or turning. Pick the ripe one, leave the rest. The fly's own eye failed here, and we measured why:
+      its facets are about 11&deg; apart, so from the head the three tomatoes are one blur, and even the wrist
+      eye read ripeness at only 85&ndash;92 %. So, as harvesting robots do, the hand now carries a close-range
+      <strong>depth camera</strong> (like an Intel RealSense D405). Its image, 16&times;10 pixels of colour and
+      distance, goes into the <em>same</em> fly-brain neurons the wrist eye used, each pixel to the facet
+      pointing the same way, so the fly's visual pathways stay in place. The head keeps the fly eye; smell
+      is unchanged.</p>
+    <ul class="facts"><li>Picked correctly: <b>98 %</b> of 200</li><li>Unripe picked: <b>0</b> of 400</li><li>All look ripe: <b>54 %</b></li><li>No smell: <b>0 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v17_panda_pickripe_cam/showcase_best_brain.mp4" poster="results/v17_panda_pickripe_cam/poster_showcase_best_brain.jpg" controls muted loop playsinline preload="none"
+               aria-label="The arm goes to a truss of three tomatoes, picks the ripe red one and drops it in the basket, leaving the green and turning ones; insets show the wrist camera and the 16 by 10 image the brain gets"></video>
+        <figcaption><b>Picking the ripe one</b> on new layouts, with the wrist camera and what the brain receives.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v17_panda_pickripe_cam/curves.png"><img src="results/v17_panda_pickripe_cam/curves.png" alt="Learning curves: 2 to 98 percent over the ten teacher rounds, then 96 to 98 percent in practice" loading="lazy"></a>
+        <figcaption><b>Learning curves</b>: 98 % after copying the teacher.</figcaption>
+      </figure>
+    </div>
+    <details open>
+      <summary>What it took (three failed tries first)</summary>
+      <ol>
+        <li><b>The eye was too coarse</b> from a distance, so the teacher now first brings the hand close to the
+          truss, the same move whatever is ripe, then goes for the ripe one.</li>
+        <li><b>A bug in the eye model</b>: a thin stalk hid the whole tomato from the wrist eye at grasping
+          distance. Fixed.</li>
+        <li><b>The teacher had a memory</b> the brain lacks (it kept its earlier choice): in 12 % of situations
+          its choice was not one the brain could make from what it senses. Now it decides from the present only.</li>
+        <li><b>One step at a time</b>: one ripe tomato among three first, two ripe next.</li>
+      </ol>
+      <p>Each fix was found by measuring rather than guessing: a linear read-out of "is this tomato ripe" from
+        each sense showed where the information was missing. The camera then made it 100 %. Honest limits: the
+        camera is an engineering part, not a fly eye; it has no white balance yet, so tinted light (12 %) and
+        uneven light (0 %) break it; the brain still uses smell to time its grasp.</p>
+    </details>
+  </section>
+
   <!-- roadmap ------------------------------------------------------------- -->
   <h2 id="roadmap">What's next</h2>
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Ripe or not</b><span class="why">a cluster of tomatoes at different ripeness (green, turning, red, as fly photoreceptors see them): pick only the ripe ones</span></li>
+    <li><b>Two ripe tomatoes</b><span class="why">pick one, come back, pick the next; then any number</span></li>
     <li><b>Rotten and infected fruit</b><span class="why">grey mould and rot by look and smell, into a separate reject bin so it does not spread</span></li>
     <li><b>A real plant</b><span class="why">leaves that hide fruit, bending stems, fruit at different heights, leaf shadows (uneven light)</span></li>
     <li><b>The greenhouse loop</b><span class="why">the arm on a cart driving a loop through the rows, stopping at each plant, unloading after each lap</span></li>
