@@ -477,7 +477,7 @@ class FlyPandaEnv(gym.Env):
 
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
-                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
+                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
                  wrist_cam=None, ripe_max=2, **_):
@@ -633,6 +633,9 @@ class FlyPandaEnv(gym.Env):
         # training only (lift): share of episodes that start partway through the task, half with the
         # gripper open around the block, half with the block already held (practice closing / lifting)
         self.grasp_start = grasp_start
+        # training only (pickripe, two ripe): share of episodes that start after the first pick, one ripe tomato
+        # already in the basket and the hand over it (practise the way back to the plant and the second pick)
+        self.return_start = return_start
         assert lift_reward in ("height", "goal"), lift_reward
         self.lift_reward = lift_reward
         # grip_mode: "delta" = each command nudges the finger target (old); "absolute" = the command
@@ -1160,6 +1163,16 @@ class FlyPandaEnv(gym.Env):
         if self.harvest and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
             mid, held = True, self.rng.random() < 0.5            # open around the tomato, or already closed on it
             start = tom + self.rng.uniform([-0.004, -0.004, -0.004], [0.004, 0.004, 0.004])
+        elif (self.n_tom > 1 and self.return_start > 0 and sum(r == 2 for r in self.ripe) >= 2
+              and self.rng.random() < self.return_start):
+            ripe = [k for k in range(self.n_tom) if self.ripe[k] == 2]
+            done = ripe[int(self.rng.integers(len(ripe)))]
+            c = self.bin_pos()
+            d.eq_active[self.stalks[done]] = 0
+            self.att[done] = False
+            d.qpos[self.tom_q[done]:self.tom_q[done] + 3] = c + [*self.rng.uniform(-0.02, 0.02, 2), self.rest_z + 0.005]
+            self._set_target(next(k for k in ripe if k != done))
+            start = c + np.array([0, 0, self.rest_z + HARVEST_CARRY]) + self.rng.uniform(-0.02, 0.02, 3)
         elif self.task in ("lift", "place", "sort", "smell") and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
             mid, held = True, self.rng.random() < 0.5
             start = np.array([target[0], target[1], BLOCK_H]) + self.rng.uniform([-0.008, -0.008, -0.004],

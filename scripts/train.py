@@ -65,6 +65,9 @@ def parse():
     ap.add_argument("--lr", type=float, default=None, help="learning rate (default 3e-4; fine-tuning: 1e-4)")
     ap.add_argument("--std", type=float, default=None,
                     help="fine-tune: reset the exploration noise (action std) of the loaded brain, e.g. 0.25")
+    ap.add_argument("--return_start", type=float, default=0.0,
+                    help="panda_pickripe: share of two-ripe TRAINING episodes that start with one ripe tomato already "
+                         "in the basket and the hand over it (practise going back for the second)")
     ap.add_argument("--grasp_start", type=float, default=0.0,
                     help="panda_lift: share of TRAINING episodes that start with the gripper around the block "
                          "(half open, half already holding it)")
@@ -192,6 +195,9 @@ def main():
     if args.edge_bias > 0:                  # training only; evaluation keeps uniform block positions
         train_kw["edge_bias"] = args.edge_bias
         print(f"[train] {args.edge_bias:.0%} of training blocks placed near the table edges / corners")
+    if args.return_start > 0:               # training only (panda_pickripe): start after the first pick
+        train_kw["return_start"] = args.return_start
+        print(f"[train] {args.return_start:.0%} of two-ripe training episodes start after the first pick")
     if args.grasp_start > 0:                # training only; evaluation always starts from scratch
         train_kw["grasp_start"] = args.grasp_start
         print(f"[train] {args.grasp_start:.0%} of training episodes start at the block (half open, half holding it)")

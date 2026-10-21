@@ -407,6 +407,12 @@ picked correctly, and not one of the 400 unripe tomatoes picked (median 3.0 s). 
 (every tomato looking ripe: 54 %, one in three would be guessing) and still needs smell to grasp (antennae
 silenced: 0 %). Weak spots: tinted light 12 % (no white balance in the camera model) and uneven light 0 %.
 
+Phase 2b (`--ripe_max 2`, from the v17 brain): 54-72 % during the teacher rounds, 66 % at 265k. The videos
+show where: after dropping the first ripe tomato in the basket, the hand comes back too high and hovers where
+the wrist camera does not see the truss, and the second ripe tomato is never taken. That way back happens
+only once per episode, so it gets little practice. `--return_start 0.3`: 30 % of the two-ripe training
+episodes start right after the first pick (one ripe tomato already in the basket, the hand over it).
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
