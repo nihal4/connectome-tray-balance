@@ -437,3 +437,33 @@ class StatefulModel:
 
     def __getattr__(self, k):
         return getattr(self.model, k)
+
+
+SEQ_LEN = 32      # memory: PPO learns on 32-step pieces of the episodes, each started from its stored neuron state
+
+
+def chunk_rollout_buffer(model, seq_len=SEQ_LEN):
+    """Recurrent PPO (sb3-contrib) replays every episode step by step from its first step, which makes each
+    update ~300 sequential brain steps. Here the rollout is cut into seq_len-step pieces instead; each piece starts
+    from the neuron state stored while collecting (exact for the first pass, slightly stale after, as in RLlib's
+    max_seq_len / R2D2's stored state). The state is still only reset where an episode really starts."""
+    from sb3_contrib.common.recurrent.buffers import RecurrentRolloutBuffer
+
+    class ChunkedRecurrentRolloutBuffer(RecurrentRolloutBuffer):
+        def get(self, batch_size=None):
+            orig = self.swap_and_flatten
+
+            def swap(arr):                        # get() builds env_change = 1 at t = 0 and swaps it: add every seq_len
+                if arr.ndim == 2 and arr.shape == (self.buffer_size, self.n_envs) and arr.dtype == np.float64 \
+                        and arr[0].all() and not arr[1:].any():
+                    arr = arr.copy()
+                    arr[::seq_len, :] = 1.0
+                return orig(arr)
+            self.swap_and_flatten = swap
+            try:
+                yield from super().get(batch_size)
+            finally:
+                del self.swap_and_flatten
+
+    model.rollout_buffer.__class__ = ChunkedRecurrentRolloutBuffer
+    return model

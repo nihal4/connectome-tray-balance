@@ -63,7 +63,7 @@ def _actor_step(policy, obs_brain, h):
 
 
 # memory: stored stretch, learned piece, warm-up, pieces per update, neuron state saved every H_EVERY steps
-BLOCK, CHUNK, BURN, N_CHUNKS, H_EVERY = 256, 48, 24, 16, 16
+BLOCK, CHUNK, BURN, N_CHUNKS, H_EVERY = 256, 48, 24, 32, 16     # 32 pieces per update: ~1.5x faster per step learned
 
 
 def _save_stats(norm, path):
