@@ -10,3 +10,4 @@ imageio
 imageio-ffmpeg
 matplotlib
 scipy
+sb3-contrib>=2.3

@@ -13,7 +13,10 @@ ConnectomePolicy
         latent   = LayerNorm(h[output neurons]) -> SB3 adds a linear action head
 
     The hidden state starts from zero at every control step (no memory across
-    time). That keeps PPO simple; adding memory is a later experiment.
+    time). ConnectomeRecurrentPolicy (--memory) instead carries the neurons'
+    activity on from one control step to the next (reset only when an episode
+    starts), so the wiring's own loops can hold information over time; it is
+    trained with recurrent PPO (sb3-contrib) and sequence imitation.
 
     wiring="shuffled" keeps the same number of edges, signs and weights but
     connects them to random neurons. Useful control for "is it the wiring?".
@@ -174,6 +177,10 @@ class ConnectomeCore(nn.Module):
         return torch.sparse_coo_tensor(idx, w, (self.n, self.n)).coalesce()
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        return self.step(obs, None)[0]
+
+    def step(self, obs: torch.Tensor, h0):
+        """One control step from neuron state h0 (None = all zero): (output-neuron activity, final state)."""
         b = obs.shape[0]
         A = None if self.use_csr else self.weight_matrix()
         w = self.edge_weights() if self.use_csr else None
@@ -189,7 +196,7 @@ class ConnectomeCore(nn.Module):
                 u[:, self.smell_idx] = obs[:, end:] * self.smell_gain + self.smell_bias
         else:
             u[:, self.input_idx] = self.w_in(obs)
-        h = obs.new_zeros(b, self.n)
+        h = obs.new_zeros(b, self.n) if h0 is None else h0
         for _ in range(self.k_steps):
             if self.use_csr:
                 rec = _SparseRecurrent.apply(h, w, self)
@@ -198,7 +205,7 @@ class ConnectomeCore(nn.Module):
             else:
                 rec = h @ A.T
             h = (1 - self.leak) * h + self.leak * torch.tanh(rec + u + self.bias)
-        return h[:, self.output_idx]
+        return h[:, self.output_idx], h
 
 
 class ConnectomeExtractor(nn.Module):
@@ -238,6 +245,15 @@ class ConnectomeExtractor(nn.Module):
 
     def forward_critic(self, x):
         return self.critic(x[:, self.n_brain:] if self.n_priv else x)
+
+    def step_actor(self, x, h):
+        """With memory: one control step from neuron state h -> (actor latent, new state)."""
+        x = x[:, :self.n_brain]
+        if len(self.mask_idx):
+            x = x.clone()
+            x[:, self.mask_idx] = 0.0
+        out, h = self.core.step(x, h)
+        return self.readout_norm(out), h
 
 
 class ConnectomePolicy(ActorCriticPolicy):
@@ -279,5 +295,127 @@ def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu", custo
                   gain=cfg.get("gain") if cfg.get("gain") is not None else 1.5,
                   wiring=cfg.get("wiring", "real"), log_std_init=-0.5, n_priv=int(cfg.get("n_priv", 0) or 0),
                   mask_inputs=tuple(cfg.get("mask_inputs", ()) or ()))
+    if cfg.get("memory"):                       # fly brain with memory (recurrent PPO, sb3-contrib)
+        from sb3_contrib import RecurrentPPO
+        return RecurrentPPO.load(model_path, env=env, device=device,
+                                 custom_objects={"policy_class": recurrent_policy_class(), "policy_kwargs": kwargs,
+                                                 **(custom or {})})
     return PPO.load(model_path, env=env, device=device,
                     custom_objects={"policy_class": ConnectomePolicy, "policy_kwargs": kwargs, **(custom or {})})
+
+
+# --------------------------------------------------------------------------------------------- memory
+class _CoreAsRNN(nn.Module):
+    """Stands in for the LSTM of sb3-contrib's recurrent policy: same call signature
+    (sequence, (h, c)) -> (outputs, (h, c)), where h is the fly brain's neuron activity
+    (c is unused, kept as zeros). Holds no parameters of its own: they live in the policy's
+    mlp_extractor (so names and init_from copies are the same as without memory)."""
+
+    def __init__(self, extractor, input_size):
+        super().__init__()
+        self.__dict__["_ext"] = extractor           # a reference, not a sub-module (no duplicate parameters)
+        self.input_size, self.hidden_size, self.num_layers = input_size, extractor.core.n, 1
+
+    def forward(self, x_seq, state):
+        h, c = state
+        h = h[0]
+        outs = []
+        for x in x_seq:                               # (sequence length, batch, features)
+            out, h = self._ext.step_actor(x, h)
+            outs.append(out)
+        return torch.stack(outs), (h.unsqueeze(0), c)
+
+
+class _CriticFromObs(nn.Module):
+    """The critic of the recurrent policy: the same small network on the privileged state."""
+
+    def __init__(self, extractor):
+        super().__init__()
+        self.__dict__["_ext"] = extractor
+
+    def forward(self, features):
+        return self._ext.forward_critic(features)
+
+
+class RecurrentConnectomeExtractor(ConnectomeExtractor):
+    """Latents arrive already computed (actor: by _CoreAsRNN; critic: by _CriticFromObs)."""
+
+    def forward_actor(self, latent):
+        return latent
+
+    def forward_critic(self, latent):
+        return latent
+
+    def critic_latent(self, x):
+        return ConnectomeExtractor.forward_critic(self, x)
+
+
+def _make_recurrent_policy_class():
+    from sb3_contrib.common.recurrent.policies import RecurrentActorCriticPolicy
+
+    class ConnectomeRecurrentPolicy(RecurrentActorCriticPolicy):
+        """The fly brain WITH memory: neuron activity carries over between control steps."""
+
+        def __init__(self, observation_space, action_space, lr_schedule, *args, subset_path: str = "",
+                     k_steps: int = 4, leak: float = 0.5, gain: float = 1.5, wiring: str = "real", n_priv: int = 0,
+                     mask_inputs=(), **kwargs):
+            self._cfg = dict(subset_path=subset_path, k_steps=k_steps, leak=leak, gain=gain, wiring=wiring,
+                             n_priv=n_priv, mask_inputs=tuple(mask_inputs))
+            kwargs.update(ortho_init=False, lstm_hidden_size=1, n_lstm_layers=1, shared_lstm=False,
+                          enable_critic_lstm=False)
+            super().__init__(observation_space, action_space, lr_schedule, *args, **kwargs)
+            ext = self.mlp_extractor
+            self.lstm_actor = _CoreAsRNN(ext, self.features_dim)
+            self.critic = _CriticFromObs(_CriticAdapter(ext))
+            self.lstm_hidden_state_shape = (1, 1, ext.core.n)
+            self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+
+        def _build_mlp_extractor(self):
+            self.mlp_extractor = RecurrentConnectomeExtractor(self.features_dim, **self._cfg)
+
+    return ConnectomeRecurrentPolicy
+
+
+class _CriticAdapter:
+    def __init__(self, ext):
+        self.ext = ext
+
+    def forward_critic(self, x):
+        return self.ext.critic_latent(x)
+
+
+_RECURRENT = None
+
+
+def recurrent_policy_class():
+    global _RECURRENT
+    if _RECURRENT is None:
+        _RECURRENT = _make_recurrent_policy_class()
+    return _RECURRENT
+
+
+class StatefulModel:
+    """A loaded model for evaluation / videos: predict() keeps the fly brain's neuron state from
+    one call to the next when the run has memory. Call reset_memory() after every env.reset()
+    (a no-op for runs without memory). Everything else is passed through to the model."""
+
+    def __init__(self, model):
+        self.__dict__["model"] = model
+        self.__dict__["memory"] = hasattr(model.policy, "lstm_actor")
+        self.__dict__["_state"] = None
+        self.__dict__["_start"] = True
+
+    def reset_memory(self):
+        self.__dict__["_state"], self.__dict__["_start"] = None, True
+
+    def predict(self, obs, state=None, episode_start=None, deterministic=False):
+        if not self.memory:
+            return self.model.predict(obs, deterministic=deterministic)
+        n = len(obs)
+        a, st = self.model.predict(obs, state=self._state, deterministic=deterministic,
+                                   episode_start=np.full(n, self._start, bool))
+        self.__dict__["_state"], self.__dict__["_start"] = st, bool(self.__dict__.get("forget"))   # forget: test only
+        return a, st
+
+    def __getattr__(self, k):
+        return getattr(self.model, k)

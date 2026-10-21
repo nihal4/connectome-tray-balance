@@ -39,6 +39,7 @@ res = []
 t0 = time.time()
 for i in range(N):
     obs, _ = env.reset(seed=60_000 + i)
+    model.reset_memory()
     colour = env._colour
     t_succ, grasped = None, False
     for t in range(env.max_steps):

@@ -37,6 +37,7 @@ def main():
         seed = args.first_seed + i
         env = build_env(env_name, seed, **run_env_kw(run))
         obs, _ = env.reset(seed=seed)
+        model.reset_memory()
         info = {}
         for _ in range(env.max_steps):
             a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)

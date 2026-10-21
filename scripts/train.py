@@ -96,6 +96,9 @@ def parse():
     ap.add_argument("--ripe_max", type=int, choices=[1, 2], default=None,
                     help="panda_pickripe: at most this many ripe tomatoes per truss (1 = choose one of three; task "
                          "definition, saved in config)")
+    ap.add_argument("--memory", action="store_true", default=None,
+                    help="the fly brain keeps its neuron activity from one step to the next (memory); recurrent "
+                         "PPO + sequence imitation. New runs with --imitate only")
     ap.add_argument("--set_std", type=float, default=None,
                     help="resumed run: reset the exploration noise (action std) to this value, ONCE "
                          "(remembered in the run folder, so a later restart does not reset it again)")
@@ -156,7 +159,7 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -244,6 +247,7 @@ def main():
         body_end = n_brain - n_smell
         mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
         parent.update(mask_inputs=mask)
+        parent.update(memory=bool(args.memory))
         parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
                       eye_adapt=bool(args.eye_adapt), wrist_cam=args.wrist_cam, ripe_max=args.ripe_max,
                       n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
@@ -256,7 +260,14 @@ def main():
         policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=parent["k_steps"],
                              leak=parent["leak"], gain=parent["gain"], wiring=parent.get("wiring", "real"),
                              log_std_init=-0.5, n_priv=N_PRIV, mask_inputs=mask)
-        model = PPO(ConnectomePolicy, norm, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
+        if args.memory:
+            from sb3_contrib import RecurrentPPO
+            from ctb.policies import recurrent_policy_class
+            Algo, Pol = RecurrentPPO, recurrent_policy_class()
+            print("[train] MEMORY: the fly brain's neuron activity carries over between steps (reset at each new episode)")
+        else:
+            Algo, Pol = PPO, ConnectomePolicy
+        model = Algo(Pol, norm, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
                     n_steps=cfg["n_steps"], batch_size=cfg["batch_size"], n_epochs=cfg["n_epochs"],
                     learning_rate=lr, gamma=0.99, gae_lambda=0.95, clip_range=0.2,
                     ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0)
@@ -282,7 +293,9 @@ def main():
               f"{args.imitate} imitation rounds of {args.imitate_steps:,} steps, then PPO (lr {lr})")
         do_imitate = True
         reset = False
-    elif init:
+    elif init or (args.memory and not os.path.exists(model_path)):
+        if args.memory:
+            raise SystemExit("--memory: start a new run with --init_from PARENT --imitate N --privileged")
         # fine-tune: copy the parent's brain wiring + settings, load its BEST brain, fresh step count
         import shutil
         from ctb.policies import load_ppo

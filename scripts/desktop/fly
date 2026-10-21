@@ -18,6 +18,8 @@ case "${1:-help}" in
       *)         BRAIN=data/subset_flywire783_N1000.npz; EXTRA="${4:-}"; NAME="$ENV-connectome-real-s0" ;;
     esac
     case "$EXTRA" in
+      *--memory*--return_start*|*--return_start*--memory*) NAME="$NAME-cam-2ripe-mem" ;;   # fly brain with memory
+      *--memory*) NAME="$NAME-cam-mem" ;;                         # fly brain with memory: its own run
       *--return_start*) NAME="$NAME-cam-2ripe-ret" ;;              # two ripe + practise the second pick
       *--ripe_max\ 1*) NAME="$NAME-cam-1ripe" ;;                  # one ripe tomato per truss: its own run
       *--ripe_max\ 2*) NAME="$NAME-cam-2ripe" ;;                  # up to two ripe tomatoes: its own run
@@ -59,7 +61,7 @@ case "${1:-help}" in
     A="${3:-16:9}"; mkdir -p "$ROOT/exports"; O="$ROOT/exports/${R}_linkedin_$(echo "$A" | tr ':' 'x')_$(date +%Y%m%d-%H%M).mp4"
     cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/linkedin_video.py --run "$D" --aspect "$A" --out "$O" \
       && echo "download on the Mac:  http://$(hostname -I | awk '{print $1}'):8080/exports/$(basename "$O")" ;;
-  update)  git -C "$REPO" pull && $U restart flybrain-watch && echo "code updated (fly restart to use it for training)" ;;
+  update)  git -C "$REPO" pull && "$ROOT/.venv/bin/python" -m pip install -q -r "$REPO/requirements.txt" && $U restart flybrain-watch && echo "code updated (fly restart to use it for training)" ;;
   eval)    cur; cd "$REPO" && "$ROOT/.venv/bin/python" scripts/evaluate.py --run "$ROOT/runs/$NAME" --robustness --episodes "${2:-20}" ;;
   showcase) cur; cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/showcase.py --run "$ROOT/runs/$NAME" --episodes "${2:-40}" ;;
   *) cat <<HELP

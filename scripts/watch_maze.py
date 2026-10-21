@@ -45,6 +45,7 @@ def place_ball(env, cell):
 def watch(model, vn, env_name, before, out_dir, seed, robot_kw=None):
     env = build_env(env_name, seed, render_mode="rgb_array", **(robot_kw or {}))
     obs, _ = env.reset(seed=seed)
+    model.reset_memory()
     label = "real_start"
     if before is not None:
         obs = place_ball(env, route_cells(env)[-1 - before])

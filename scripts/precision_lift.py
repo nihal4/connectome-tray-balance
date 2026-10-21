@@ -38,6 +38,7 @@ def place(xy):
 
 def episode(seed, xy=None):
     obs, _ = env.reset(seed=seed)
+    model.reset_memory()
     if xy is not None:
         obs = place(xy)
     start = env.block_pos()

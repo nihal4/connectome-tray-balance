@@ -87,6 +87,7 @@ def record_tests(run, out, seeds=None, best=False):
             title, line = TEXT.get(env_name, (env_name, ""))
             pres = Presenter(env, 960, 544, "16:9", ci, title, line, shadows=False, samples=4)
         obs, _ = env.reset(seed=seed)
+        model.reset_memory()
         info, f = {}, None
         for t in range(env.max_steps):
             a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)

@@ -218,6 +218,7 @@ def main():
         seed = args.first_seed + i
         env = build_env(env_name, seed, **kw)
         obs, _ = env.reset(seed=seed)
+        model.reset_memory()
         info = {}
         for _ in range(env.max_steps):
             a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
@@ -287,6 +288,7 @@ def main():
         env = build_env(env_name, seed, **kw)
         pres = Presenter(env, W, H, args.aspect, ci, title, task_line)
         obs, _ = env.reset(seed=seed)
+        model.reset_memory()
         info = {}
         frames_ep = []
         for t in range(env.max_steps):

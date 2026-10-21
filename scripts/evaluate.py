@@ -33,7 +33,7 @@ import numpy as np  # noqa: E402
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize  # noqa: E402
 
 from ctb.envs import build_env  # noqa: E402
-from ctb.policies import load_ppo  # noqa: E402
+from ctb.policies import StatefulModel, load_ppo  # noqa: E402
 
 TESTS = {
     "clean": {},
@@ -83,7 +83,7 @@ def run_config(run):
 def load(run, best=True):
     best_path = os.path.join(run, "best_model.zip")
     path = best_path if best and os.path.exists(best_path) else os.path.join(run, "model.zip")
-    return load_ppo(run, path)
+    return StatefulModel(load_ppo(run, path))        # keeps the neuron state between steps for runs with memory
 
 
 def run_env_kw(run):
@@ -128,9 +128,12 @@ def make_norm(run, env_kw, seed=0, best=False):
 
 def run_episodes(model, run, env_kw, episodes, seed=123, best=False):
     rets, lens, succ = [], [], []
+    env_kw = dict(env_kw)
+    model.__dict__["forget"] = bool(env_kw.pop("_forget", False))
     for ep in range(episodes):
         vn = make_norm(run, env_kw, seed + ep, best=best)
         obs = vn.reset()
+        model.reset_memory()
         done, ret, n, info = False, 0.0, 0, {}
         while not done:
             a, _ = model.predict(obs, deterministic=True)
@@ -164,6 +167,7 @@ def record(model, run, path, seed=7, best=False):
     raw = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
     vn = make_norm(run, {}, best=best)
     raw_obs, _ = raw.reset(seed=seed)
+    model.reset_memory()
     frames = []
     for _ in range(raw.max_steps):
         a, _ = model.predict(vn.normalize_obs(raw_obs[None]), deterministic=True)
@@ -194,6 +198,8 @@ def main():
     model = load(args.run, best=not args.last)
     named = TESTS_DRONE if cfg["env"].startswith("drone") else TESTS_PANDA if cfg["env"].startswith("panda") else TESTS
     tests = dict(named) if args.robustness else {"clean": {}}
+    if args.robustness and cfg.get("memory"):           # does the brain USE its memory? wipe it every step
+        tests["memory_wiped"] = {"_forget": True}
     if args.robustness and cfg["env"].startswith("maze_fixed3"):
         tests["random_mazes"] = {"fixed_maze": False}
 

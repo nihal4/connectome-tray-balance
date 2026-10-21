@@ -51,6 +51,7 @@ def episodes(n, seed0, smell=None, shift=None, **kw):
     for i in range(n):
         env._shift = np.array([0, (1 if i % 2 else -1) * shift, 0]) if shift else np.zeros(3)
         obs, _ = env.reset(seed=seed0 + i)
+        model.reset_memory()
         t_pick = t_done = None
         closest, cxyz = 9.0, None
         for t in range(env.max_steps):

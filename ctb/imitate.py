@@ -17,6 +17,11 @@ The teacher's knowledge only shapes the training targets. The fly brain never re
 block position as an input (the policy slices it away), and the teacher is never used in
 evaluation, videos or `fly eval`.
 
+With memory (--memory, ConnectomeRecurrentPolicy) the student's neuron activity carries over from
+step to step, during collection, testing and learning: the data is kept as stretches of consecutive
+steps, and the brain learns on 32-step pieces after a 16-step warm-up (burn-in) that rebuilds its
+state, with the error flowing back through time (truncated backpropagation through time).
+
 Output is an ordinary run folder (model.zip, vecnormalize.pkl, evaluations.npz, best_model.zip),
 so PPO can continue from it and the dashboard, videos and `fly eval` work as usual. Each round is
 checkpointed, so a power cut costs at most one round.
@@ -48,6 +53,15 @@ def _actor_mean(policy, obs_brain):
     return policy.action_net(ext.readout_norm(ext.core(obs_brain)))
 
 
+def _actor_step(policy, obs_brain, h):
+    """With memory: action from the brain's inputs and its neuron state h -> (action, new state)."""
+    out, h = policy.mlp_extractor.step_actor(obs_brain, h)
+    return policy.action_net(out), h
+
+
+BLOCK, CHUNK, BURN, N_CHUNKS = 256, 32, 16, 16      # memory: stored stretch, learned piece, warm-up, pieces per update
+
+
 def _save_stats(norm, path):
     with open(path, "wb") as f:
         pickle.dump({"mean": norm.obs_rms.mean, "var": norm.obs_rms.var, "count": norm.obs_rms.count}, f)
@@ -70,6 +84,8 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     nb = ext.n_brain
     n_smell = getattr(ext.core, "n_smell", 0)
     rng = np.random.default_rng(seed)
+    mem = hasattr(model.policy, "lstm_actor")      # recurrent fly brain (memory)
+    n_neur = ext.core.n
     ckpt = os.path.join(out, "imitate_state.json")
     ev_file = os.path.join(out, "evaluations.npz")
     state = json.load(open(ckpt)) if os.path.exists(ckpt) else {"round": 0, "steps": 0, "best": -1e9}
@@ -109,24 +125,34 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     eval_norm.obs_rms = norm.obs_rms
 
     opt = torch.optim.Adam(_actor_params(model.policy), lr=lr)
-    X = np.zeros((0, nb), np.float16)
-    Y = np.zeros((0, 4), np.float32)
+    X = np.zeros((0, BLOCK, nb) if mem else (0, nb), np.float16)
+    Y = np.zeros((0, BLOCK, 4) if mem else (0, 4), np.float32)
+    S = np.zeros((0, BLOCK), bool)                 # memory: episode starts (neuron state reset there)
     data_f = os.path.join(out, "imitate_data.npz")
     if state["round"] > 0 and os.path.exists(data_f):      # the data collected so far (DAgger aggregates it)
         with np.load(data_f) as d:
             X, Y = d["X"], d["Y"]
-        log(f"[imitate] data set restored: {len(X):,} examples")
+            if mem:
+                S = d["S"]
+        log(f"[imitate] data set restored: {len(X) * (BLOCK if mem else 1):,} examples")
 
     def evaluate():
         env = eval_norm.venv
         rets, lens, succ = [], [], []
         obs = env.reset()
         cur_r, cur_l = 0.0, 0
+        h = torch.zeros(1, n_neur)
         while len(rets) < eval_episodes:
             o = torch.as_tensor(eval_norm.normalize_obs(obs)[:, :nb], dtype=torch.float32)
             with torch.no_grad():
-                a = _actor_mean(model.policy, o).clamp(-1, 1).numpy()
+                if mem:
+                    a, h = _actor_step(model.policy, o, h)
+                    a = a.clamp(-1, 1).numpy()
+                else:
+                    a = _actor_mean(model.policy, o).clamp(-1, 1).numpy()
             obs, r, done, info = env.step(a)
+            if mem and done[0]:
+                h = torch.zeros(1, n_neur)
             cur_r += float(r[0]); cur_l += 1
             if done[0]:
                 rets.append(cur_r); lens.append(cur_l); succ.append(float(info[0].get("is_success", False)))
@@ -141,8 +167,10 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         log(f"[imitate] round {k + 1}/{iters}: collecting {n_steps:,} steps (teacher drives {beta:.0%}) ...")
         # ---- 1. collect: teacher labels everywhere, mixed control ------------------------------
         obs = venv.reset()
-        xs, ys, ep_r, ep_s = [], [], [], []
+        xs, ys, ss, ep_r, ep_s = [], [], [], [], []
         cur = np.zeros(n_envs)
+        h = torch.zeros(n_envs, n_neur)            # memory: the student's neuron state follows its own perception
+        start = np.ones(n_envs, bool)
         priv_raw = []
         for _ in range(n_steps // n_envs):
             teacher = np.array(venv.env_method("teacher_action"), dtype=np.float32)
@@ -150,14 +178,22 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             if k == 0:
                 priv_raw.append(obs[:, nb - n_smell:].copy())
             with torch.no_grad():
-                student = _actor_mean(model.policy, torch.as_tensor(nobs[:, :nb], dtype=torch.float32)).clamp(-1, 1).numpy()
+                if mem:
+                    student, h = _actor_step(model.policy, torch.as_tensor(nobs[:, :nb], dtype=torch.float32), h)
+                    student = student.clamp(-1, 1).numpy()
+                else:
+                    student = _actor_mean(model.policy, torch.as_tensor(nobs[:, :nb], dtype=torch.float32)).clamp(-1, 1).numpy()
             use_teacher = rng.random(n_envs) < beta
             # a little noise on whoever drives, so the data covers slightly-off situations too
             drive = np.where(use_teacher[:, None], teacher, student)
             act = np.clip(drive + rng.normal(0, teacher_noise, drive.shape), -1, 1)
             xs.append(nobs[:, :nb].astype(np.float16))
             ys.append(teacher)
+            ss.append(start.copy())
             obs, r, done, info = venv.step(act)
+            start = done.astype(bool)
+            if mem and done.any():
+                h[torch.as_tensor(done.astype(bool))] = 0.0
             cur += r
             for i in np.where(done)[0]:
                 ep_r.append(cur[i]); ep_s.append(float(info[i].get("is_success", False))); cur[i] = 0
@@ -165,25 +201,38 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             pr = np.concatenate(priv_raw)
             norm.obs_rms.mean[nb - n_smell:], norm.obs_rms.var[nb - n_smell:] = pr.mean(0), pr.var(0) + 1e-6
         state["steps"] += n_steps
+        if mem:                                    # per arm: consecutive steps, cut into stretches of BLOCK steps
+            xa, ya, sa = np.stack(xs, 1), np.stack(ys, 1), np.stack(ss, 1)     # (arm, time, ...)
+            nblk = xa.shape[1] // BLOCK
+            cut = lambda a: a[:, :nblk * BLOCK].reshape(a.shape[0] * nblk, BLOCK, *a.shape[2:])  # noqa: E731
+            xs, ys, S = [cut(xa)], [cut(ya)], np.concatenate([S, cut(sa)])
         X = np.concatenate([X] + xs)
         Y = np.concatenate([Y] + ys)
-        if len(X) > cap:                           # keep a random subset of the old data + all new data
-            new = n_steps
-            keep_old = rng.choice(len(X) - new, cap - new, replace=False)
+        lim = cap // BLOCK if mem else cap
+        if len(X) > lim:                           # keep a random subset of the old data + all new data
+            new = len(xs[0]) if mem else n_steps
+            keep_old = rng.choice(len(X) - new, lim - new, replace=False)
             idx = np.concatenate([np.sort(keep_old), np.arange(len(X) - new, len(X))])
             X, Y = X[idx], Y[idx]
+            if mem:
+                S = S[idx]
+        n_ex = len(X) * (BLOCK if mem else 1)
         t_collect = time.time() - t0
         # ---- 2. train the fly brain on the teacher's moves --------------------------------------
-        log(f"[imitate] round {k + 1}/{iters}: collected in {t_collect:.0f}s; learning from {len(X):,} examples ...")
+        log(f"[imitate] round {k + 1}/{iters}: collected in {t_collect:.0f}s; learning from {n_ex:,} examples ...")
         model.policy.train()
         # round 0 learns the teacher thoroughly; later rounds a fixed, sufficient amount
-        n_up = int(first_epochs * len(X) / batch) if k == 0 else min(max_updates, int(epochs * len(X) / batch))
+        per_up = N_CHUNKS * CHUNK if mem else batch
+        n_up = int(first_epochs * n_ex / per_up) if k == 0 else min(max_updates, int(epochs * n_ex / per_up))
         n_up = max(1, n_up)
         losses = []
         for u in range(n_up):
-            b = rng.integers(0, len(X), batch)
-            pred = _actor_mean(model.policy, torch.as_tensor(X[b], dtype=torch.float32))
-            loss = ((pred - torch.as_tensor(Y[b])) ** 2).mean()
+            if mem:
+                loss = _sequence_loss(model.policy, X, Y, S, rng, n_neur)
+            else:
+                b = rng.integers(0, len(X), batch)
+                pred = _actor_mean(model.policy, torch.as_tensor(X[b], dtype=torch.float32))
+                loss = ((pred - torch.as_tensor(Y[b])) ** 2).mean()
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(_actor_params(model.policy), 1.0)
@@ -211,14 +260,14 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             f"solved {100 * np.mean(ep_s) if ep_s else 0:.0f}%")
         log(f"Eval num_timesteps={state['steps']}, episode_reward={rets.mean():.2f} +/- {rets.std():.2f}")
         log(f"Success rate: {100 * succ.mean():.2f}%")
-        log(f"[imitate] round {k + 1}/{iters}: teacher drives {beta:.0%} | data {len(X):,} | imitation loss "
+        log(f"[imitate] round {k + 1}/{iters}: teacher drives {beta:.0%} | data {n_ex:,} | imitation loss "
             f"{np.mean(losses[-50:]):.4f} | student alone: return {rets.mean():.1f}, solved {succ.mean():.0%} | "
             f"{t_collect:.0f}s collect, {t_train:.0f}s learn")
         # ---- 4. checkpoint ----------------------------------------------------------------------
         state["round"] = k + 1
         torch.save(model.policy.state_dict(), os.path.join(out, "imitate_policy.pt"))
         with open(data_f + ".tmp", "wb") as f:                # the aggregated data, so a restart keeps it
-            np.savez(f, X=X, Y=Y)
+            np.savez(f, X=X, Y=Y, **({"S": S} if mem else {}))
         os.replace(data_f + ".tmp", data_f)
         _save_stats(norm, os.path.join(out, "imitate_obs_stats.pkl"))
         with open(ckpt + ".tmp", "w") as f:
@@ -240,3 +289,23 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     log(f"[imitate] done: {state['steps']:,} steps, best student return {state['best']:.1f}; "
         f"handing over to PPO with action std {final_std}")
     return model
+
+
+def _sequence_loss(policy, X, Y, S, rng, n_neur):
+    """Memory: imitation error on N_CHUNKS pieces of CHUNK consecutive steps, each after a BURN-step
+    warm-up without learning (the neuron state is unknown where a piece starts; the warm-up rebuilds it)."""
+    blk = rng.integers(0, len(X), N_CHUNKS)
+    t0 = rng.integers(0, BLOCK - BURN - CHUNK + 1, N_CHUNKS)
+    rows = t0[:, None] + np.arange(BURN + CHUNK)[None]
+    x = torch.as_tensor(X[blk[:, None], rows], dtype=torch.float32)      # (pieces, time, inputs)
+    y = torch.as_tensor(Y[blk[:, None], rows[:, BURN:]])
+    keep = torch.as_tensor(1.0 - S[blk[:, None], rows], dtype=torch.float32)   # 0 where an episode starts
+    h = torch.zeros(N_CHUNKS, n_neur)
+    with torch.no_grad():
+        for t in range(BURN):
+            _, h = _actor_step(policy, x[:, t], h * keep[:, t:t + 1])
+    preds = []
+    for t in range(BURN, BURN + CHUNK):
+        a, h = _actor_step(policy, x[:, t], h * keep[:, t:t + 1])
+        preds.append(a)
+    return ((torch.stack(preds, 1) - y) ** 2).mean()

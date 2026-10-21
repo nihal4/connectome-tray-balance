@@ -54,6 +54,7 @@ def move_bin(xy, rng):
 
 def episode(seed, bin_xy=None):
     obs, _ = env.reset(seed=seed)
+    model.reset_memory()
     if bin_xy is not None:
         obs = move_bin(bin_xy, np.random.default_rng(seed))
     c = env.bin_pos()

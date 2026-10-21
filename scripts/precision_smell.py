@@ -31,6 +31,7 @@ def episodes(n, seed0, **kw):
     res = []
     for i in range(n):
         obs, _ = env.reset(seed=seed0 + i)
+        model.reset_memory()
         fruit = env._fruit
         grasped, t_succ = False, None
         for t in range(env.max_steps):

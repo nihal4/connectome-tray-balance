@@ -30,6 +30,7 @@ for f in factors:
     ok = 0
     for i in range(N):
         obs, _ = env.reset(seed=80_000 + i)
+        model.reset_memory()
         for t in range(env.max_steps):
             a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
             obs, r, te, tr, info = env.step(a[0])

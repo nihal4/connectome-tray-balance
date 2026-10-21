@@ -32,6 +32,7 @@ def episodes(n, seed0, **kw):
     res = []
     for i in range(n):
         obs, _ = env.reset(seed=seed0 + i)
+        model.reset_memory()
         ripeness = [RIPENESS[r] for r in env.ripe]
         t_done = None
         for t in range(env.max_steps):
