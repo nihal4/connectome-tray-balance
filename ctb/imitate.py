@@ -43,7 +43,8 @@ from ctb.envs.panda import N_PRIV
 
 def _actor_params(policy):
     ext = policy.mlp_extractor
-    return list(ext.core.parameters()) + list(ext.readout_norm.parameters()) + list(policy.action_net.parameters())
+    extra = [ext.mem_logit] if hasattr(ext, "mem_logit") else []          # memory: the carry-over gates
+    return list(ext.core.parameters()) + list(ext.readout_norm.parameters()) + list(policy.action_net.parameters()) + extra
 
 
 def _actor_mean(policy, obs_brain):
@@ -242,14 +243,19 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
                 b = rng.integers(0, len(X), batch)
                 pred = _actor_mean(model.policy, torch.as_tensor(X[b], dtype=torch.float32))
                 loss = ((pred - torch.as_tensor(Y[b])) ** 2).mean()
+            if not torch.isfinite(loss):           # never let one bad batch poison the brain
+                losses.append(float("nan"))
+                continue
             opt.zero_grad()
             loss.backward()
+            if not all(torch.isfinite(p.grad).all() for p in _actor_params(model.policy) if p.grad is not None):
+                continue
             torch.nn.utils.clip_grad_norm_(_actor_params(model.policy), 1.0)
             opt.step()
             losses.append(loss.item())
             if (u + 1) % max(1, n_up // 4) == 0 and u + 1 < n_up:
                 log(f"[imitate] round {k + 1}/{iters}: learning {100 * (u + 1) // n_up}% "
-                    f"(imitation loss {np.mean(losses[-50:]):.4f})")
+                    f"(imitation loss {np.nanmean(losses[-50:]):.4f})")
         model.policy.eval()
         t_train = time.time() - t0 - t_collect
         # ---- 3. test the student alone ----------------------------------------------------------
@@ -270,7 +276,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         log(f"Eval num_timesteps={state['steps']}, episode_reward={rets.mean():.2f} +/- {rets.std():.2f}")
         log(f"Success rate: {100 * succ.mean():.2f}%")
         log(f"[imitate] round {k + 1}/{iters}: teacher drives {beta:.0%} | data {n_ex:,} | imitation loss "
-            f"{np.mean(losses[-50:]):.4f} | student alone: return {rets.mean():.1f}, solved {succ.mean():.0%} | "
+            f"{np.nanmean(losses[-50:]):.4f} | student alone: return {rets.mean():.1f}, solved {succ.mean():.0%} | "
             f"{t_collect:.0f}s collect, {t_train:.0f}s learn")
         # ---- 4. checkpoint ----------------------------------------------------------------------
         state["round"] = k + 1

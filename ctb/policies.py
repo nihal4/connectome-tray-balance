@@ -337,8 +337,26 @@ class _CriticFromObs(nn.Module):
         return self._ext.forward_critic(features)
 
 
+MEM_INIT = -3.0       # carry-over logit at the start: sigmoid(-3) = 5 % of each neuron's activity is kept
+
+
 class RecurrentConnectomeExtractor(ConnectomeExtractor):
-    """Latents arrive already computed (actor: by _CoreAsRNN; critic: by _CriticFromObs)."""
+    """Latents arrive already computed (actor: by _CoreAsRNN; critic: by _CriticFromObs).
+
+    Memory = a learned per-neuron carry-over: a control step starts from r * (last step's activity),
+    r = sigmoid(mem_logit) in (0, 1). It starts small (5 %), so the brain copied from a memoryless
+    parent first behaves almost as before, and learning then raises r wherever remembering helps
+    (warm start + gated recurrence, as in GRU/LSTM forget gates; a full carry-over from the start
+    turned the parent's dynamics chaotic and imitation diverged)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mem_logit = nn.Parameter(torch.full((self.core.n,), MEM_INIT))
+
+    def step_actor(self, x, h):
+        if h is not None:
+            h = torch.sigmoid(self.mem_logit) * h
+        return ConnectomeExtractor.step_actor(self, x, h)
 
     def forward_actor(self, latent):
         return latent

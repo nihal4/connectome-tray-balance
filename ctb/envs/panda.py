@@ -1362,7 +1362,7 @@ class FlyPandaEnv(gym.Env):
         return r, inside, released
 
     def step(self, action):
-        a = np.clip(np.asarray(action, dtype=np.float64), -1, 1)
+        a = np.clip(np.nan_to_num(np.asarray(action, dtype=np.float64)), -1, 1)    # a broken (NaN) command = stay still
         m, d = self.model, self.data
         # move a target point that the hand follows (like Fetch's mocap target), kept
         # within 5 cm of the real hand so it cannot run away when the arm is blocked
