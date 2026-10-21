@@ -36,6 +36,12 @@ sys.path.insert(0, ROOT)
 from ctb.profiles import ENV_NAMES, PROFILES  # noqa: E402 (no heavy imports)
 
 
+# Recurrent PPO (memory): 4 passes over each rollout in 4 batches, as in the usual PPO-LSTM settings (CleanRL:
+# update_epochs 4, num_minibatches 4). Each batch replays whole episodes step by step through the brain, so fewer,
+# larger batches cost far less time (measured: ~4x faster updates than 10 passes in batches of 512).
+MEM_BATCH, MEM_EPOCHS = 1024, 4
+
+
 def parse():
     ap = argparse.ArgumentParser()
     ap.add_argument("--env", choices=ENV_NAMES, default="tray")
@@ -268,7 +274,8 @@ def main():
         else:
             Algo, Pol = PPO, ConnectomePolicy
         model = Algo(Pol, norm, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
-                    n_steps=cfg["n_steps"], batch_size=cfg["batch_size"], n_epochs=cfg["n_epochs"],
+                    n_steps=cfg["n_steps"], batch_size=MEM_BATCH if args.memory else cfg["batch_size"],
+                    n_epochs=MEM_EPOCHS if args.memory else cfg["n_epochs"],
                     learning_rate=lr, gamma=0.99, gae_lambda=0.95, clip_range=0.2,
                     ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0)
         src = load_ppo(init, os.path.join(init, "best_model.zip"), device=args.device).policy.state_dict()
@@ -335,6 +342,9 @@ def main():
             model_path_used = model_path + ".bak"
         venv = norm
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
+        if json.load(open(os.path.join(out, "config.json"))).get("memory"):
+            model.batch_size, model.n_epochs = MEM_BATCH, MEM_EPOCHS
+            print(f"[train] memory run: PPO updates with {MEM_EPOCHS} passes in batches of {MEM_BATCH}")
         print(f"[train] resumed from {locals().get('model_path_used', model_path)} at {model.num_timesteps} steps")
         reset = False
         if args.lift_reward:
