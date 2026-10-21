@@ -172,7 +172,41 @@ class Presenter:
                                      radius=max(2, int(10 * s)), fill=(12, 14, 20, 210))
                 frame.paste(im, (x0, int(yy)))
                 dr.text((x0 + 4 * s, yy + ins_h + 6 * s), cap, font=f_small, fill=(215, 220, 226))
+            self._smell_meter(dr, x0, y0 + 2 * (ins_h + int(48 * s)), ins_w, f_small)
         return np.asarray(frame)
+
+    def _smell_meter(self, dr, x0, y0, w, f_small):
+        """The antennae: a bar for the ripe-fruit scent at the hand, and every receptor's response (left and
+        right antenna, one cell per receptor type) exactly as the fly brain receives it."""
+        import numpy as np
+        env, s = self.env, self.s
+        sm = getattr(env, "_last_smell", None)
+        if sm is None or not getattr(env, "n_smell", 0) or getattr(env, "smell_off", False):
+            return
+        G = len(sm) // 2
+        groups = getattr(env, "_smell_groups", None)
+        idx = groups[0] if groups is not None else range(G)                # fruity-ester receptors
+        scent = float(np.clip(np.mean([sm[a * G + g] for a in range(2) for g in idx]), 0, 1))
+        h = int(104 * s)
+        dr.rounded_rectangle((x0 - 6 * s, y0 - 6 * s, x0 + w + 6 * s, y0 + h), radius=max(2, int(10 * s)),
+                             fill=(12, 14, 20, 210))
+        dr.text((x0 + 4 * s, y0), "smell: ripe-fruit scent at the hand", font=f_small, fill=(215, 220, 226))
+        by = y0 + int(30 * s)
+        dr.rounded_rectangle((x0 + 4 * s, by, x0 + w - 4 * s, by + int(16 * s)), radius=max(1, int(6 * s)),
+                             outline=(110, 115, 125), width=max(1, int(2 * s)))
+        fill_w = (w - 8 * s) * scent
+        if fill_w > 2:
+            dr.rounded_rectangle((x0 + 4 * s, by, x0 + 4 * s + fill_w, by + int(16 * s)), radius=max(1, int(6 * s)),
+                                 fill=(230, 70, 50))
+        cw = (w - int(30 * s)) / G                                          # receptor cells, L and R rows
+        for a in range(2):
+            ry = by + int(26 * s) + a * int(16 * s)
+            dr.text((x0 + 4 * s, ry - 4 * s), "LR"[a], font=f_small, fill=(170, 175, 182))
+            for g in range(G):
+                v = float(np.clip(sm[a * G + g], -1, 1))
+                c = (int(40 + 200 * v), int(40 + 120 * v), 50) if v >= 0 else (60, 50, int(40 - 200 * v))
+                cx = x0 + int(26 * s) + g * cw
+                dr.rectangle((cx, ry, cx + max(1.0, cw - 1), ry + int(12 * s)), fill=c)
 
     def close(self):
         self.r.close()
