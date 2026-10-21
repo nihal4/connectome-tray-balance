@@ -102,6 +102,8 @@ def run_env_kw(run):
         kw["wrist_cam"] = cfg["wrist_cam"]
     if cfg.get("ripe_max"):                 # task definition (panda_pickripe)
         kw["ripe_max"] = cfg["ripe_max"]
+    if cfg.get("gentle"):                   # robot + task definition (panda_pickripe): quality harvest
+        kw["gentle"] = True
     if cfg["env"].startswith(("drone", "panda")):
         import numpy as np
         brain = os.path.join(run, "subset.npz")

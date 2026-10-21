@@ -142,6 +142,13 @@ HOME_HARVEST_TCP = np.array([0.50, 0.0, 0.22])    # where it puts the TCP
 PLANT_PENALTY = 0.5          # reward lost per step while the robot touches the plant
 BUMP_FORCE = 5.0          # pickripe: pressing an unripe tomato harder than this (N) counts as a bump (bruising)
 BUMP_PENALTY = 0.5        # per bump step, like touching the plant
+# gentle handling (pickripe, gentle=True). Tomato bio-yield force ~2.6 N (soft-gripper studies keep the squeeze
+# below it); visible bruising grows with impact energy (drop tests at 20-50 cm).
+GRIP_LIMIT = 3.0          # gripper actuator force cap -> median squeeze ~1.5 N on the fruit
+DAMAGE_FORCE = 5.0        # any robot contact on any tomato harder than this (N): bruised
+LAND_SPEED = 1.0          # m/s: landing in the basket faster than this (~5 cm free fall): bruised
+SLOW_NEAR, SLOW_MAX = 0.06, 0.5    # teacher: within 6 cm of the fruit, at most 0.5 x STEP per step (25 cm/s)
+HARVEST_CARRY_GENTLE = 0.07   # teacher: release lower over the basket (fall ~3 cm instead of ~7 cm)
 # pickripe (phase 2): three tomatoes on a truss that runs sideways (along y) at the end of the branch
 TRUSS_Y = (0.0, -0.065, 0.065)            # tomato slots (slot 0 = the middle one, called "block")
 TOM_LO3 = np.array([0.50, -0.08, 0.13])   # where the middle tomato hangs
@@ -481,7 +488,7 @@ class FlyPandaEnv(gym.Env):
 
     def __init__(self, task="reach", n_facets=160, max_steps=60, seed=None, render_mode=None,
                  eye_noise=0.01, body_noise=0.005, light_jitter=0.2, max_distractors=2,
-                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, lift_reward="height",
+                 target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, gentle=False, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
                  wrist_cam=None, ripe_max=2, **_):
@@ -585,6 +592,8 @@ class FlyPandaEnv(gym.Env):
             m.opt.cone, m.opt.impratio = mujoco.mjtCone.mjCONE_ELLIPTIC, 10.0   # firm friction: a round fruit
             m.actuator_gainprm[7, 0] *= GRIP_X              # stronger squeeze (position servo: gain and stiffness)
             m.actuator_biasprm[7, 1:3] *= GRIP_X
+            if gentle and self.n_tom > 1:                   # force-limited fingers (like a soft gripper with force
+                m.actuator_forcerange[7] = [-GRIP_LIMIT, GRIP_LIMIT]   # feedback): squeeze stays under the bio-yield
             names = ["block"] + [f"tomato{k}" for k in range(1, self.n_tom)]
             self.tom_q = [m.jnt_qposadr[m.body(b).jntadr[0]] for b in names]
             self.tom_geoms = [m.geom(b).id for b in names]
@@ -641,6 +650,9 @@ class FlyPandaEnv(gym.Env):
         # training only (pickripe, two ripe): share of episodes that start after the first pick, one ripe tomato
         # already in the basket and the hand over it (practise the way back to the plant and the second pick)
         self.return_start = return_start
+        # gentle (pickripe): handle the fruit as a quality harvest would -- a force-limited gripper, a low release
+        # over the basket, and any bruise (squeeze, hard knock, hard landing) costs reward and fails the episode
+        self.gentle = bool(gentle)
         assert lift_reward in ("height", "goal"), lift_reward
         self.lift_reward = lift_reward
         # grip_mode: "delta" = each command nudges the finger target (old); "absolute" = the command
@@ -1177,7 +1189,8 @@ class FlyPandaEnv(gym.Env):
             self.att[done] = False
             d.qpos[self.tom_q[done]:self.tom_q[done] + 3] = c + [*self.rng.uniform(-0.02, 0.02, 2), self.rest_z + 0.005]
             self._set_target(next(k for k in ripe if k != done))
-            start = c + np.array([0, 0, self.rest_z + HARVEST_CARRY]) + self.rng.uniform(-0.02, 0.02, 3)
+            start = c + np.array([0, 0, self.rest_z + (HARVEST_CARRY_GENTLE if self.gentle else HARVEST_CARRY)]) \
+                + self.rng.uniform(-0.02, 0.02, 3)
         elif self.task in ("lift", "place", "sort", "smell") and self.grasp_start > 0 and self.rng.random() < self.grasp_start:
             mid, held = True, self.rng.random() < 0.5
             start = np.array([target[0], target[1], BLOCK_H]) + self.rng.uniform([-0.008, -0.008, -0.004],
@@ -1219,6 +1232,11 @@ class FlyPandaEnv(gym.Env):
         self._cmd = np.zeros(3)
         self._hold = 0
         self._last_action = np.zeros(4)
+        if self.harvest:                                    # gentle: bruise bookkeeping
+            self._bruised = [False] * self.n_tom
+            self._in_basket = [self.tom_in_basket(k) for k in range(self.n_tom)]
+            self._tom_z = np.array([self.tom_pos(k)[2] for k in range(self.n_tom)])
+            self._tom_vz = np.zeros(self.n_tom)
         self._steps = 0
         self._prev_img = None
         self._adapt = None                                  # eyes adapt to this scene from the first look
@@ -1342,13 +1360,42 @@ class FlyPandaEnv(gym.Env):
         self._plant_hits += touched
         if touched:
             r -= PLANT_PENALTY / 7.0
-        f = self.unripe_bump_force()                            # bumping a green / turning tomato hard bruises it
-        if f > BUMP_FORCE:
-            self._bumps += 1
-            r -= BUMP_PENALTY / 7.0
+        if self.gentle:                                         # any bruise: costs reward, and the harvest fails
+            if self._damage_check():
+                self._bumps += 1
+                r -= BUMP_PENALTY / 7.0
+            if any(self._bruised):
+                success = False
+                if r >= 1.0:
+                    r = 0.9
         if self._unripe_picked:
             r = -0.3
         return r, success, float(np.linalg.norm(self.tcp_pos() - self.block_pos()))
+
+    def _damage_check(self):
+        """gentle: mark tomatoes bruised by a hard contact with the robot (> DAMAGE_FORCE) or a hard landing in the
+        basket (> LAND_SPEED). Returns True if anything was bruised on this step."""
+        m, d, f, hit = self.model, self.data, np.zeros(6), False
+        geom_k = {self.tom_geoms[k]: k for k in range(self.n_tom)}
+        for i in range(d.ncon):
+            c = d.contact[i]
+            k = geom_k.get(c.geom1, geom_k.get(c.geom2))
+            if k is None:
+                continue
+            other = c.geom2 if c.geom1 == self.tom_geoms[k] else c.geom1
+            if m.geom_bodyid[other] in self.robot_bodies:
+                mujoco.mj_contactForce(m, d, i, f)
+                if abs(f[0]) > DAMAGE_FORCE:
+                    self._bruised[k] = hit = True
+        z = np.array([self.tom_pos(k)[2] for k in range(self.n_tom)])
+        vz = (z - self._tom_z) / (FRAME_SKIP * m.opt.timestep)
+        for k in range(self.n_tom):
+            inb = self.tom_in_basket(k)
+            if inb and not self._in_basket[k] and -self._tom_vz[k] > LAND_SPEED:
+                self._bruised[k] = hit = True
+            self._in_basket[k] = inb
+        self._tom_z, self._tom_vz = z, vz
+        return hit
 
     def unripe_bump_force(self):
         """pickripe: the largest contact force (N) between the robot and a tomato that is not ripe."""
@@ -1440,7 +1487,7 @@ class FlyPandaEnv(gym.Env):
         if self.harvest:
             info.update(picked=not self.attached, plant_touch_steps=self._plant_hits)
             if self.n_tom > 1:
-                info.update(unripe_bump_steps=self._bumps)
+                info.update(damage_steps=self._bumps, bruised=sum(self._bruised))
         if self.n_tom > 1:
             ripe = [k for k in range(self.n_tom) if self.ripe[k] == 2]
             info.update(n_ripe=len(ripe), ripe_in_basket=sum(self.tom_in_basket(k) for k in ripe),
@@ -1697,7 +1744,7 @@ def place_teacher(env):
     return a
 
 
-def harvest_teacher(env):
+def _harvest_teacher_raw(env):
     """Harvest teacher (TRUE tomato, plant and basket positions; training targets only). Stateless, the hand
     tilted towards the plant (APPROACH): on the vine, not held -> line up PRE_GRASP back along the approach
     line (backing out first if close but off the line), go in along it with the hand open, close; held on the
@@ -1766,7 +1813,7 @@ def harvest_teacher(env):
                 a[3] = -1.0
     elif env.is_grasped():
         c = env.bin_pos()
-        want = np.array([c[0], c[1], c[2] + env.rest_z + HARVEST_CARRY])
+        want = np.array([c[0], c[1], c[2] + env.rest_z + (HARVEST_CARRY_GENTLE if env.gentle else HARVEST_CARRY)])
         a[3] = -1.0
         if np.linalg.norm(tom[:2] - c[:2]) < 0.012:
             a[3] = 1.0                                         # over the basket: let go (wide open)
@@ -1780,4 +1827,16 @@ def harvest_teacher(env):
         target = tcp.copy()
         a[3] = 1.0
     a[:3] = np.clip((target - tcp) / STEP * 0.6, -1, 1)
+    return a
+
+
+def harvest_teacher(env):
+    """Harvest teacher (see _harvest_teacher_raw). gentle: the final approach among the fruit is slow, as human
+    pickers and harvesting robots do it (fast moves near the truss knocked tomatoes harder than DAMAGE_FORCE)."""
+    a = _harvest_teacher_raw(env)
+    if env.n_tom > 1 and getattr(env, "gentle", False) and any(env.att):
+        tcp = env.tcp_pos()
+        near = min(np.linalg.norm(tcp - env.tom_pos(k)) for k in range(env.n_tom) if env.att[k])
+        if near < SLOW_NEAR:
+            a[:3] = np.clip(a[:3], -SLOW_MAX, SLOW_MAX)
     return a
