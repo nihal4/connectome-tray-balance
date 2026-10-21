@@ -44,7 +44,8 @@ def episodes(n, seed0, **kw):
         res.append(dict(seed=seed0 + i, ripeness=ripeness, n_ripe=info['n_ripe'], success=bool(info['is_success']),
                         ripe_in_basket=int(info['ripe_in_basket']), ripe_picked=int(info['ripe_picked']),
                         unripe_picked=int(info['unripe_picked']), steps=t_done,
-                        plant_touch_steps=int(info['plant_touch_steps'])))
+                        plant_touch_steps=int(info['plant_touch_steps']),
+                        unripe_bump_steps=int(info.get('unripe_bump_steps', 0))))
     return res
 
 
@@ -54,7 +55,8 @@ def summary(res, title):
     st = [r['steps'] for r in res if r['steps']]
     print(f"{title}: {len(res)} layouts | solved {np.mean([r['success'] for r in res]):.0%} | ripe tomatoes into the basket "
           f"{sum(r['ripe_in_basket'] for r in res)}/{ripe} | unripe picked {sum(r['unripe_picked'] for r in res)}/{unripe} "
-          f"(in {np.mean([r['unripe_picked'] > 0 for r in res]):.0%} of layouts) | steps median {np.median(st) if st else '-'}", flush=True)
+          f"(in {np.mean([r['unripe_picked'] > 0 for r in res]):.0%} of layouts) | unripe bumped >5 N in "
+          f"{np.mean([r.get('unripe_bump_steps', 0) > 0 for r in res]):.0%} of layouts | steps median {np.median(st) if st else '-'}", flush=True)
     for k in (1, 2):
         sub = [r for r in res if r['n_ripe'] == k]
         if sub:

@@ -140,6 +140,8 @@ YAW_W = 0.3                  # IK weight of turning about the finger axis (vs ti
 HOME_HARVEST = np.array([0.0, -0.07, 0.0, -2.705, 0.0, 3.159, 0.785])   # arm posture with that hand
 HOME_HARVEST_TCP = np.array([0.50, 0.0, 0.22])    # where it puts the TCP
 PLANT_PENALTY = 0.5          # reward lost per step while the robot touches the plant
+BUMP_FORCE = 5.0          # pickripe: pressing an unripe tomato harder than this (N) counts as a bump (bruising)
+BUMP_PENALTY = 0.5        # per bump step, like touching the plant
 # pickripe (phase 2): three tomatoes on a truss that runs sideways (along y) at the end of the branch
 TRUSS_Y = (0.0, -0.065, 0.065)            # tomato slots (slot 0 = the middle one, called "block")
 TOM_LO3 = np.array([0.50, -0.08, 0.13])   # where the middle tomato hangs
@@ -148,6 +150,7 @@ RIPENESS = ("green", "turning", "ripe")
 RIPE_RGBA = ([0.36, 0.62, 0.18, 1], [0.92, 0.50, 0.14, 1], [0.85, 0.12, 0.08, 1])
 RIPE_SMELL = (0.1, 0.4, 1.0)              # how strongly each stage smells of ripe fruit (fewer esters when unripe)
 PICK_OPEN = 0.35                          # teacher: open the hand only this far (5.5 cm) between neighbours
+SCAN_BACK = 0.10                          # observation pose: 10 cm back along the approach line from the home pose
 TEACHER_SCAN = True                       # teacher: after each tomato in the basket, back to the home (observation) pose
 LOOK_BACK = 0.12                          # teacher: first come to 12 cm in front of the middle of the truss
 LOOK_NEAR = 0.13                          # (from further away the fly eye cannot tell the three tomatoes apart)
@@ -567,6 +570,7 @@ class FlyPandaEnv(gym.Env):
         self.tom_q, self.tom_geoms, self.stalks = [self.block_q], [self.block_geom], [0]
         self._unripe_picked = 0
         self._plant_hits = 0
+        self._bumps = 0
         if self.harvest:
             self._block_spec, self._obj_r, self.rest_z = TOMATO_RED, TOM_R, BIN_FLOOR + TOM_R
             y = np.array([0, -1.0, 0])
@@ -1210,6 +1214,7 @@ class FlyPandaEnv(gym.Env):
         if self.task in ("place", "sort", "smell", "harvest", "pickripe"):   # where the block should end up
             self._goal = self.bin_pos() + np.array([0, 0, self.rest_z])
         self._plant_hits = 0
+        self._bumps = 0
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
         self._hold = 0
@@ -1337,9 +1342,27 @@ class FlyPandaEnv(gym.Env):
         self._plant_hits += touched
         if touched:
             r -= PLANT_PENALTY / 7.0
+        f = self.unripe_bump_force()                            # bumping a green / turning tomato hard bruises it
+        if f > BUMP_FORCE:
+            self._bumps += 1
+            r -= BUMP_PENALTY / 7.0
         if self._unripe_picked:
             r = -0.3
         return r, success, float(np.linalg.norm(self.tcp_pos() - self.block_pos()))
+
+    def unripe_bump_force(self):
+        """pickripe: the largest contact force (N) between the robot and a tomato that is not ripe."""
+        m, d, worst = self.model, self.data, 0.0
+        geoms = {self.tom_geoms[k] for k in range(self.n_tom) if self.ripe[k] != 2}
+        f = np.zeros(6)
+        for i in range(d.ncon):
+            c = d.contact[i]
+            if c.geom1 in geoms or c.geom2 in geoms:
+                other = c.geom2 if c.geom1 in geoms else c.geom1
+                if m.geom_bodyid[other] in self.robot_bodies:
+                    mujoco.mj_contactForce(m, d, i, f)
+                    worst = max(worst, abs(f[0]))
+        return worst
 
     def _touching(self, k):
         g, self.block_geom = self.block_geom, self.tom_geoms[k]
@@ -1416,6 +1439,8 @@ class FlyPandaEnv(gym.Env):
             info.update(in_bin=self.in_bin())
         if self.harvest:
             info.update(picked=not self.attached, plant_touch_steps=self._plant_hits)
+            if self.n_tom > 1:
+                info.update(unripe_bump_steps=self._bumps)
         if self.n_tom > 1:
             ripe = [k for k in range(self.n_tom) if self.ripe[k] == 2]
             info.update(n_ripe=len(ripe), ripe_in_basket=sum(self.tom_in_basket(k) for k in ripe),
@@ -1697,9 +1722,15 @@ def harvest_teacher(env):
             env._t_home = True
         env._t_in = n_in
         if env._t_home and not env.is_grasped():
-            if np.linalg.norm(tcp - HOME_HARVEST_TCP) > 0.03:
+            # a safe route, clear of the truss: straight up out of the basket to the height of the observation
+            # pose, then across to it. The pose is the home pose backed off along the approach line (higher and
+            # further from the plant), so the camera sees the whole truss and the hand stays off the fruit.
+            obs_pose = HOME_HARVEST_TCP - SCAN_BACK * APPROACH
+            if np.linalg.norm(tcp - obs_pose) > 0.03:
+                up_first = tcp[2] < obs_pose[2] - 0.03 and np.linalg.norm((tcp - obs_pose)[:2]) > 0.04
+                goal = np.array([tcp[0], tcp[1], obs_pose[2]]) if up_first else obs_pose
                 a[3] = open_a
-                a[:3] = np.clip((HOME_HARVEST_TCP - tcp) / STEP * 0.6, -1, 1)
+                a[:3] = np.clip((goal - tcp) / STEP * 0.6, -1, 1)
                 return a
             env._t_home = False
     if env.n_tom > 1 and env.attached and not env.is_grasped():
