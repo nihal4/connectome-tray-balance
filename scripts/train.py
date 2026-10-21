@@ -90,6 +90,9 @@ def parse():
     ap.add_argument("--wrist_cam", choices=["rgbd"], default=None,
                     help="panda: the wrist eye is a close-range depth camera (D405-like) feeding the same wrist-eye "
                          "input neurons (training AND evaluation; saved in config)")
+    ap.add_argument("--ripe_max", type=int, choices=[1, 2], default=None,
+                    help="panda_pickripe: at most this many ripe tomatoes per truss (1 = choose one of three; task "
+                         "definition, saved in config)")
     ap.add_argument("--set_std", type=float, default=None,
                     help="resumed run: reset the exploration noise (action std) to this value, ONCE "
                          "(remembered in the run folder, so a later restart does not reset it again)")
@@ -150,7 +153,7 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -162,6 +165,9 @@ def main():
     if args.eye_adapt:            # robot property: applies to training and evaluation
         env_kw["eye_adapt"] = True
         print("[train] eyes adapt to the light level (photoreceptor gain control)")
+    if args.ripe_max:             # task definition: applies to training and evaluation
+        env_kw["ripe_max"] = args.ripe_max
+        print(f"[train] at most {args.ripe_max} ripe tomato(es) per truss")
     if args.wrist_cam:            # robot property: applies to training and evaluation
         env_kw["wrist_cam"] = args.wrist_cam
         print("[train] wrist eye -> depth camera (16 x 10 pixels of red, distance, green into the wrist-eye neurons)")
@@ -233,7 +239,7 @@ def main():
         mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
         parent.update(mask_inputs=mask)
         parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
-                      eye_adapt=bool(args.eye_adapt), wrist_cam=args.wrist_cam,
+                      eye_adapt=bool(args.eye_adapt), wrist_cam=args.wrist_cam, ripe_max=args.ripe_max,
                       n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
                       edge_bias=args.edge_bias, random_start=args.random_start, eval_episodes=cfg["eval_episodes"],
                       light_log=args.light_log, imitation={"rounds": args.imitate, "steps_per_round": args.imitate_steps,

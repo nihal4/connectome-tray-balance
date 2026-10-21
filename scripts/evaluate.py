@@ -100,6 +100,8 @@ def run_env_kw(run):
         kw["eye_adapt"] = True
     if cfg.get("wrist_cam"):                # robot property: the wrist eye is a depth camera
         kw["wrist_cam"] = cfg["wrist_cam"]
+    if cfg.get("ripe_max"):                 # task definition (panda_pickripe)
+        kw["ripe_max"] = cfg["ripe_max"]
     if cfg["env"].startswith(("drone", "panda")):
         import numpy as np
         brain = os.path.join(run, "subset.npz")

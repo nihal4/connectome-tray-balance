@@ -480,7 +480,7 @@ class FlyPandaEnv(gym.Env):
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
-                 wrist_cam=None, **_):
+                 wrist_cam=None, ripe_max=2, **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -612,6 +612,7 @@ class FlyPandaEnv(gym.Env):
         self.tomato_look = tomato_look
         assert wrist_cam in (None, "rgbd"), wrist_cam
         self.wrist_cam = wrist_cam
+        self.ripe_max = ripe_max                # pickripe: at most this many ripe tomatoes (1 = choose one of three)
         self._cam_r, self._cam_gain, self._cam_last = None, None, None
         if wrist_cam:                           # which wrist-eye facet each camera pixel feeds (one to one, by layout)
             from scipy.optimize import linear_sum_assignment
@@ -867,16 +868,16 @@ class FlyPandaEnv(gym.Env):
         return bool(np.all(np.abs(b[:2] - c[:2]) < BIN_IN) and b[2] < c[2] + self.rest_z + 2 * TOM_R + 0.012)
 
     def _update_target(self):
-        """pickripe: the tomato to work on: the one in the hand, else the nearest ripe one still on the vine
-        (keeping the current one while it is), else a ripe one not yet in the basket."""
+        """pickripe: the tomato to work on: the one in the hand, else the ripe one still on the vine nearest the
+        hand, else a ripe one not yet in the basket. A function of the present state only (no memory of earlier
+        choices), so the teacher's choice is one the memoryless student can make from what it senses now."""
         held = [k for k in range(self.n_tom) if self.grasped_tom(k)]
         if held:
             return self._set_target(held[0])
         on_vine = [k for k in range(self.n_tom) if self.ripe[k] == 2 and self.att[k]]
         if on_vine:
-            if self._tgt not in on_vine:
-                tcp = self.tcp_pos()
-                self._set_target(min(on_vine, key=lambda k: np.linalg.norm(self.tom_pos(k) - tcp)))
+            tcp = self.tcp_pos()
+            self._set_target(min(on_vine, key=lambda k: np.linalg.norm(self.tom_pos(k) - tcp)))
             return
         loose = [k for k in range(self.n_tom) if self.ripe[k] == 2 and not self.tom_in_basket(k)]
         if loose:
@@ -1105,7 +1106,7 @@ class FlyPandaEnv(gym.Env):
             toms = [tom + np.array([0, TRUSS_Y[k], 0]) for k in range(self.n_tom)]
             self.ripe = [2] * self.n_tom
             if self.n_tom > 1:                          # phase 2: 1 or 2 ripe, the rest green or turning
-                n_ripe = int(self.rng.integers(1, self.n_tom))
+                n_ripe = int(self.rng.integers(1, self.n_tom)) if self.ripe_max > 1 else 1
                 order = self.rng.permutation(self.n_tom)
                 for i, k in enumerate(order):
                     self.ripe[k] = 2 if i < n_ripe else int(self.rng.integers(0, 2))

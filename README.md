@@ -395,6 +395,12 @@ each pixel to the facet pointing the same way (one-to-one assignment by layout),
 pathways stay as they are; the head keeps the fly eye. Ripeness read-out from the wrist (8 and 12 cm in
 front of the truss, `scripts/info_pickripe.py 160 400 rgbd`): 100 % (fly eye: 85-92 %, head eye 53 %,
 smell 66 %). The imitation step measures the new inputs' statistics on a short teacher-driven warm-up.
+Camera run 1: 22 / 28 / 26 % after teacher rounds 1-3, then 0-2 % (the same collapse as with the fly eye, so
+seeing was not the only problem). Two changes: (1) the teacher chose its tomato with a memory (keep the
+current one while it is on the vine); in 12 % of the states with two ripe tomatoes this differed from the
+nearest one, i.e. from anything the memoryless brain could infer from what it senses now. The choice is now
+a function of the present state only (the ripe tomato nearest the hand). (2) A step in between:
+`--ripe_max 1`, exactly one ripe tomato among three (choose, pick, done), before two.
 
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
