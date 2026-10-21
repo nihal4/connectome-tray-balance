@@ -1403,11 +1403,26 @@ class FlyPandaEnv(gym.Env):
         out = np.zeros((h + 4, 2 * size + 6, 3))
         for e, x0 in ((1, 0), (0, size + 6)):
             if e == 1 and self.wrist_cam and getattr(self, "_cam_rgb", None) is not None:
-                q = 6                                    # the camera: colour image and distance (white = near)
+                # the camera, for people watching: its full-detail view (top) and what the brain gets (bottom:
+                # 16 x 10 colour, and distance, white = near, black = none)
+                if getattr(self, "_cam_view_r", None) is None:
+                    self._cam_view_r = mujoco.Renderer(self.model, 50, 80)
+                vr = self._cam_view_r
+                vr.update_scene(self.data, camera="wrist_cam", scene_option=self._cam_opt)
+                vr.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
+                full = vr.render().astype(np.float64) / 255.0
+                vr.enable_depth_rendering()
+                vr.update_scene(self.data, camera="wrist_cam", scene_option=self._cam_opt)
+                zf = vr.render().astype(np.float64)
+                vr.disable_depth_rendering()
+                nf = np.clip((CAM_MAX - zf) / (CAM_MAX - CAM_MIN), 0, 1) * (zf >= CAM_MIN)
+                out[2:52, 2:82] = full
+                out[2:52, 86:166] = nf[..., None]
+                q = 4
                 cam = np.repeat(np.repeat(np.clip(self._cam_rgb, 0, 1), q, 0), q, 1)
                 dep = np.repeat(np.repeat(np.repeat(self._cam_near[..., None], 3, 2), q, 0), q, 1)
-                out[2:2 + CAM_H * q, 2:2 + CAM_W * q] = cam
-                out[2:2 + CAM_H * q, 4 + CAM_W * q:4 + 2 * CAM_W * q] = dep
+                out[54:54 + CAM_H * q, 2:2 + CAM_W * q] = cam[:h - 52]
+                out[54:54 + CAM_H * q, 86:86 + CAM_W * q] = dep[:h - 52]
                 continue
             sl = slice(e * F, (e + 1) * F)
             az, el, val = self.facet_az[sl], self.facet_el[sl], img[sl]
@@ -1516,6 +1531,9 @@ class FlyPandaEnv(gym.Env):
         return np.asarray(img)
 
     def close(self):
+        if getattr(self, "_cam_view_r", None) is not None:
+            self._cam_view_r.close()
+            self._cam_view_r = None
         if self._cam_r is not None:
             self._cam_r.close()
             self._cam_r = None
