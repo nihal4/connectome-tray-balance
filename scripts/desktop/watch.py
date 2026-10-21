@@ -77,21 +77,31 @@ def record_tests(run, out, seeds=None, best=False):
     results = []
     tmp = out[:-4] + ".part.mp4"            # written frame by frame (little memory), renamed when complete
     writer = None
-    for seed in (seeds or TEST_SEEDS_BY_ENV.get(env_name, TEST_SEEDS)):
+    for ci, seed in enumerate(seeds or TEST_SEEDS_BY_ENV.get(env_name, TEST_SEEDS)):
         env = build_env(env_name, seed, render_mode="rgb_array", **run_env_kw(run))
         if writer is None:
-            writer = imageio.get_writer(tmp, fps=env.metadata.get("render_fps", 50))
+            writer = imageio.get_writer(tmp, fps=env.metadata.get("render_fps", 50), macro_block_size=8)
+        pres = None
+        if env_name.startswith("panda"):                # the presentation layout (as fly linkedin), small and fast
+            from scripts.linkedin_video import TEXT, Presenter
+            title, line = TEXT.get(env_name, (env_name, ""))
+            pres = Presenter(env, 960, 544, "16:9", ci, title, line, shadows=False, samples=4)
         obs, _ = env.reset(seed=seed)
         info, f = {}, None
-        for _ in range(env.max_steps):
+        for t in range(env.max_steps):
             a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
             obs, _, te, tr, info = env.step(a[0])
-            f = env.render()
-            if getattr(env, "vision", False):
-                f = add_eye_view(f, env.camera_frame())
+            if pres is not None:
+                f = pres.frame(t, info)
+            else:
+                f = env.render()
+                if getattr(env, "vision", False):
+                    f = add_eye_view(f, env.camera_frame())
             writer.append_data(f)
             if te or tr:
                 break
+        if pres is not None:
+            pres.close()
         ok = bool(info.get("is_success", False))
         results.append(ok)
         mark = f.copy()                            # last frame: green border = solved, red = not
