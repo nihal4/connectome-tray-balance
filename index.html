@@ -213,7 +213,8 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t8"><span class="n">8</span><span class="t">Panda arm: pick and place</span><span class="tag done">Done</span></a></li>
     <li><a href="#t9"><span class="n">9</span><span class="t">Panda arm: sort by colour</span><span class="tag done">Done</span></a></li>
     <li><a href="#t10"><span class="n">10</span><span class="t">Ripe or rotten by smell</span><span class="tag done">Done</span></a></li>
-    <li><a href="#roadmap"><span class="n">11+</span><span class="t">Real fruit, conveyor, formalin</span><span class="tag next">Planned</span></a></li>
+    <li><a href="#t11"><span class="n">11</span><span class="t">Greenhouse: pick a tomato off the plant</span><span class="tag done">Done</span></a></li>
+    <li><a href="#roadmap"><span class="n">12+</span><span class="t">Full greenhouse harvesting robot</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
 
@@ -951,16 +952,62 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     </details>
   </section>
 
+  <!-- 11 ----------------------------------------------------------------- -->
+  <section class="task" id="t11">
+    <div class="task-head"><span class="num">11</span><h3>Greenhouse, phase 1: pick a tomato off the plant</h3><span class="tag done">Done</span></div>
+    <p><strong>Towards a real job.</strong> The end goal is a greenhouse harvesting robot: an arm on a cart
+      that drives a loop through tomato rows, picks ripe tomatoes into a basket, removes rotten ones and
+      unloads after each lap. Phase 1 is the core skill. One cherry tomato hangs on its stalk from a plant;
+      the arm comes at it from the front and above, the way greenhouse harvesting robots do, closes on it,
+      pulls until the stalk snaps, and drops it into the basket beside the robot. Touching the plant costs
+      reward (a broken stem costs a grower weeks of fruit). Same brain as task 10, so it can still smell.</p>
+    <ul class="facts"><li>Picked into the basket: <b>98 %</b> of 200</li><li>Time to the basket: <b>2.4 s</b></li><li>Dropped: <b>1 %</b></li><li>Uneven light: <b>0 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v16_panda_harvest/showcase_best_brain.mp4" poster="results/v16_panda_harvest/poster_showcase_best_brain.jpg" controls muted loop playsinline preload="none"
+               aria-label="Seen from the aisle: the arm reaches into a tomato plant, grips a red cherry tomato, pulls it off and drops it into a basket beside the robot; one tomato is dropped"></video>
+        <figcaption><b>Picking</b> on new layouts (and one drop).</figcaption>
+      </figure>
+      <figure>
+        <video src="results/v16_panda_harvest/progress_0500k.mp4" poster="results/v16_panda_harvest/poster_progress_0500k.jpg" controls muted loop playsinline preload="none"
+               aria-label="The three fixed test plants at 500k steps: each tomato picked and dropped into the basket"></video>
+        <figcaption><b>Fixed test plants</b> at 500k steps.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v16_panda_harvest/curves.png"><img src="results/v16_panda_harvest/curves.png" alt="Learning curves: 0 to 96 percent over the ten teacher rounds, then 98 to 100 percent in practice" loading="lazy"></a>
+        <figcaption><b>Learning curves</b>: 96 % after copying the teacher, 100 % with practice.</figcaption>
+      </figure>
+    </div>
+    <details open>
+      <summary>What does it use smell for?</summary>
+      <table>
+        <thead><tr><th>Smell (50 layouts each)</th><th>Solved</th><th>Closest to the tomato</th></tr></thead>
+        <tbody>
+          <tr><td>Normal</td><td class="num yes">98 %</td><td class="num">0.5 cm</td></tr>
+          <tr><td>Antennae silenced</td><td class="num no">0 %</td><td class="num">4.1 cm</td></tr>
+          <tr><td>Smell coming from 6 cm beside the tomato</td><td class="num yes">96 %</td><td class="num">0.6 cm</td></tr>
+          <tr><td>Full-strength smell everywhere</td><td class="num no">20 %</td><td class="num">13.5 cm</td></tr>
+        </tbody>
+      </table>
+      <p>It finds the tomato by sight (moving the smell aside does not move the hand), but uses how strong the
+        smell gets as the hand closes in to time the grasp: without smell it stops 4 cm short and never closes.
+        Nobody taught it this; the teacher only ever moved by the true tomato position. Honest limits: the
+        plant the eyes and physics see is simple (a stem, a branch, the stalk, three leaves; the leafy plant
+        in the videos is drawn for viewers only), stems do not bend, and the hand brushes the stalk briefly in
+        most picks. Strongly uneven light breaks it, as in the sorting task.</p>
+    </details>
+  </section>
+
   <!-- roadmap ------------------------------------------------------------- -->
   <h2 id="roadmap">What's next</h2>
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Real fruit</b><span class="why">real mango shape, size and weight; colours from measured reflectance spectra as fly photoreceptors see them, rot spots; suction or pushing instead of a two-finger grasp; eyes only vs smell only vs both, and a conflict test (looks ripe, smells rotten)</span></li>
-    <li><b>Conveyor sorting station</b><span class="why">a single lane of fruit moving past the arm (as on real graders), then a random crowd: remove only the bad fruit without disturbing the rest, with mixed smells; find the fastest belt speed it can handle</span></li>
-    <li><b>Mushroom body</b><span class="why">add the fly's odour-learning centre and test whether the brain can learn a new smell rule</span></li>
-    <li><b>Formalin-treated or natural fruit</b><span class="why">reject adulterated fruit; there is no published data on how fly smell neurons respond to formaldehyde, so the fly response would be an assumption</span></li>
-    <li><b>Real arm</b><span class="why">test the vision part on a low-cost real arm with real fruit; smell stays in simulation (no sensor matches fly receptors)</span></li>
+    <li><b>Ripe or not</b><span class="why">a cluster of tomatoes at different ripeness (green, turning, red, as fly photoreceptors see them): pick only the ripe ones</span></li>
+    <li><b>Rotten and infected fruit</b><span class="why">grey mould and rot by look and smell, into a separate reject bin so it does not spread</span></li>
+    <li><b>A real plant</b><span class="why">leaves that hide fruit, bending stems, fruit at different heights, leaf shadows (uneven light)</span></li>
+    <li><b>The greenhouse loop</b><span class="why">the arm on a cart driving a loop through the rows, stopping at each plant, unloading after each lap</span></li>
+    <li><b>Mushroom body and real arm</b><span class="why">the fly's odour-learning centre; the vision part on a low-cost real arm with real cherry tomatoes</span></li>
   </ol>
 
   <h2>What is biological here, and what is not</h2>

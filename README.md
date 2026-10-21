@@ -350,6 +350,12 @@ Teacher (`harvest_teacher`, true positions, training targets only): line up behi
 approach line, go in, close, pull back and down until it snaps, carry gently, drop into the basket:
 99 % of 100 layouts, median 76 steps (3 s) of the 200 allowed.
 
+**Result (v16, `results/v16_panda_harvest/`):** 98 % of 200 new layouts picked into the basket, 1 % dropped;
+picked in 1.1 s and in the basket in 2.4 s (median; faster than the teacher). It finds the tomato by sight
+and uses the rising smell as the hand closes in to time the grasp: antennae silenced -> 0 % (stops 4 cm
+short), smell moved 6 cm aside -> 96 % (ignored), full-strength smell everywhere -> 20 %. Brief brushes of
+the stalk in 90 % of picks. Uneven light: 0 %.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
@@ -558,6 +564,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v13, sorting under changing light** (`results/v13_panda_sort_light/`): practising at x0.5-2 brightness; fixed-brightness success x0.7 92 %, x1.4 70 %, x2 62 % (v12: 15 / 0 / 0 %), still 0 % at x2.5; 91 % at normal light (v12 95 %).
 - **v14, sorting with light-adapting fly eyes** (`results/v14_panda_sort_adapt/`): photoreceptor adaptation in the eye model, practised at normal light only; 100 % at every fixed brightness x0.4-2.5, tinted light 98 %, uneven light 48-60 % (v12/v13: 3 %); 98 % of 300 new layouts sorted, none into a wrong bin.
 - **v15, ripe or rotten by smell** (`results/v15_panda_smell/`): brain grown with the fly's smell pathway; 98 % of 300 identical-looking fruits sorted, none into the wrong bin; antennae silenced: 50 % (always the ripe bin).
+- **v16, greenhouse phase 1: pick a tomato off the plant** (`results/v16_panda_harvest/`): 98 % of 200 layouts into the basket in 2.4 s; finds the tomato by sight, times the grasp by smell strength.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 
