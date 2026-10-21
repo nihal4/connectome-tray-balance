@@ -573,6 +573,10 @@ class FlyPandaEnv(gym.Env):
             self.att, self.ripe = [False] * self.n_tom, [2] * self.n_tom
             self.stalk = self.stalks[0]
             self.robot_bodies = set(range(1, m.body("hand").id + 1)) | {m.body(f).id for f in ("left_finger", "right_finger")}
+        # (phase 2) a 2-5 mm stalk or stem between eye and tomato does not hide a 3.2 cm tomato (one test ray
+        # through its centre otherwise hid it completely: from above, the stalk always crosses that ray)
+        self._thin = {m.geom(f"plant_{n}").id for n in ["stem", "branch", "pedicel", "truss"] +
+                      [f"pedicel{k}" for k in range(1, self.n_tom)]} if self.n_tom > 1 else set()
         self.n_priv = n_priv(task)
 
         self.n_vis = 2 * n_facets * N_CH
@@ -680,8 +684,8 @@ class FlyPandaEnv(gym.Env):
                 rel = d.geom_xpos[g] - origin
                 dist_b = np.linalg.norm(rel)
                 hit_d = mujoco.mj_ray(m, d, origin, rel / dist_b, self._occl_groups, 1, skip, gid1)
-                if gid1[0] != g and 0 <= hit_d < dist_b - 0.03:      # hidden behind the arm
-                    continue
+                if gid1[0] != g and 0 <= hit_d < dist_b - 0.03 and gid1[0] not in self._thin:   # hidden behind
+                    continue                                                                # the arm, a leaf
                 alpha = np.arcsin(min(r_eq / dist_b, 0.99))
                 theta = np.arccos(np.clip(fdir @ (rel / dist_b), -1, 1))
                 s2 = self.sigma ** 2

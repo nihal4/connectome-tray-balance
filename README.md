@@ -375,6 +375,14 @@ front of the middle of the truss, the same move whatever is ripe, and only then 
 Reason (first try, which reached 0 % after the teacher rounds): the fly eye's facets are ~11 deg apart, and
 from the head the three tomatoes are ~6 deg apart, so from a distance the truss is one blur and the student
 could not see which tomato the teacher was heading for. Close up, the wrist eye resolves them (~30 deg apart).
+Second try (best 20 % while copying the teacher, then worse as more of the data came from the student's own
+moves): checking what the brain's inputs reveal (`scripts/info_pickripe.py`: a linear read-out of "is this
+tomato ripe" from each sense, 400 layouts, chance 53 %) showed the head eye at chance (54 %) and the wrist
+eye at 85 % at 12 cm but at chance at 8 cm, exactly where the hand lines up for the grasp. Cause: the eye
+model hid an object whenever its single test ray (eye to centre) hit anything first, and from above that ray
+always crosses the tomato's own stalk. Thin plant parts (stem, branch, stalks) no longer hide tomatoes in
+phase 2: wrist eye 92 % at 8 cm (all senses 87 %), smell alone 65-67 %. (Phase 1 keeps the old rule, so its
+results stay reproducible; there the tomato was found from the plant and smell anyway.)
 
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
