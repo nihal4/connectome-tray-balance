@@ -62,7 +62,7 @@ def start_video(run, step_k, py):
 TEST_SEEDS = (7, 8, 9)      # the same three test rooms / mazes in every video, so videos compare
 # Panda: three blocks spread across the table (left-near, centre, right-far), so the clips
 # visibly show different positions: seed 1 = (0.39, +0.20), 24 = (0.52, 0.00), 4 = (0.64, -0.18)
-TEST_SEEDS_BY_ENV = {"panda_reach": (1, 24, 4), "panda_lift": (1, 24, 4), "panda_place": (1, 24, 4), "panda_sort": (13, 11, 10), "panda_smell": (2, 5, 8), "panda_harvest": (1, 3, 7)}
+TEST_SEEDS_BY_ENV = {"panda_reach": (1, 24, 4), "panda_lift": (1, 24, 4), "panda_place": (1, 24, 4), "panda_sort": (13, 11, 10), "panda_smell": (2, 5, 8), "panda_harvest": (1, 3, 7), "panda_pickripe": (3, 7, 10)}
 
 
 def record_tests(run, out, seeds=None, best=False):

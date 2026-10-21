@@ -356,6 +356,22 @@ and uses the rising smell as the hand closes in to time the grasp: antennae sile
 short), smell moved 6 cm aside -> 96 % (ignored), full-strength smell everywhere -> 20 %. Brief brushes of
 the stalk in 90 % of picks. Uneven light: 0 %.
 
+### Greenhouse, phase 2: pick only the ripe tomatoes (`panda_pickripe`)
+
+A truss of three cherry tomatoes hangs side by side (6.5 cm apart) at the end of the branch. Each is green,
+turning (orange) or ripe (red); one or two are ripe, the rest are not. Pick only the ripe ones into the
+basket, one at a time, and leave the others on the plant; picking an unripe tomato fails the episode
+(12 s allowed). Colours are approximate fly photoreceptor views: ripe red is dark to a fly, turning is less
+green, green tomatoes look much like the leaves (a little brighter, glossy skin). Riper tomatoes smell
+stronger (green 0.1, turning 0.4, ripe 1.0 of the ripe smell); the antennae get the sum of all three.
+The basket now stands on a 10 cm post on the cart: carrying low and far to a table-level basket twisted the
+arm into its joint limits. The thin stalks (pedicels, truss) bend out of the way of the hand in reality, so
+here they are seen but not solid; stem, branch and leaves stay solid. Test `all_look_ripe`: every tomato
+looks ripe to the eyes, so only smell can tell them apart (with `no_smell`: only colour).
+
+Teacher (the phase-1 teacher, working on the nearest ripe tomato still on the vine, hand opened only 5.5 cm
+between neighbours): 98 % of 60 layouts, never an unripe one picked.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;

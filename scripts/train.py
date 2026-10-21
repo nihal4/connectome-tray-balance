@@ -229,7 +229,7 @@ def main():
                       n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
                       edge_bias=args.edge_bias, random_start=args.random_start, eval_episodes=cfg["eval_episodes"],
                       light_log=args.light_log, imitation={"rounds": args.imitate, "steps_per_round": args.imitate_steps,
-                                 "teacher": ("ctb.envs.panda.harvest_teacher (true tomato, plant and basket positions" if args.env == "panda_harvest" else "ctb.envs.panda.place_teacher (true block and bin positions" if args.env in ("panda_place", "panda_sort", "panda_smell") else "ctb.envs.panda.lift_teacher (true block position") + "; training targets only)"})
+                                 "teacher": ("ctb.envs.panda.harvest_teacher (true tomato, plant and basket positions" if args.env in ("panda_harvest", "panda_pickripe") else "ctb.envs.panda.place_teacher (true block and bin positions" if args.env in ("panda_place", "panda_sort", "panda_smell") else "ctb.envs.panda.lift_teacher (true block position") + "; training targets only)"})
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)
         norm = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
