@@ -19,8 +19,10 @@ evaluation, videos or `fly eval`.
 
 With memory (--memory, ConnectomeRecurrentPolicy) the student's neuron activity carries over from
 step to step, during collection, testing and learning: the data is kept as stretches of consecutive
-steps, and the brain learns on 32-step pieces after a 16-step warm-up (burn-in) that rebuilds its
-state, with the error flowing back through time (truncated backpropagation through time).
+steps together with the student's neuron state saved every 16 steps. The brain learns on 48-step
+pieces, each started from the saved state and run through a 24-step warm-up (burn-in) first, with
+the error flowing back through time (truncated backpropagation through time) -- the stored-state +
+burn-in scheme of R2D2 (Kapturowski et al. 2019), which beats starting from zero.
 
 Output is an ordinary run folder (model.zip, vecnormalize.pkl, evaluations.npz, best_model.zip),
 so PPO can continue from it and the dashboard, videos and `fly eval` work as usual. Each round is
@@ -59,7 +61,8 @@ def _actor_step(policy, obs_brain, h):
     return policy.action_net(out), h
 
 
-BLOCK, CHUNK, BURN, N_CHUNKS = 256, 32, 16, 16      # memory: stored stretch, learned piece, warm-up, pieces per update
+# memory: stored stretch, learned piece, warm-up, pieces per update, neuron state saved every H_EVERY steps
+BLOCK, CHUNK, BURN, N_CHUNKS, H_EVERY = 256, 48, 24, 16, 16
 
 
 def _save_stats(norm, path):
@@ -128,12 +131,13 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     X = np.zeros((0, BLOCK, nb) if mem else (0, nb), np.float16)
     Y = np.zeros((0, BLOCK, 4) if mem else (0, 4), np.float32)
     S = np.zeros((0, BLOCK), bool)                 # memory: episode starts (neuron state reset there)
+    H = np.zeros((0, BLOCK // H_EVERY, n_neur), np.float16)   # memory: the student's neuron state, every H_EVERY steps
     data_f = os.path.join(out, "imitate_data.npz")
     if state["round"] > 0 and os.path.exists(data_f):      # the data collected so far (DAgger aggregates it)
         with np.load(data_f) as d:
             X, Y = d["X"], d["Y"]
             if mem:
-                S = d["S"]
+                S, H = d["S"], d["H"]
         log(f"[imitate] data set restored: {len(X) * (BLOCK if mem else 1):,} examples")
 
     def evaluate():
@@ -171,8 +175,11 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         cur = np.zeros(n_envs)
         h = torch.zeros(n_envs, n_neur)            # memory: the student's neuron state follows its own perception
         start = np.ones(n_envs, bool)
+        hs = []
         priv_raw = []
-        for _ in range(n_steps // n_envs):
+        for j in range(n_steps // n_envs):
+            if mem and j % H_EVERY == 0:           # state entering step j (already reset if an episode starts)
+                hs.append(h.numpy().astype(np.float16))
             teacher = np.array(venv.env_method("teacher_action"), dtype=np.float32)
             nobs = norm.normalize_obs(obs)
             if k == 0:
@@ -206,6 +213,8 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             nblk = xa.shape[1] // BLOCK
             cut = lambda a: a[:, :nblk * BLOCK].reshape(a.shape[0] * nblk, BLOCK, *a.shape[2:])  # noqa: E731
             xs, ys, S = [cut(xa)], [cut(ya)], np.concatenate([S, cut(sa)])
+            ha = np.stack(hs, 1)[:, :nblk * (BLOCK // H_EVERY)]
+            H = np.concatenate([H, ha.reshape(ha.shape[0] * nblk, BLOCK // H_EVERY, n_neur)])
         X = np.concatenate([X] + xs)
         Y = np.concatenate([Y] + ys)
         lim = cap // BLOCK if mem else cap
@@ -215,7 +224,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             idx = np.concatenate([np.sort(keep_old), np.arange(len(X) - new, len(X))])
             X, Y = X[idx], Y[idx]
             if mem:
-                S = S[idx]
+                S, H = S[idx], H[idx]
         n_ex = len(X) * (BLOCK if mem else 1)
         t_collect = time.time() - t0
         # ---- 2. train the fly brain on the teacher's moves --------------------------------------
@@ -228,7 +237,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         losses = []
         for u in range(n_up):
             if mem:
-                loss = _sequence_loss(model.policy, X, Y, S, rng, n_neur)
+                loss = _sequence_loss(model.policy, X, Y, S, H, rng)
             else:
                 b = rng.integers(0, len(X), batch)
                 pred = _actor_mean(model.policy, torch.as_tensor(X[b], dtype=torch.float32))
@@ -267,7 +276,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         state["round"] = k + 1
         torch.save(model.policy.state_dict(), os.path.join(out, "imitate_policy.pt"))
         with open(data_f + ".tmp", "wb") as f:                # the aggregated data, so a restart keeps it
-            np.savez(f, X=X, Y=Y, **({"S": S} if mem else {}))
+            np.savez(f, X=X, Y=Y, **({"S": S, "H": H} if mem else {}))
         os.replace(data_f + ".tmp", data_f)
         _save_stats(norm, os.path.join(out, "imitate_obs_stats.pkl"))
         with open(ckpt + ".tmp", "w") as f:
@@ -291,16 +300,18 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     return model
 
 
-def _sequence_loss(policy, X, Y, S, rng, n_neur):
-    """Memory: imitation error on N_CHUNKS pieces of CHUNK consecutive steps, each after a BURN-step
-    warm-up without learning (the neuron state is unknown where a piece starts; the warm-up rebuilds it)."""
+def _sequence_loss(policy, X, Y, S, H, rng):
+    """Memory: imitation error on N_CHUNKS pieces of CHUNK consecutive steps. Each piece starts from the
+    neuron state saved during collection and first runs BURN warm-up steps without learning: the saved
+    state comes from an older brain, the warm-up brings it up to date (R2D2's stored state + burn-in)."""
     blk = rng.integers(0, len(X), N_CHUNKS)
-    t0 = rng.integers(0, BLOCK - BURN - CHUNK + 1, N_CHUNKS)
+    k = rng.integers(0, (BLOCK - BURN - CHUNK) // H_EVERY + 1, N_CHUNKS)    # start at a saved state
+    t0 = k * H_EVERY
     rows = t0[:, None] + np.arange(BURN + CHUNK)[None]
     x = torch.as_tensor(X[blk[:, None], rows], dtype=torch.float32)      # (pieces, time, inputs)
     y = torch.as_tensor(Y[blk[:, None], rows[:, BURN:]])
     keep = torch.as_tensor(1.0 - S[blk[:, None], rows], dtype=torch.float32)   # 0 where an episode starts
-    h = torch.zeros(N_CHUNKS, n_neur)
+    h = torch.as_tensor(H[blk, k], dtype=torch.float32)
     with torch.no_grad():
         for t in range(BURN):
             _, h = _actor_step(policy, x[:, t], h * keep[:, t:t + 1])
