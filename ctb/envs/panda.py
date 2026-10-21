@@ -148,6 +148,7 @@ RIPENESS = ("green", "turning", "ripe")
 RIPE_RGBA = ([0.36, 0.62, 0.18, 1], [0.92, 0.50, 0.14, 1], [0.85, 0.12, 0.08, 1])
 RIPE_SMELL = (0.1, 0.4, 1.0)              # how strongly each stage smells of ripe fruit (fewer esters when unripe)
 PICK_OPEN = 0.35                          # teacher: open the hand only this far (5.5 cm) between neighbours
+TEACHER_SCAN = True                       # teacher: after each tomato in the basket, back to the home (observation) pose
 LOOK_BACK = 0.12                          # teacher: first come to 12 cm in front of the middle of the truss
 LOOK_NEAR = 0.13                          # (from further away the fly eye cannot tell the three tomatoes apart)
 BASKET3 = np.array([0.48, -0.28])         # phase 2: the basket stands on a post on the cart, 10 cm up (a long
@@ -1684,6 +1685,23 @@ def harvest_teacher(env):
         a[3] = open_a
         a[:3] = np.clip((tcp + np.array([-0.03, 0, 0.03]) - tcp) / STEP * 0.6, -1, 1)
         return a
+    if env.n_tom > 1 and TEACHER_SCAN:
+        # after a tomato lands in the basket, first go back to the home pose: from there the wrist camera sees the
+        # whole truss zone (as at the start of an episode). The way real harvesting robots work: return to an
+        # observation pose, look, then approach -- so the student never has to remember, over seconds of carrying,
+        # where the next tomato was (it learns "basket done -> go home", which it can see and feel).
+        n_in = sum(env.tom_in_basket(k) for k in range(env.n_tom) if env.ripe[k] == 2)
+        if env._steps == 0 or not hasattr(env, "_t_in"):
+            env._t_in, env._t_home = n_in, n_in > 0
+        if n_in > env._t_in:
+            env._t_home = True
+        env._t_in = n_in
+        if env._t_home and not env.is_grasped():
+            if np.linalg.norm(tcp - HOME_HARVEST_TCP) > 0.03:
+                a[3] = open_a
+                a[:3] = np.clip((HOME_HARVEST_TCP - tcp) / STEP * 0.6, -1, 1)
+                return a
+            env._t_home = False
     if env.n_tom > 1 and env.attached and not env.is_grasped():
         # the head eye's facets are ~11 deg apart and the three tomatoes ~6 deg apart from there: from a distance
         # the truss is one blur. So the teacher first brings the wrist eye close to the middle of the truss
