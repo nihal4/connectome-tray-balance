@@ -19,6 +19,7 @@ case "${1:-help}" in
     esac
     case "$EXTRA" in
       *--ripe_max\ 1*) NAME="$NAME-cam-1ripe" ;;                  # one ripe tomato per truss: its own run
+      *--ripe_max\ 2*) NAME="$NAME-cam-2ripe" ;;                  # up to two ripe tomatoes: its own run
       *--wrist_cam*) NAME="$NAME-cam" ;;                           # wrist depth camera: its own run
       *--eye_adapt*) NAME="$NAME-adapt" ;;                         # light-adapting eyes: its own run
       *--light_log*) NAME="$NAME-light" ;;                         # wide-light retraining: its own run
