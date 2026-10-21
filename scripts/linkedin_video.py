@@ -19,8 +19,8 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 
 REPO = "github.com/nihal4/connectome-tray-balance"
 TEXT = {    # env -> (title, one line on the task, label of the progress counter)
-    "panda_pickripe": ("Picking only the ripe tomato",
-                       "Three tomatoes on a truss: green, turning, ripe. Pick only the ripe one into the basket."),
+    "panda_pickripe": ("Picking only the ripe tomatoes",
+                       "Three tomatoes on a truss, each green, turning or ripe. Pick only the ripe ones into the basket."),
     "panda_harvest": ("Picking a tomato off the plant",
                       "Grip the cherry tomato, snap its stalk, carry it to the basket."),
     "panda_smell": ("Ripe or rotten, by smell alone",
