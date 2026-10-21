@@ -1361,6 +1361,11 @@ class FlyPandaEnv(gym.Env):
             r = 6.0 if released else 5.5
         return r, inside, released
 
+    def _bad_count(self):
+        """How often MuJoCo has flagged a blown-up state (NaN / huge position, velocity or acceleration)."""
+        W = mujoco.mjtWarning
+        return sum(int(self.data.warning[w].number) for w in (W.mjWARN_BADQPOS, W.mjWARN_BADQVEL, W.mjWARN_BADQACC))
+
     def step(self, action):
         a = np.clip(np.nan_to_num(np.asarray(action, dtype=np.float64)), -1, 1)    # a broken (NaN) command = stay still
         m, d = self.model, self.data
@@ -1379,6 +1384,7 @@ class FlyPandaEnv(gym.Env):
         else:
             self._grip_ctrl = float(np.clip(self._grip_ctrl + a[3] * 64, 0, 255))   # 4 steps to open/close
         d.ctrl[7] = self._grip_ctrl
+        bad0 = self._bad_count()
         for _ in range(FRAME_SKIP):
             mujoco.mj_step(m, d)
             if self.n_tom > 1:
@@ -1396,7 +1402,12 @@ class FlyPandaEnv(gym.Env):
             self._update_target()
         r, success, d_t = self._reward()
         truncated = self._steps >= self.max_steps
-        info = {"is_success": success, "dist": d_t}
+        # physics blew up (MuJoCo resets the state by itself then): end the episode as a failure, so a
+        # broken state never reaches the brain or the training data
+        unstable = self._bad_count() > bad0 or not np.isfinite(d.qpos).all()
+        if unstable:
+            r, success, truncated = 0.0, False, True
+        info = {"is_success": success, "dist": d_t, "sim_unstable": unstable}
         if self.task in ("lift", "place", "sort", "smell", "harvest", "pickripe"):
             info.update(grasped=self.is_grasped(), lift=self.lift_height(),
                         goal_dist=float(np.linalg.norm(self.block_pos() - self._goal)))
@@ -1413,7 +1424,10 @@ class FlyPandaEnv(gym.Env):
             info.update(fruit=("ripe", "rotten")[self._fruit], wrong_bin=self.in_wrong_bin())
         if self.task == "sort":
             info.update(colour=SORT_COLOURS[self._colour][0], wrong_bin=self.in_wrong_bin())
-        return self._get_obs(), float(r), False, truncated, info
+        obs = self._get_obs()
+        if unstable:
+            obs = np.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0)
+        return obs, float(np.nan_to_num(r)), False, truncated, info
 
     # ------------------------------------------------------------------ rendering
     def eye_view(self, size=190):
