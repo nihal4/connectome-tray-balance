@@ -51,6 +51,12 @@ case "${1:-help}" in
     echo "saved $Z ($(du -h "$Z" | cut -f1))"
     echo "download on the Mac:  http://$(hostname -I | awk '{print $1}'):8080/exports/$(basename "$Z")"
     echo "or:                   scp flybox:$Z ~/Downloads/" ;;
+  linkedin)
+    # a high-quality presentation video (1080p, title + result cards) of a run's best brain
+    cur; R="${2:-$NAME}"; D="$ROOT/runs/$R"; [ -d "$D" ] || { echo "no run $R"; exit 1; }
+    A="${3:-16:9}"; mkdir -p "$ROOT/exports"; O="$ROOT/exports/${R}_linkedin_$(echo "$A" | tr ':' 'x')_$(date +%Y%m%d-%H%M).mp4"
+    cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/linkedin_video.py --run "$D" --aspect "$A" --out "$O" \
+      && echo "download on the Mac:  http://$(hostname -I | awk '{print $1}'):8080/exports/$(basename "$O")" ;;
   update)  git -C "$REPO" pull && $U restart flybrain-watch && echo "code updated (fly restart to use it for training)" ;;
   eval)    cur; cd "$REPO" && "$ROOT/.venv/bin/python" scripts/evaluate.py --run "$ROOT/runs/$NAME" --robustness --episodes "${2:-20}" ;;
   showcase) cur; cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/showcase.py --run "$ROOT/runs/$NAME" --episodes "${2:-40}" ;;
@@ -63,6 +69,7 @@ fly log [N]                   follow the training log (Ctrl+C to leave; training
 fly eval [EPISODES]           robustness tests on the best model
 fly showcase [EPISODES]       film the best brain's successes on new random layouts (default 40 tried)
 fly export [RUN]              zip a run (curves, results, best model, latest progress video, log) to send
+fly linkedin [RUN] [ASPECT]   1080p presentation video of the best brain (ASPECT 16:9, 1:1 or 4:5) for posting
 fly update                    get the latest code from GitHub
 Dashboard with curves and progress videos: http://<this-pc>:8080
 HELP
