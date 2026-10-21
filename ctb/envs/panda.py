@@ -140,6 +140,8 @@ RIPENESS = ("green", "turning", "ripe")
 RIPE_RGBA = ([0.36, 0.62, 0.18, 1], [0.92, 0.50, 0.14, 1], [0.85, 0.12, 0.08, 1])
 RIPE_SMELL = (0.1, 0.4, 1.0)              # how strongly each stage smells of ripe fruit (fewer esters when unripe)
 PICK_OPEN = 0.35                          # teacher: open the hand only this far (5.5 cm) between neighbours
+LOOK_BACK = 0.12                          # teacher: first come to 12 cm in front of the middle of the truss
+LOOK_NEAR = 0.13                          # (from further away the fly eye cannot tell the three tomatoes apart)
 BASKET3 = np.array([0.48, -0.28])         # phase 2: the basket stands on a post on the cart, 10 cm up (a long
 BASKET3_Z = 0.10                          # carry at table height twisted the arm into its joint limits)
 
@@ -1541,6 +1543,16 @@ def harvest_teacher(env):
         a[3] = open_a
         a[:3] = np.clip((tcp + np.array([-0.03, 0, 0.03]) - tcp) / STEP * 0.6, -1, 1)
         return a
+    if env.n_tom > 1 and env.attached and not env.is_grasped():
+        # the head eye's facets are ~11 deg apart and the three tomatoes ~6 deg apart from there: from a distance
+        # the truss is one blur. So the teacher first brings the wrist eye close to the middle of the truss
+        # (the same move whichever tomato is ripe), and only then goes for a ripe one. Its far moves give
+        # nothing away that the student cannot see.
+        mid = env.data.mocap_pos[env.plant_mocap] + np.array([-BRANCH_LEN, 0, -PED_LEN - TOM_R])
+        if np.linalg.norm(tcp - mid) > LOOK_NEAR:
+            a[3] = open_a
+            a[:3] = np.clip((mid - LOOK_BACK * APPROACH - tcp) / STEP * 0.6, -1, 1)
+            return a
     if env.attached:
         if env.is_grasped() and env._grip_ctrl < 40:
             target = tcp + np.array([-0.03, 0, -0.03])         # pull it off
@@ -1556,7 +1568,7 @@ def harvest_teacher(env):
             elif ahead >= 0.035 and lat > 0.012 and is_open:   # line up behind it on the approach line
                 target = tom - PRE_GRASP * APPROACH
                 a[3] = open_a
-            elif (np.linalg.norm(rel) > 0.005 or np.linalg.norm(env.tcp_vel()) > 0.03) and is_open:
+            elif (np.linalg.norm(rel) > (0.005 if env.n_tom == 1 else 0.009) or np.linalg.norm(env.tcp_vel()) > 0.03) and is_open:
                 target = tom.copy()                            # straight in, open
                 a[3] = open_a
             else:

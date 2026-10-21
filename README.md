@@ -370,7 +370,11 @@ here they are seen but not solid; stem, branch and leaves stay solid. Test `all_
 looks ripe to the eyes, so only smell can tell them apart (with `no_smell`: only colour).
 
 Teacher (the phase-1 teacher, working on the nearest ripe tomato still on the vine, hand opened only 5.5 cm
-between neighbours): 98 % of 60 layouts, never an unripe one picked.
+between neighbours): 96 % of 80 layouts, never an unripe one picked. It first brings the hand to 12 cm in
+front of the middle of the truss, the same move whatever is ripe, and only then goes for a ripe tomato.
+Reason (first try, which reached 0 % after the teacher rounds): the fly eye's facets are ~11 deg apart, and
+from the head the three tomatoes are ~6 deg apart, so from a distance the truss is one blur and the student
+could not see which tomato the teacher was heading for. Close up, the wrist eye resolves them (~30 deg apart).
 
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
