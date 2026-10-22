@@ -348,8 +348,10 @@ def main():
         runs = find_runs(args.root)
         if pending is not None:
             proc, out, t0, run, mark = pending
-            if proc.poll() is None and time.time() - t0 > 1800:
+            if proc.poll() is None and time.time() - t0 > 5400:
                 proc.kill()                 # stuck: give up on this one, try again at the next mark
+                                            # (90 min: a two-camera run renders 3 views per step while training
+                                            # keeps the CPU busy; 30 min was too short)
             if proc.poll() is not None:
                 state = json.load(open(state_f)) if os.path.exists(state_f) else {}
                 state[run + "|tried"] = mark            # never retry the same mark over and over
