@@ -173,6 +173,21 @@ class Presenter:
                 frame.paste(im, (x0, int(yy)))
                 dr.text((x0 + 4 * s, yy + ins_h + 6 * s), cap, font=f_small, fill=(215, 220, 226))
             self._smell_meter(dr, x0, y0 + 2 * (ins_h + int(48 * s)), ins_w, f_small)
+        if self.insets is not None and getattr(env, "_hcam_rgb", None) is not None:  # the front camera, right column
+            ins_w = int(400 * s)
+            ins_h = int(ins_w * 0.625)
+            self.insets.update_scene(env.data, camera="head_cam", scene_option=env._cam_opt)
+            full = Image.fromarray(self.insets.render()).resize((ins_w, ins_h), Image.LANCZOS)
+            small = Image.fromarray((np.clip(env._hcam_rgb, 0, 1) * 255).astype(np.uint8)).resize((ins_w, ins_h), Image.NEAREST)
+            x0 = W - pad - ins_w - int(6 * s)
+            y0 = pad + int(6 * s)
+            for j, (im, cap) in enumerate(((full, "front depth camera (finds the fruit)"),
+                                           (small, "what the fly brain receives: 16 x 10 px"))):
+                yy = y0 + j * (ins_h + int(48 * s))
+                dr.rounded_rectangle((x0 - 6 * s, yy - 6 * s, x0 + ins_w + 6 * s, yy + ins_h + int(40 * s)),
+                                     radius=max(2, int(10 * s)), fill=(12, 14, 20, 210))
+                frame.paste(im, (x0, int(yy)))
+                dr.text((x0 + 4 * s, yy + ins_h + 6 * s), cap, font=f_small, fill=(215, 220, 226))
         return np.asarray(frame)
 
     def _smell_meter(self, dr, x0, y0, w, f_small):

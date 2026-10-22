@@ -18,6 +18,7 @@ case "${1:-help}" in
       *)         BRAIN=data/subset_flywire783_N1000.npz; EXTRA="${4:-}"; NAME="$ENV-connectome-real-s0" ;;
     esac
     case "$EXTRA" in
+      *--head_cam*) NAME="$NAME-2cam-2ripe-mem" ;;                 # + front camera facing the truss: its own run
       *--memory*--return_start*|*--return_start*--memory*) NAME="$NAME-cam-2ripe-mem" ;;   # fly brain with memory
       *--memory*) NAME="$NAME-cam-mem" ;;                         # fly brain with memory: its own run
       *--return_start*) NAME="$NAME-cam-2ripe-ret" ;;              # two ripe + practise the second pick
