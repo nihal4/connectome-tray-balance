@@ -66,7 +66,7 @@ def summary(res, title):
 t0 = time.time()
 out_d = {'clean': episodes(N, 140_000)}
 summary(out_d['clean'], 'clean')
-for name, kw in [('no_smell', dict(smell_off=True)), ('all_look_ripe', dict(tomato_look='all_ripe'))]:
+for name, kw in [('no_smell', dict(smell_off=True)), ('all_look_ripe', dict(tomato_look='all_ripe')), ('turning_smells_ripe', dict(smell_confuse=True))]:
     out_d[name] = episodes(NT, 145_000, **kw)
     summary(out_d[name], name)
 json.dump(out_d, open(out, 'w'))

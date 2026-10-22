@@ -509,7 +509,7 @@ class FlyPandaEnv(gym.Env):
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, gentle=False, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
-                 wrist_cam=None, head_cam=None, ripe_max=2, **_):
+                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -642,6 +642,8 @@ class FlyPandaEnv(gym.Env):
         self.smell_off, self.smell_noise_x = smell_off, smell_noise_x
         # tests only (pickripe): every tomato looks ripe to the eyes ("all_ripe"), so only smell can tell
         self.tomato_look = tomato_look
+        # test only (pickripe): turning tomatoes smell exactly like ripe ones, so only colour can tell them apart
+        self.smell_confuse = smell_confuse
         assert wrist_cam in (None, "rgbd"), wrist_cam
         self.wrist_cam = wrist_cam
         self.ripe_max = ripe_max                # pickripe: at most this many ripe tomatoes (1 = choose one of three)
@@ -1080,7 +1082,7 @@ class FlyPandaEnv(gym.Env):
         out = []
         for a in SMELL_ANTENNAE:
             if self.n_tom > 1:                  # pickripe: every tomato, riper ones smell stronger
-                near = sum(RIPE_SMELL[r] * np.exp(-float(np.sum((tcp + a - self.tom_pos(k)) ** 2)) / (2 * SMELL_SIGMA ** 2))
+                near = sum(RIPE_SMELL[2 if (self.smell_confuse and r == 1) else r] * np.exp(-float(np.sum((tcp + a - self.tom_pos(k)) ** 2)) / (2 * SMELL_SIGMA ** 2))
                            for k, r in enumerate(self.ripe))
             else:
                 d2 = float(np.sum((tcp + a - blk) ** 2))

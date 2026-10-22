@@ -71,6 +71,7 @@ TESTS_PANDA = {
     "no_smell": {"smell_off": True},                     # panda_smell: antennae silenced (chance = 50 %)
     "smell_noise_x3": {"smell_noise_x": 3.0},
     "all_look_ripe": {"tomato_look": "all_ripe"},          # panda_pickripe: every tomato looks ripe (smell only)
+    "turning_smells_ripe": {"smell_confuse": True},       # panda_pickripe: turning ones smell ripe (colour only)
 }
 
 
