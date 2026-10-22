@@ -153,6 +153,7 @@ BUMP_PENALTY = 0.5        # per bump step, like touching the plant
 # below it); visible bruising grows with impact energy (drop tests at 20-50 cm).
 GRIP_LIMIT = 3.0          # gripper actuator force cap -> median squeeze ~1.5 N on the fruit
 DAMAGE_FORCE = 5.0        # any robot contact on any tomato harder than this (N): bruised
+FLUNG_SPEED = 2.5         # m/s: a tomato this fast was flung / is falling far: episode over (failure)
 LAND_SPEED = 1.0          # m/s: landing in the basket faster than this (~5 cm free fall): bruised
 SLOW_NEAR, SLOW_MAX = 0.06, 0.5    # teacher: within 6 cm of the fruit, at most 0.5 x STEP per step (25 cm/s)
 HARVEST_CARRY_GENTLE = 0.07   # teacher: release lower over the basket (fall ~3 cm instead of ~7 cm)
@@ -614,6 +615,7 @@ class FlyPandaEnv(gym.Env):
                 m.actuator_forcerange[7] = [-GRIP_LIMIT, GRIP_LIMIT]   # feedback): squeeze stays under the bio-yield
             names = ["block"] + [f"tomato{k}" for k in range(1, self.n_tom)]
             self.tom_q = [m.jnt_qposadr[m.body(b).jntadr[0]] for b in names]
+            self.tom_dof = [m.jnt_dofadr[m.body(b).jntadr[0]] for b in names]
             self.tom_geoms = [m.geom(b).id for b in names]
             self.stalks = [m.equality("stalk" if k == 0 else f"stalk{k}").id for k in range(self.n_tom)]
             for k, e in enumerate(self.stalks):                          # (the compiler sets this from the start pose)
@@ -1482,6 +1484,18 @@ class FlyPandaEnv(gym.Env):
             r = 6.0 if released else 5.5
         return r, inside, released
 
+    def _fruit_flung(self):
+        """harvest: a tomato flung (faster than FLUNG_SPEED) or fallen below the table: in the simulator this is
+        what comes just before a blow-up (a fast small fruit sinks into the table), and for a real harvest the
+        fruit is lost anyway. Ends the episode as a failure (see step)."""
+        if not self.harvest:
+            return False
+        d = self.data
+        for k in range(self.n_tom):
+            if np.linalg.norm(d.qvel[self.tom_dof[k]:self.tom_dof[k] + 3]) > FLUNG_SPEED or self.tom_pos(k)[2] < -0.02:
+                return True
+        return False
+
     def _bad_count(self):
         """How often MuJoCo has flagged a blown-up state (NaN / huge position, velocity or acceleration)."""
         W = mujoco.mjtWarning
@@ -1525,7 +1539,7 @@ class FlyPandaEnv(gym.Env):
         truncated = self._steps >= self.max_steps
         # physics blew up (MuJoCo resets the state by itself then): end the episode as a failure, so a
         # broken state never reaches the brain or the training data
-        unstable = self._bad_count() > bad0 or not np.isfinite(d.qpos).all()
+        unstable = self._bad_count() > bad0 or not np.isfinite(d.qpos).all() or self._fruit_flung()
         if unstable:
             r, success, truncated = 0.0, False, True
         info = {"is_success": success, "dist": d_t, "sim_unstable": unstable}
