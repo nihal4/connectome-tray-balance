@@ -85,7 +85,7 @@ def record_tests(run, out, seeds=None, best=False):
         if env_name.startswith("panda"):                # the presentation layout (as fly linkedin), small and fast
             from scripts.linkedin_video import TEXT, Presenter
             title, line = TEXT.get(env_name, (env_name, ""))
-            pres = Presenter(env, 960, 544, "16:9", ci, title, line, shadows=False, samples=4)
+            pres = Presenter(env, 960, 544, "16:9", ci, title, line, shadows=False, samples=0)
         obs, _ = env.reset(seed=seed)
         model.reset_memory()
         info, f = {}, None
