@@ -4,6 +4,8 @@ Usage: python scripts/precision_smell.py RUN OUT.json [N] [N_NO_SMELL]
 N new layouts with smell, N_NO_SMELL with the antennae silenced. Per episode: fruit, solved, which
 bin it ended in (ripe = left, rotten = right, none), grasped. Prints fruit x bin tables.
 """
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (no display needed)
 import json
 import sys
 import time

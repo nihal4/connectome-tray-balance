@@ -6,6 +6,8 @@ basket, unripe ones picked, steps, plant contact. Then N_TEST layouts for each p
   no_smell       antennae silenced (colour only)
   all_look_ripe  every tomato looks ripe to the eyes (smell only)
 """
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (no display needed)
 import json
 import os
 import sys

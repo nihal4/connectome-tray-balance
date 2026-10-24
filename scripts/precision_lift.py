@@ -1,5 +1,7 @@
 """Precision of a lift brain (used for results/v10_panda_lift_imitate): same rules for every brain (goal rule: block within 2.5 cm of the
 point 8 cm above its start, held 5 steps). Usage: python scripts/precision_lift.py RUN OUT.json [random|map] [N]"""
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (no display needed)
 import sys, json, time
 import numpy as np
 import mujoco

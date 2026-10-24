@@ -6,6 +6,8 @@ Usage: python scripts/precision_place.py RUN OUT.json [random|map] [N]
 Per episode: solved (block resting in the bin, released, 0.2 s), when, whether it was grasped
 and carried, and where the block ended relative to the bin centre.
 """
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (no display needed)
 import json
 import sys
 import time

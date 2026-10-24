@@ -4,6 +4,8 @@ Usage: python scripts/light_sweep.py RUN OUT.json [N] [factors...]
 Each factor (default 0.4 0.5 0.7 1 1.4 2 2.5) is used for every one of N new layouts (the same
 layouts for every factor), best brain, evaluation conditions otherwise.
 """
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (no display needed)
 import json
 import sys
 import time

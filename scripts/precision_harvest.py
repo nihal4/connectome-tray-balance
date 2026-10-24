@@ -7,6 +7,8 @@ touching the plant. Then N_SMELL layouts for each smell probe, to see what the b
   smell_shift_6cm the smell comes from 6 cm beside the tomato (left or right, half each)
   smell_constant  full-strength smell everywhere (no rise as the hand gets close)
 """
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (no display needed)
 import json
 import sys
 import time

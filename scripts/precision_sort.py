@@ -5,6 +5,8 @@ N new random layouts (evaluation conditions). Per episode: block colour, solved,
 block ended in (left / centre / right / none), whether it was grasped and released, and the
 block-to-bin-centre distance when placed. Prints a colour x bin table (the confusion matrix).
 """
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")      # off-screen rendering (no display needed)
 import json
 import sys
 import time
