@@ -98,6 +98,11 @@ def parse():
                          "definition, saved in config)")
     ap.add_argument("--head_cam", choices=["rgbd"], default=None,
                     help="head eye -> fixed front depth camera facing the truss (finds the fruit left to pick)")
+    ap.add_argument("--smooth", action="store_true", default=None,
+                    help="panda_pickripe: small cost for touching tomatoes other than the one being picked, and the "
+                         "episode ends when the harvest is done (with the remaining success reward paid at once)")
+    ap.add_argument("--init_last", action="store_true",
+                    help="--init_from: start from the parent's LATEST brain (model.zip) instead of its best one")
     ap.add_argument("--gentle", action="store_true", default=None,
                     help="panda_pickripe: quality harvest -- force-limited gripper, low release, any bruise fails")
     ap.add_argument("--memory", action="store_true", default=None,
@@ -163,7 +168,15 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam", "smooth"):
+            if getattr(args, _k) is None and _saved.get(_k) is not None:
+                setattr(args, _k, _saved[_k])
+    _par = args.init_from if args.init_from and os.path.isdir(str(args.init_from)) else \
+        os.path.join(args.runs_dir, str(args.init_from))
+    if args.init_from and not args.imitate and not os.path.exists(model_path) and os.path.exists(os.path.join(_par, "config.json")):
+        # fine-tune: the same robot and task as the parent unless the job line says otherwise
+        _saved = json.load(open(os.path.join(_par, "config.json")))
+        for _k in ("grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -181,6 +194,9 @@ def main():
     if args.head_cam:             # robot property: applies to training and evaluation
         env_kw["head_cam"] = args.head_cam
         print("[train] head eye -> front depth camera facing the truss (16 x 10 pixels into the head-eye neurons)")
+    if args.smooth:               # task definition: applies to training and evaluation
+        env_kw["smooth"] = True
+        print("[train] smooth: touching other tomatoes costs a little; the episode ends when the harvest is done")
     if args.gentle:               # robot + task definition: applies to training and evaluation
         env_kw["gentle"] = True
         print("[train] gentle harvest: gripper force capped, low release, a bruised tomato fails the episode")
@@ -307,33 +323,39 @@ def main():
               f"{args.imitate} imitation rounds of {args.imitate_steps:,} steps, then PPO (lr {lr})")
         do_imitate = True
         reset = False
-    elif init or (args.memory and not os.path.exists(model_path)):
-        if args.memory:
-            raise SystemExit("--memory: start a new run with --init_from PARENT --imitate N --privileged")
+    elif init:
         # fine-tune: copy the parent's brain wiring + settings, load its BEST brain, fresh step count
         import shutil
         from ctb.policies import load_ppo
         shutil.copy(os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
         parent = json.load(open(os.path.join(init, "config.json")))
         parent.update(lift_reward=args.lift_reward or "height", env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
-                      random_start=args.random_start, eval_episodes=cfg["eval_episodes"])
+                      random_start=args.random_start, eval_episodes=cfg["eval_episodes"], smooth=bool(args.smooth),
+                      init_brain="latest" if args.init_last else "best")
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)
-        norm = VecNormalize.load(os.path.join(init, "vecnormalize.pkl"), venv)
+        src_model = "model.zip" if args.init_last else "best_model.zip"
+        src_vn = "vecnormalize.pkl" if args.init_last or not os.path.exists(os.path.join(init, "best_vecnormalize.pkl")) \
+            else "best_vecnormalize.pkl"                  # the input scaling that goes with that brain
+        norm = VecNormalize.load(os.path.join(init, src_vn), venv)
         # inputs that never changed in the parent task (e.g. touch, unused in reach) have
         # ~zero variance there; reset them so the new signal is not blown up to the clip limit
         flat = norm.obs_rms.var < 1e-6
         if flat.any():
             norm.obs_rms.mean[flat], norm.obs_rms.var[flat] = 0.0, 1.0
             print(f"[train] reset normalisation of {int(flat.sum())} input(s) unused in the parent task")
-        model = load_ppo(out, os.path.join(init, "best_model.zip"), env=norm, device=args.device,
+        model = load_ppo(out, os.path.join(init, src_model), env=norm, device=args.device,
                          custom={"learning_rate": lr, "lr_schedule": (lambda _: lr)})
+        if parent.get("memory"):
+            from ctb.policies import SEQ_LEN, chunk_rollout_buffer
+            chunk_rollout_buffer(model)
+            print(f"[train] memory run: PPO learns on {SEQ_LEN}-step pieces from stored neuron states")
         if args.std:
             with torch.no_grad():
                 model.policy.log_std.fill_(float(np.log(args.std)))
         venv = norm
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
-        print(f"[train] fine-tuning from {init}/best_model.zip (was at {model.num_timesteps:,} steps): "
+        print(f"[train] fine-tuning from {init}/{src_model} (was at {model.num_timesteps:,} steps): "
               f"lr={lr}" + (f", action std reset to {args.std}" if args.std else ""))
         model.num_timesteps = 0
         reset = True                       # this run counts its own steps from 0

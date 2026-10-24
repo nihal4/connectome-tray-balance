@@ -153,6 +153,8 @@ BUMP_PENALTY = 0.5        # per bump step, like touching the plant
 # below it); visible bruising grows with impact energy (drop tests at 20-50 cm).
 GRIP_LIMIT = 3.0          # gripper actuator force cap -> median squeeze ~1.5 N on the fruit
 DAMAGE_FORCE = 5.0        # any robot contact on any tomato harder than this (N): bruised
+TOUCH_PENALTY = 0.1       # smooth: per step touching a tomato other than the one being picked
+SUCCESS_GAMMA = 0.99      # smooth: PPO's discount, for the success reward paid at the end
 FLUNG_SPEED = 2.5         # m/s: a tomato this fast was flung / is falling far: episode over (failure)
 LAND_SPEED = 1.0          # m/s: landing in the basket faster than this (~5 cm free fall): bruised
 SLOW_NEAR, SLOW_MAX = 0.06, 0.5    # teacher: within 6 cm of the fruit, at most 0.5 x STEP per step (25 cm/s)
@@ -510,7 +512,7 @@ class FlyPandaEnv(gym.Env):
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, gentle=False, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
-                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, **_):
+                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -673,6 +675,10 @@ class FlyPandaEnv(gym.Env):
         # gentle (pickripe): handle the fruit as a quality harvest would -- a force-limited gripper, a low release
         # over the basket, and any bruise (squeeze, hard knock, hard landing) costs reward and fails the episode
         self.gentle = bool(gentle)
+        # smooth (pickripe): every step the robot touches a tomato it is not picking costs a little (a smoother
+        # pick), and the episode ends once the harvest is complete, with the rest of the episode's success reward
+        # paid at once (discounted as PPO sees it), so finishing early is never worse than before
+        self.smooth = bool(smooth)
         assert lift_reward in ("height", "goal"), lift_reward
         self.lift_reward = lift_reward
         # grip_mode: "delta" = each command nudges the finger target (old); "absolute" = the command
@@ -1279,6 +1285,7 @@ class FlyPandaEnv(gym.Env):
             self._goal = self.bin_pos() + np.array([0, 0, self.rest_z])
         self._plant_hits = 0
         self._bumps = 0
+        self._touches = 0
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
         self._hold = 0
@@ -1420,9 +1427,25 @@ class FlyPandaEnv(gym.Env):
                 success = False
                 if r >= 1.0:
                     r = 0.9
+        if self.smooth:
+            if self._touching_others():
+                self._touches += 1
+                r -= TOUCH_PENALTY / 7.0
         if self._unripe_picked:
             r = -0.3
         return r, success, float(np.linalg.norm(self.tcp_pos() - self.block_pos()))
+
+    def _touching_others(self):
+        """smooth: the robot touches (any force) a tomato other than the one it is working on."""
+        m, d = self.model, self.data
+        others = {self.tom_geoms[k] for k in range(self.n_tom) if k != self._tgt and not self.tom_in_basket(k)}
+        for i in range(d.ncon):
+            c = d.contact[i]
+            if c.geom1 in others or c.geom2 in others:
+                o = c.geom2 if c.geom1 in others else c.geom1
+                if m.geom_bodyid[o] in self.robot_bodies:
+                    return True
+        return False
 
     def _damage_check(self):
         """gentle: mark tomatoes bruised by a hard contact with the robot (> DAMAGE_FORCE) or a hard landing in the
@@ -1551,7 +1574,7 @@ class FlyPandaEnv(gym.Env):
         if self.harvest:
             info.update(picked=not self.attached, plant_touch_steps=self._plant_hits)
             if self.n_tom > 1:
-                info.update(damage_steps=self._bumps, bruised=sum(self._bruised))
+                info.update(damage_steps=self._bumps, bruised=sum(self._bruised), touch_steps=self._touches)
         if self.n_tom > 1:
             ripe = [k for k in range(self.n_tom) if self.ripe[k] == 2]
             info.update(n_ripe=len(ripe), ripe_in_basket=sum(self.tom_in_basket(k) for k in ripe),
@@ -1561,10 +1584,17 @@ class FlyPandaEnv(gym.Env):
             info.update(fruit=("ripe", "rotten")[self._fruit], wrong_bin=self.in_wrong_bin())
         if self.task == "sort":
             info.update(colour=SORT_COLOURS[self._colour][0], wrong_bin=self.in_wrong_bin())
+        terminated = False
+        if self.smooth and self.n_tom > 1 and success:
+            # done: end here, and pay the success reward of the remaining steps at once (discounted with PPO's
+            # gamma), exactly what staying solved until the time limit was worth
+            rem = self.max_steps - self._steps
+            r += SUCCESS_GAMMA * (1 - SUCCESS_GAMMA ** rem) / (1 - SUCCESS_GAMMA)
+            terminated = True
         obs = self._get_obs()
         if unstable:
             obs = np.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0)
-        return obs, float(np.nan_to_num(r)), False, truncated, info
+        return obs, float(np.nan_to_num(r)), terminated, truncated and not terminated, info
 
     # ------------------------------------------------------------------ rendering
     def eye_view(self, size=190):

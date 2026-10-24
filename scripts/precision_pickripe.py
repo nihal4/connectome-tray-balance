@@ -7,6 +7,7 @@ basket, unripe ones picked, steps, plant contact. Then N_TEST layouts for each p
   all_look_ripe  every tomato looks ripe to the eyes (smell only)
 """
 import json
+import os
 import sys
 import time
 
@@ -23,8 +24,10 @@ from scripts.evaluate import load, make_norm, run_env_kw  # noqa: E402
 run, out = sys.argv[1], sys.argv[2]
 N = int(sys.argv[3]) if len(sys.argv) > 3 else 200
 NT = int(sys.argv[4]) if len(sys.argv) > 4 else 50
-model = load(run, best=True)
-vn = make_norm(run, {}, best=True)
+BEST = os.environ.get("BRAIN", "best") != "last"        # BRAIN=last: the latest brain (model.zip) instead of the best
+model = load(run, best=BEST)
+vn = make_norm(run, {}, best=BEST)
+print("brain:", "best_model.zip" if BEST else "model.zip (latest)", flush=True)
 
 
 def episodes(n, seed0, **kw):
@@ -34,10 +37,11 @@ def episodes(n, seed0, **kw):
         obs, _ = env.reset(seed=seed0 + i)
         model.reset_memory()
         ripeness = [RIPENESS[r] for r in env.ripe]
-        t_done = None
+        t_done, touch_steps = None, 0
         for t in range(env.max_steps):
             a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
             obs, r, te, tr, info = env.step(a[0])
+            touch_steps += env._touching_others()          # touching a tomato it is not picking (any force)
             if info['is_success']:
                 t_done = t + 1
                 break
@@ -45,7 +49,8 @@ def episodes(n, seed0, **kw):
                         ripe_in_basket=int(info['ripe_in_basket']), ripe_picked=int(info['ripe_picked']),
                         unripe_picked=int(info['unripe_picked']), steps=t_done,
                         plant_touch_steps=int(info['plant_touch_steps']),
-                        bruised=int(info.get('bruised', 0)), damage_steps=int(info.get('damage_steps', 0))))
+                        bruised=int(info.get('bruised', 0)), damage_steps=int(info.get('damage_steps', 0)),
+                        touch_steps=touch_steps))
     return res
 
 
@@ -56,7 +61,8 @@ def summary(res, title):
     print(f"{title}: {len(res)} layouts | solved {np.mean([r['success'] for r in res]):.0%} | ripe tomatoes into the basket "
           f"{sum(r['ripe_in_basket'] for r in res)}/{ripe} | unripe picked {sum(r['unripe_picked'] for r in res)}/{unripe} "
           f"(in {np.mean([r['unripe_picked'] > 0 for r in res]):.0%} of layouts) | tomatoes bruised {sum(r.get('bruised', 0) for r in res)} "
-          f"(in {np.mean([r.get('bruised', 0) > 0 for r in res]):.0%} of layouts) | steps median {np.median(st) if st else '-'}", flush=True)
+          f"(in {np.mean([r.get('bruised', 0) > 0 for r in res]):.0%} of layouts) | steps median {np.median(st) if st else '-'} | touching other tomatoes: "
+          f"{np.mean([r['touch_steps'] > 0 for r in res]):.0%} of layouts, mean {np.mean([r['touch_steps'] for r in res]):.1f} steps", flush=True)
     for k in (1, 2):
         sub = [r for r in res if r['n_ripe'] == k]
         if sub:
