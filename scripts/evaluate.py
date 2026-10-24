@@ -105,6 +105,8 @@ def run_env_kw(run):
         kw["ripe_max"] = cfg["ripe_max"]
     if cfg.get("head_cam"):                 # robot property: the head eye is a front depth camera
         kw["head_cam"] = cfg["head_cam"]
+    if cfg.get("head_fovy"):                # robot property: zoomed front camera
+        kw["head_fovy"] = cfg["head_fovy"]
     if cfg.get("smooth"):                   # task definition (panda_pickripe)
         kw["smooth"] = True
     if cfg.get("gentle"):                   # robot + task definition (panda_pickripe): quality harvest

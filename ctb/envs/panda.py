@@ -512,7 +512,7 @@ class FlyPandaEnv(gym.Env):
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, gentle=False, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
-                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, **_):
+                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, head_fovy=None, **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -654,6 +654,8 @@ class FlyPandaEnv(gym.Env):
         self._cam_r, self._cam_gain, self._cam_last = None, None, None
         assert head_cam in (None, "rgbd"), head_cam
         self.head_cam = head_cam
+        if head_fovy:                           # a narrower (zoomed) front camera: more pixels per tomato
+            m.cam_fovy[m.camera("head_cam").id] = float(head_fovy)
         self._hcam_r, self._hcam_gain, self._hcam_last = None, None, None
         if wrist_cam:                           # which wrist-eye facet each camera pixel feeds (one to one, by layout)
             self._cam_pix = self._pixel_map(1)

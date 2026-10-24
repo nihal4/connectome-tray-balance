@@ -98,6 +98,8 @@ def parse():
                          "definition, saved in config)")
     ap.add_argument("--head_cam", choices=["rgbd"], default=None,
                     help="head eye -> fixed front depth camera facing the truss (finds the fruit left to pick)")
+    ap.add_argument("--head_fovy", type=float, default=None,
+                    help="front camera's vertical field of view in degrees (default 34; 26 = zoomed, ~1.7x pixels per tomato)")
     ap.add_argument("--smooth", action="store_true", default=None,
                     help="panda_pickripe: small cost for touching tomatoes other than the one being picked, and the "
                          "episode ends when the harvest is done (with the remaining success reward paid at once)")
@@ -168,7 +170,7 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam", "smooth"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam", "smooth", "head_fovy"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     _par = args.init_from if args.init_from and os.path.isdir(str(args.init_from)) else \
@@ -176,7 +178,8 @@ def main():
     if args.init_from and not args.imitate and not os.path.exists(model_path) and os.path.exists(os.path.join(_par, "config.json")):
         # fine-tune: the same robot and task as the parent unless the job line says otherwise
         _saved = json.load(open(os.path.join(_par, "config.json")))
-        for _k in ("grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam"):
+        for _k in ("grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam",
+                   "smooth", "head_fovy"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -194,6 +197,9 @@ def main():
     if args.head_cam:             # robot property: applies to training and evaluation
         env_kw["head_cam"] = args.head_cam
         print("[train] head eye -> front depth camera facing the truss (16 x 10 pixels into the head-eye neurons)")
+    if args.head_fovy:            # robot property: applies to training and evaluation
+        env_kw["head_fovy"] = args.head_fovy
+        print(f"[train] front camera field of view {args.head_fovy:g} deg")
     if args.smooth:               # task definition: applies to training and evaluation
         env_kw["smooth"] = True
         print("[train] smooth: touching other tomatoes costs a little; the episode ends when the harvest is done")
@@ -331,6 +337,7 @@ def main():
         parent = json.load(open(os.path.join(init, "config.json")))
         parent.update(lift_reward=args.lift_reward or "height", env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
                       random_start=args.random_start, eval_episodes=cfg["eval_episodes"], smooth=bool(args.smooth),
+                      head_fovy=args.head_fovy,
                       init_brain="latest" if args.init_last else "best")
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)
