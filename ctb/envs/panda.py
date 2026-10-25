@@ -153,6 +153,7 @@ BUMP_PENALTY = 0.5        # per bump step, like touching the plant
 # below it); visible bruising grows with impact energy (drop tests at 20-50 cm).
 GRIP_LIMIT = 3.0          # gripper actuator force cap -> median squeeze ~1.5 N on the fruit
 DAMAGE_FORCE = 5.0        # any robot contact on any tomato harder than this (N): bruised
+GUARD_FORCE = 2.0         # guarded: pressing a tomato (not held) harder than this stops the hand advancing into it
 TOUCH_PENALTY = 0.1       # smooth: per step touching a tomato other than the one being picked
 SUCCESS_GAMMA = 0.99      # smooth: PPO's discount, for the success reward paid at the end
 FLUNG_SPEED = 2.5         # m/s: a tomato this fast was flung / is falling far: episode over (failure)
@@ -512,7 +513,7 @@ class FlyPandaEnv(gym.Env):
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, gentle=False, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
-                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, head_fovy=None, **_):
+                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, head_fovy=None, guarded=False, **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -681,6 +682,10 @@ class FlyPandaEnv(gym.Env):
         # pick), and the episode ends once the harvest is complete, with the rest of the episode's success reward
         # paid at once (discounted as PPO sees it), so finishing early is never worse than before
         self.smooth = bool(smooth)
+        # guarded (pickripe): a guarded move, as on real harvesting arms -- where the robot presses a tomato it is
+        # not holding harder than GUARD_FORCE, its hand target stops advancing towards that tomato (moving sideways
+        # or away is still allowed), so a stiff position-controlled arm cannot push on into the fruit
+        self.guarded = bool(guarded)
         assert lift_reward in ("height", "goal"), lift_reward
         self.lift_reward = lift_reward
         # grip_mode: "delta" = each command nudges the finger target (old); "absolute" = the command
@@ -1437,6 +1442,22 @@ class FlyPandaEnv(gym.Env):
             r = -0.3
         return r, success, float(np.linalg.norm(self.tcp_pos() - self.block_pos()))
 
+    def _pressed_tomatoes(self):
+        """guarded: tomatoes (not held in the hand) the robot presses harder than GUARD_FORCE right now."""
+        m, d, f, out = self.model, self.data, np.zeros(6), set()
+        geom_k = {self.tom_geoms[k]: k for k in range(self.n_tom)}
+        for i in range(d.ncon):
+            c = d.contact[i]
+            k = geom_k.get(c.geom1, geom_k.get(c.geom2))
+            if k is None or k in out or self.grasped_tom(k):
+                continue
+            o = c.geom2 if c.geom1 == self.tom_geoms[k] else c.geom1
+            if m.geom_bodyid[o] in self.robot_bodies:
+                mujoco.mj_contactForce(m, d, i, f)
+                if abs(f[0]) > GUARD_FORCE:
+                    out.add(k)
+        return out
+
     def _touching_others(self):
         """smooth: the robot touches (any force) a tomato other than the one it is working on."""
         m, d = self.model, self.data
@@ -1538,6 +1559,14 @@ class FlyPandaEnv(gym.Env):
         n = np.linalg.norm(off)
         if n > 0.05:
             self._target = tcp + off * 0.05 / n
+        if self.guarded and self.harvest:
+            for k in self._pressed_tomatoes():
+                away = tcp - self.tom_pos(k)
+                away /= np.linalg.norm(away) + 1e-9
+                off = self._target - tcp
+                into = float(off @ away)
+                if into < 0:                                 # the target lies towards the pressed tomato: stop there
+                    self._target = self._target - into * away
         d.ctrl[:7] = self._ik_solve(self._target, d.qpos[:7].copy())
         if self.grip_mode == "absolute":
             self._grip_ctrl = float((a[3] + 1) * 127.5)                        # -1 closed .. +1 open
