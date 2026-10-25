@@ -32,6 +32,7 @@ case "${1:-help}" in
       *--imitate*)   NAME="$NAME-imitate" ;;                       # teacher -> student: its own run
       *--init_from*) NAME="$NAME-ft" ;;                            # fine-tune = a new run next to its parent
     esac
+    [ "$ENV" = panda_pickmany ] && NAME="$ENV-connectome-real-s0-2cam-mem"   # phase 2c: one run name
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;
   start)   $U start flybrain-train && echo "started: $("$0" job)" ;;

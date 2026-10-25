@@ -169,8 +169,10 @@ MANY_N = (2, 6)                           # tomatoes on a truss
 MANY_GAP = (0.056, 0.066)                 # m along the truss between neighbours (4.4-5.4 cm: the teacher bruised
                                           # a neighbour in ~40 % of trusses; the gripper opens to 5.5 cm)
 MANY_DX = (0.004, 0.010)                  # m: each tomato this far in front of / behind the truss line, alternating
-MANY_PED = (0.030, 0.050)                 # m: pedicel lengths
+MANY_PED = (0.035, 0.045)                 # m: pedicel lengths (3-5 cm: the hand's palm knocked higher neighbours)
 MANY_YMAX = 0.15                          # every tomato within +-15 cm sideways (in the front camera's view)
+MANY_ZMIN = 0.15                          # m: the middle tomato's lowest height (TOM_LO3's 13 cm + a longer pedicel
+                                          # put some tomatoes below where the hand reaches)
 MANY_RIPE_MAX = 3                         # at most this many ripe on one truss (episode: 16 s)
 CLEAR_NEAR = 0.08                         # teacher (2c): a picked tomato closer than this to one on the vine backs out first
 PARK_Y = 3.0                              # where unused tomatoes hang (3 m to the side, invisible)
@@ -1251,6 +1253,7 @@ class FlyPandaEnv(gym.Env):
             tom = self.rng.uniform(TOM_LO, TOM_HI) if self.n_tom == 1 else self.rng.uniform(TOM_LO3, TOM_HI3)
             if self.many:
                 tom[1] = self._layout_many(tom[1])
+                tom[2] = max(tom[2], MANY_ZMIN)         # longer pedicels hang lower: keep every tomato reachable
             d.mocap_pos[self.plant_mocap] = tom + np.array([BRANCH_LEN, 0, PED_LEN + TOM_R])
             d.mocap_pos[self.look_mocap] = [tom[0] + BRANCH_LEN, tom[1], 0.0]
             toms = [d.mocap_pos[self.plant_mocap] + self._anchor[k] - np.array([0, 0, TOM_R]) for k in range(self.n_tom)]
@@ -2016,7 +2019,7 @@ def _harvest_teacher_raw(env):
             np.linalg.norm(tom - env.tom_pos(k)) < CLEAR_NEAR for k in range(env.n_tom) if env.att[k] and env.present[k]):
         # phase 2c: first back the picked tomato out of the truss (away from the plant, a little up), then carry
         a[3] = -1.0
-        a[:3] = np.clip(-APPROACH * 0.4 + np.array([0, 0, 0.3]), -0.5, 0.5)
+        a[:3] = np.clip(-APPROACH * 0.2 + np.array([0, 0, 0.15]), -0.25, 0.25)   # slowly: the grip is gentle
         return a
     elif env.is_grasped():
         c = env.bin_pos()
