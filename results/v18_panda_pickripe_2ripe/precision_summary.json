@@ -1,0 +1,168 @@
+{
+  "how": "scripts/precision_pickripe.py RUN OUT 200 50 (BRAIN=last for model.zip); the same 200 layouts (seeds 140000+) for every brain; tests 50 layouts each",
+  "2cam_mem_best (1.37M)": {
+    "clean": {
+      "solved": 0.82,
+      "solved_1ripe": 0.89,
+      "solved_2ripe": 0.76,
+      "ripe_into_basket": "289/310",
+      "unripe_picked": "6/290",
+      "unripe_picked_layouts": 0.02,
+      "bruised_tomatoes": 29,
+      "bruised_layouts": 0.11,
+      "steps_median": 131.0,
+      "touching_others_layouts": 0.34,
+      "touching_others_mean_steps": 1.5
+    },
+    "no_smell": {
+      "solved": 0.0
+    },
+    "all_look_ripe": {
+      "solved": 0.4,
+      "unripe_picked_layouts": 0.54
+    },
+    "turning_smells_ripe": {
+      "solved": 0.76,
+      "unripe_picked_layouts": 0.08
+    }
+  },
+  "2cam_mem_latest (2M)": {
+    "clean": {
+      "solved": 0.77,
+      "solved_1ripe": 0.82,
+      "solved_2ripe": 0.73,
+      "ripe_into_basket": "278/310",
+      "unripe_picked": "2/290",
+      "unripe_picked_layouts": 0.01,
+      "bruised_tomatoes": 25,
+      "bruised_layouts": 0.1,
+      "steps_median": 124.0,
+      "touching_others_layouts": 0.24,
+      "touching_others_mean_steps": 0.6
+    },
+    "no_smell": {
+      "solved": 0.0
+    },
+    "all_look_ripe": {
+      "solved": 0.44,
+      "unripe_picked_layouts": 0.42
+    },
+    "turning_smells_ripe": {
+      "solved": 0.78,
+      "unripe_picked_layouts": 0.02
+    }
+  },
+  "smooth_best (50k of the smooth fine-tune)": {
+    "clean": {
+      "solved": 0.79,
+      "solved_1ripe": 0.87,
+      "solved_2ripe": 0.73,
+      "ripe_into_basket": "286/310",
+      "unripe_picked": "8/290",
+      "unripe_picked_layouts": 0.04,
+      "bruised_tomatoes": 29,
+      "bruised_layouts": 0.09,
+      "steps_median": 123.0,
+      "touching_others_layouts": 0.28,
+      "touching_others_mean_steps": 2.6
+    },
+    "no_smell": {
+      "solved": 0.0
+    },
+    "all_look_ripe": {
+      "solved": 0.42,
+      "unripe_picked_layouts": 0.5
+    },
+    "turning_smells_ripe": {
+      "solved": 0.78,
+      "unripe_picked_layouts": 0.08
+    }
+  },
+  "zoom_best (final brain)": {
+    "clean": {
+      "solved": 0.79,
+      "solved_1ripe": 0.86,
+      "solved_2ripe": 0.74,
+      "ripe_into_basket": "286/310",
+      "unripe_picked": "1/290",
+      "unripe_picked_layouts": 0.005,
+      "bruised_tomatoes": 26,
+      "bruised_layouts": 0.1,
+      "steps_median": 121.5,
+      "touching_others_layouts": 0.25,
+      "touching_others_mean_steps": 0.8
+    },
+    "no_smell": {
+      "solved": 0.0
+    },
+    "all_look_ripe": {
+      "solved": 0.3,
+      "unripe_picked_layouts": 0.58
+    },
+    "turning_smells_ripe": {
+      "solved": 0.78,
+      "unripe_picked_layouts": 0.04
+    }
+  },
+  "zoom_latest": {
+    "clean": {
+      "solved": 0.75,
+      "solved_1ripe": 0.81,
+      "solved_2ripe": 0.7,
+      "ripe_into_basket": "281/310",
+      "unripe_picked": "2/290",
+      "unripe_picked_layouts": 0.01,
+      "bruised_tomatoes": 28,
+      "bruised_layouts": 0.12,
+      "steps_median": 114.5,
+      "touching_others_layouts": 0.25,
+      "touching_others_mean_steps": 0.7
+    },
+    "no_smell": {
+      "solved": 0.0
+    },
+    "all_look_ripe": {
+      "solved": 0.36,
+      "unripe_picked_layouts": 0.6
+    },
+    "turning_smells_ripe": {
+      "solved": 0.68,
+      "unripe_picked_layouts": 0.04
+    }
+  },
+  "zoom_best_failures (scripts/failures_pickripe.py, same 200 layouts)": {
+    "bruised a tomato": 19,
+    "ripe one picked but not in the basket": 8,
+    "never picked the second ripe one": 8,
+    "never picked the first ripe one": 5,
+    "a tomato flung / dropped far": 1,
+    "picked an unripe one": 1,
+    "first_bruises_by_moment": {
+      "approaching (ripe one being picked)": 9,
+      "closing on it": 6,
+      "approaching (neighbour)": 5,
+      "carrying": 4,
+      "pulling it off": 1
+    }
+  },
+  "ripeness_information (scripts/info_pickripe.py-style read-outs, 160 layouts)": {
+    "wrist camera at 12 / 8 cm in front of the truss": "100 % / 99 %",
+    "smell alone": "66-67 %",
+    "front camera pixel colour, turning vs ripe, from the observation pose": {
+      "34 deg": "93 %",
+      "26 deg (zoom)": "99 %",
+      "20 deg": "100 % but ~6 % of tomatoes out of view"
+    },
+    "wrist camera pixel colour from the observation pose": "96 %"
+  },
+  "observation_pose_visibility": {
+    "old (home pose)": "35 %",
+    "old (home, 10 cm back along the fingers)": "18 %",
+    "camera-aimed (25 cm above the truss area)": "98 %"
+  },
+  "guarded_moves (exported 2cam_mem best, 80 layouts)": {
+    "solved": "58 -> 60",
+    "bruise events": "21 -> 19",
+    "bruise failures": "11 -> 11"
+  }
+}

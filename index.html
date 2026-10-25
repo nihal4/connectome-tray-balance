@@ -215,7 +215,8 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t10"><span class="n">10</span><span class="t">Ripe or rotten by smell</span><span class="tag done">Done</span></a></li>
     <li><a href="#t11"><span class="n">11</span><span class="t">Greenhouse: pick a tomato off the plant</span><span class="tag done">Done</span></a></li>
     <li><a href="#t12"><span class="n">12</span><span class="t">Greenhouse: pick only the ripe tomato</span><span class="tag done">Done</span></a></li>
-    <li><a href="#roadmap"><span class="n">13+</span><span class="t">Full greenhouse harvesting robot</span><span class="tag next">Planned</span></a></li>
+    <li><a href="#t13"><span class="n">13</span><span class="t">Greenhouse: pick every ripe tomato</span><span class="tag done">Done</span></a></li>
+    <li><a href="#roadmap"><span class="n">14+</span><span class="t">Full greenhouse harvesting robot</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
 
@@ -1040,12 +1041,67 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     </details>
   </section>
 
+  <!-- 13 ----------------------------------------------------------------- -->
+  <section class="task" id="t13">
+    <div class="task-head"><span class="num">13</span><h3>Greenhouse, phase 2b: pick every ripe tomato, gently</h3><span class="tag done">Done</span></div>
+    <p><strong>Repeating, remembering, not bruising.</strong> One or two of the three tomatoes are ripe. The arm
+      must pick one, drop it in the basket, come back, find the next and pick it, without picking an unripe one
+      and without bruising any fruit: any knock harder than 5 N, or a hard landing in the basket, fails the
+      harvest. The robot got what real harvesters have: a <strong>front depth camera</strong> on the cart that
+      sees the whole truss (into the fly's head-eye neurons), a gripper whose force is capped below what bruises
+      a tomato, and an <strong>observation pose</strong> it returns to after each fruit. The fly brain got
+      <strong>memory</strong>: each neuron keeps part of its activity from one moment to the next.</p>
+    <ul class="facts"><li>Solved: <b>79&ndash;82 %</b> of 200</li><li>Unripe picked: <b>1</b> of 290</li><li>Time: <b>4.9 s</b></li><li>Memory wiped: 74&nbsp;&rarr;&nbsp;<b>62 %</b></li></ul>
+    <div class="gallery">
+      <figure>
+        <video src="results/v18_panda_pickripe_2ripe/progress_1000k_zoom.mp4" poster="results/v18_panda_pickripe_2ripe/poster_progress_1000k_zoom.jpg" controls muted loop playsinline preload="none"
+               aria-label="Three test trusses: the arm picks the ripe tomato straight away in two of them, and both ripe tomatoes one after the other in the third; insets show the wrist camera, the front camera, what the brain receives from each, and the smell at the hand"></video>
+        <figcaption><b>Final brain</b> on the test layouts: straight to the ripe one, and 2 of 2 in the last.</figcaption>
+      </figure>
+      <figure>
+        <a class="plot" href="results/v18_panda_pickripe_2ripe/curves.png"><img src="results/v18_panda_pickripe_2ripe/curves.png" alt="Learning curves of the final fine-tune: solved between 65 and 100 percent on 20-layout tests" loading="lazy"></a>
+        <figcaption><b>Final fine-tune</b>: 20-layout tests swing by &plusmn;15 points; the 200-layout test is the measure.</figcaption>
+      </figure>
+    </div>
+    <details open>
+      <summary>Each step, measured on the same 200 layouts</summary>
+      <table>
+        <thead><tr><th>Brain</th><th>Solved</th><th>Unripe picked</th><th>Bruised</th><th>Time</th></tr></thead>
+        <tbody>
+          <tr><td>Without memory and front camera (dashboard)</td><td class="num">~66 %</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">&ndash;</td></tr>
+          <tr><td>Two cameras + memory + gentle</td><td class="num yes">82 %</td><td class="num">2 %</td><td class="num">11 %</td><td class="num">5.2 s</td></tr>
+          <tr><td>+ smooth (touching other tomatoes costs)</td><td class="num">79 %</td><td class="num">4 %</td><td class="num">9 %</td><td class="num">4.9 s</td></tr>
+          <tr><td>+ front camera zoomed (34&deg; &rarr; 26&deg;)</td><td class="num">79 %</td><td class="num yes">0.5 %</td><td class="num">10 %</td><td class="num yes">4.9 s</td></tr>
+        </tbody>
+      </table>
+      <p>The zoom was found from the videos: the hand went to the orange tomato first, looked, then took the red
+        one. At 34&deg; a tomato covered about 1.4 pixels of the front camera; at the tomato's pixel, red and
+        orange were told apart 93 % of the time, at 26&deg; 99 %.</p>
+    </details>
+    <details>
+      <summary>What went wrong on the way</summary>
+      <ol>
+        <li><b>Memory made learning blow up</b>: carrying all of each neuron's activity over scrambled the copied
+          brain. Now each neuron learns how much to keep, starting at 5 %.</li>
+        <li><b>The second tomato was never taken</b>: the arm would have had to remember where it was for ~3 s of
+          carrying. Real harvesters look again; so does this one now, from a pose aimed by its camera.</li>
+        <li><b>The way back knocked tomatoes</b> (up to 80 N): now it rises out of the basket first.</li>
+        <li><b>Practice slowly made it worse</b> (90 % &rarr; 60 %): learning rate lowered.</li>
+        <li><b>The physics engine blew up</b> after a knocked tomato flew into the table: a flung tomato now ends
+          the try as a lost fruit.</li>
+      </ol>
+      <p>Honest limits: bruises still fail 10 % of layouts, mostly a finger hitting the ripe tomato on the final
+        approach (an impact within one 40 ms control step; stopping the push on contact did not help); a dropped
+        tomato 4 %; tinted or uneven light breaks the cameras (no white balance); one training run.</p>
+    </details>
+  </section>
+
   <!-- roadmap ------------------------------------------------------------- -->
   <h2 id="roadmap">What's next</h2>
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Two ripe tomatoes</b><span class="why">pick one, come back, pick the next; then any number</span></li>
+    <li><b>Any number of tomatoes</b><span class="why">trusses with 2&ndash;6 fruit at irregular positions, any number ripe; a gentler final approach</span></li>
     <li><b>Rotten and infected fruit</b><span class="why">grey mould and rot by look and smell, into a separate reject bin so it does not spread</span></li>
     <li><b>A real plant</b><span class="why">leaves that hide fruit, bending stems, fruit at different heights, leaf shadows (uneven light)</span></li>
     <li><b>The greenhouse loop</b><span class="why">the arm on a cart driving a loop through the rows, stopping at each plant, unloading after each lap</span></li>

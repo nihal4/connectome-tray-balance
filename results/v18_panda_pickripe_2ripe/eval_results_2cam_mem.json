@@ -1,0 +1,67 @@
+{
+  "clean": {
+    "return": 188.4,
+    "length": 300.0,
+    "success_rate": 0.74
+  },
+  "no_decoys": {
+    "return": 188.4,
+    "length": 300.0,
+    "success_rate": 0.74
+  },
+  "eye_noise_x3": {
+    "return": 192.5,
+    "length": 300.0,
+    "success_rate": 0.82
+  },
+  "dim_or_bright_x2": {
+    "return": 197.2,
+    "length": 295.4,
+    "success_rate": 0.7
+  },
+  "light_0.4x_or_2.5x": {
+    "return": 190.6,
+    "length": 300.0,
+    "success_rate": 0.72
+  },
+  "uneven_light": {
+    "return": 9.0,
+    "length": 281.4,
+    "success_rate": 0.0
+  },
+  "tinted_light": {
+    "return": 13.5,
+    "length": 300.0,
+    "success_rate": 0.0
+  },
+  "target_hidden": {
+    "return": 17.7,
+    "length": 300.0,
+    "success_rate": 0.0
+  },
+  "no_smell": {
+    "return": 17.7,
+    "length": 297.0,
+    "success_rate": 0.0
+  },
+  "smell_noise_x3": {
+    "return": 186.2,
+    "length": 297.8,
+    "success_rate": 0.68
+  },
+  "all_look_ripe": {
+    "return": 102.8,
+    "length": 299.4,
+    "success_rate": 0.52
+  },
+  "turning_smells_ripe": {
+    "return": 168.9,
+    "length": 300.0,
+    "success_rate": 0.66
+  },
+  "memory_wiped": {
+    "return": 172.2,
+    "length": 300.0,
+    "success_rate": 0.62
+  }
+}

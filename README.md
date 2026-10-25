@@ -413,6 +413,25 @@ the wrist camera does not see the truss, and the second ripe tomato is never tak
 only once per episode, so it gets little practice. `--return_start 0.3`: 30 % of the two-ripe training
 episodes start right after the first pick (one ripe tomato already in the basket, the hand over it).
 
+**Phase 2b result (v18, `results/v18_panda_pickripe_2ripe/`): 79-82 % of 200 new layouts, unripe picked in
+0.5 % of layouts, done in 4.9 s.** What it took (each found by measuring; details in the v18 README):
+- **Memory** (`--memory`): each neuron keeps a learned share of its activity between steps (a per-neuron
+  carry-over gate starting at 5 %; full carry-over made imitation diverge). Recurrent PPO (sb3-contrib) learns
+  on 32-step pieces from stored neuron states (RLlib / R2D2 style, 6-7x faster than replaying whole episodes);
+  imitation learns on 48-step pieces after a 24-step warm-up from the stored state. Wiping the memory every
+  step: 74 -> 62 %.
+- **An observation pose** after each tomato in the basket, aimed by the wrist camera's line of sight (it looks
+  almost straight down): the next tomato is in view in 98 % of layouts (35 % from the start pose). Remembering
+  the next tomato over ~3 s of carrying was beyond what the memory learned; real harvesters re-observe.
+- **A front depth camera** (`--head_cam rgbd`, like a RealSense D435) on the cart facing the truss, into the
+  head-eye neurons; zoomed to 26 deg (`--head_fovy 26`) red vs orange at the tomato pixel went from 93 % to
+  99 %, and unripe picks from 6-8 to 1 in 200 layouts.
+- **Gentle handling** (`--gentle`): gripper force capped at 3 N (a tomato yields at ~2.6 N), low release,
+  any contact above 5 N or a hard landing bruises the tomato and fails the episode. Plus `--smooth` (a small
+  cost for touching other tomatoes; the episode ends when done) and a guard against flung tomatoes.
+Remaining failures: bruises (10 % of layouts, mostly the finger hitting the ripe tomato on the final
+approach, impacts within one 40 ms step), a dropped tomato (4 %), a ripe one never taken (6 %).
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
@@ -623,6 +642,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v15, ripe or rotten by smell** (`results/v15_panda_smell/`): brain grown with the fly's smell pathway; 98 % of 300 identical-looking fruits sorted, none into the wrong bin; antennae silenced: 50 % (always the ripe bin).
 - **v16, greenhouse phase 1: pick a tomato off the plant** (`results/v16_panda_harvest/`): 98 % of 200 layouts into the basket in 2.4 s; finds the tomato by sight, times the grasp by smell strength.
 - **v17, greenhouse phase 2a: pick only the ripe tomato** (`results/v17_panda_pickripe_cam/`): wrist depth camera into the fly's wrist-eye neurons; 98 % of 200 layouts, 0 of 400 unripe picked.
+- **v18, greenhouse phase 2b: pick every ripe tomato** (`results/v18_panda_pickripe_2ripe/`): wrist and front depth cameras, smell, memory, gentle handling; 79-82 % of 200 layouts (one ripe 86 %, two ripe 74 %), 1 of 290 unripe picked, 4.9 s; bruises in 10 % of layouts remain the main failure.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 
