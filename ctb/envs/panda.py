@@ -162,6 +162,18 @@ SLOW_NEAR, SLOW_MAX = 0.06, 0.5    # teacher: within 6 cm of the fruit, at most 
 HARVEST_CARRY_GENTLE = 0.07   # teacher: release lower over the basket (fall ~3 cm instead of ~7 cm)
 # pickripe (phase 2): three tomatoes on a truss that runs sideways (along y) at the end of the branch
 TRUSS_Y = (0.0, -0.065, 0.065)            # tomato slots (slot 0 = the middle one, called "block")
+# phase 2c (panda_pickmany): a truss of 2-6 tomatoes at irregular places. Real cherry-tomato trusses carry their
+# fruit on alternating sides of the stalk (zig-zag), on pedicels of different lengths.
+MANY_MAX = 6                              # tomato bodies in the model (unused ones are parked out of sight)
+MANY_N = (2, 6)                           # tomatoes on a truss
+MANY_GAP = (0.056, 0.066)                 # m along the truss between neighbours (4.4-5.4 cm: the teacher bruised
+                                          # a neighbour in ~40 % of trusses; the gripper opens to 5.5 cm)
+MANY_DX = (0.004, 0.010)                  # m: each tomato this far in front of / behind the truss line, alternating
+MANY_PED = (0.030, 0.050)                 # m: pedicel lengths
+MANY_YMAX = 0.15                          # every tomato within +-15 cm sideways (in the front camera's view)
+MANY_RIPE_MAX = 3                         # at most this many ripe on one truss (episode: 16 s)
+CLEAR_NEAR = 0.08                         # teacher (2c): a picked tomato closer than this to one on the vine backs out first
+PARK_Y = 3.0                              # where unused tomatoes hang (3 m to the side, invisible)
 TOM_LO3 = np.array([0.50, -0.08, 0.13])   # where the middle tomato hangs
 TOM_HI3 = np.array([0.58, 0.08, 0.25])
 RIPENESS = ("green", "turning", "ripe")
@@ -182,7 +194,7 @@ BASKET3_Z = 0.10                          # carry at table height twisted the ar
 def n_priv(task):
     """Size of privileged_state() for a task (place adds the bin position and block-to-bin;
     sort also the block's colour, one-hot)."""
-    return N_PRIV + {"place": 6, "sort": 9, "smell": 8, "harvest": 8, "pickripe": 18}.get(task, 0)
+    return N_PRIV + {"place": 6, "sort": 9, "smell": 8, "harvest": 8, "pickripe": 18, "pickmany": 33}.get(task, 0)
 
 
 SORT_BINS = np.array([[0.60, 0.17], [0.60, 0.0], [0.60, -0.17]])   # sort: left, centre, right bin
@@ -385,12 +397,12 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False, n_tom=1):
                  ("pedicel", mujoco.mjtGeom.mjGEOM_CAPSULE, [0.0018, PED_LEN / 2, 0], [-BRANCH_LEN, 0, -PED_LEN / 2],
                   [1, 0, 0, 0], green)]
         if n_tom > 1:                            # the truss: sideways at the end of the branch, one pedicel per tomato
-            ty = max(abs(v) for v in TRUSS_Y[:n_tom])
+            ty = max(abs(v) for v in TRUSS_Y)
             parts.append(("truss", mujoco.mjtGeom.mjGEOM_CAPSULE, [0.0025, ty, 0], [-BRANCH_LEN, 0, 0],
                           [np.cos(np.pi / 4), np.sin(np.pi / 4), 0, 0], green))
             for k in range(1, n_tom):
                 parts.append((f"pedicel{k}", mujoco.mjtGeom.mjGEOM_CAPSULE, [0.0018, PED_LEN / 2, 0],
-                              [-BRANCH_LEN, TRUSS_Y[k], -PED_LEN / 2], [1, 0, 0, 0], green))
+                              [-BRANCH_LEN, TRUSS_Y[k] if k < len(TRUSS_Y) else 0.0, -PED_LEN / 2], [1, 0, 0, 0], green))
         for k, (lx, ly, lz) in enumerate([(0.04, 0.05, 0.07), (0.05, -0.05, -0.02), (0.04, 0.04, -0.11)]):
             parts.append((f"leaf{k}", mujoco.mjtGeom.mjGEOM_ELLIPSOID, [0.05, 0.03, 0.003], [lx, ly, lz],
                           _turn(np.array([0, 0, 1.0]), np.array([-0.5, 0, 1.0]) / np.sqrt(1.25)), leaf))
@@ -430,7 +442,7 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False, n_tom=1):
             eq.name = "stalk" if k == 0 else f"stalk{k}"
             eq.type, eq.objtype = mujoco.mjtEq.mjEQ_CONNECT, mujoco.mjtObj.mjOBJ_BODY
             eq.name1, eq.name2 = t.name, "plant"
-            eq.data[:6] = [0, 0, TOM_R, -BRANCH_LEN, TRUSS_Y[k], -PED_LEN]
+            eq.data[:6] = [0, 0, TOM_R, -BRANCH_LEN, TRUSS_Y[k] if k < len(TRUSS_Y) else 0.0, -PED_LEN]
             eq.solref = [STALK_SOLREF, 1.0]      # a bit springy: a pull stretches it measurably
             ex = spec.add_exclude()
             ex.bodyname1, ex.bodyname2 = t.name, "plant"
@@ -513,7 +525,8 @@ class FlyPandaEnv(gym.Env):
                  target_visible=True, random_start=0.0, cmd_smooth=1.0, edge_bias=0.0, grasp_start=0.0, return_start=0.0, gentle=False, lift_reward="height",
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
-                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, head_fovy=None, guarded=False, **_):
+                 wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, head_fovy=None, guarded=False,
+                 many=False, **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -522,7 +535,7 @@ class FlyPandaEnv(gym.Env):
         if task == "harvest" and max_steps == 60:
             max_steps = 200                      # line up, go in, close, pull, carry, drop
         if task == "pickripe" and max_steps == 60:
-            max_steps = 300                      # up to two tomatoes
+            max_steps = 400 if many else 300     # up to two tomatoes (phase 2c: up to three)
         if task in ("sort", "smell", "harvest", "pickripe"):
             max_distractors = 0                  # the other two bins are the clutter
         if not os.path.exists(PANDA_XML):
@@ -536,7 +549,8 @@ class FlyPandaEnv(gym.Env):
             [(f"bin_{n}", [0.75, 0.12, 0.1, 1]) for n in ("ripe", "rotten")] if task == "smell" else \
             [("basket", [0.55, 0.35, 0.15, 1], BASKET_RIM)] if task in ("harvest", "pickripe") else []
         self.harvest = task in ("harvest", "pickripe")
-        self.n_tom = 3 if task == "pickripe" else 1
+        self.many = bool(many) and task == "pickripe"   # phase 2c: 2-6 tomatoes at irregular places
+        self.n_tom = (MANY_MAX if self.many else 3) if task == "pickripe" else 1
         self.model = _build_model(self.n_decoys, n_facets, bins=bins, harvest=self.harvest, n_tom=self.n_tom)
         self.data = mujoco.MjData(self.model)
         self._ik = mujoco.MjData(self.model)
@@ -622,7 +636,16 @@ class FlyPandaEnv(gym.Env):
             self.tom_geoms = [m.geom(b).id for b in names]
             self.stalks = [m.equality("stalk" if k == 0 else f"stalk{k}").id for k in range(self.n_tom)]
             for k, e in enumerate(self.stalks):                          # (the compiler sets this from the start pose)
-                m.eq_data[e][3:6] = [-BRANCH_LEN, TRUSS_Y[k], -PED_LEN]
+                m.eq_data[e][3:6] = [-BRANCH_LEN, TRUSS_Y[k] if k < len(TRUSS_Y) else 0.0, -PED_LEN]
+            # where each tomato's top hangs, relative to the plant origin (phase 2c: drawn per episode)
+            self._anchor = [np.array([-BRANCH_LEN, TRUSS_Y[k] if k < len(TRUSS_Y) else 0.0, -PED_LEN])
+                            for k in range(self.n_tom)]
+            self.present = [True] * self.n_tom
+            if self.many:
+                self._ped_geoms = [m.geom("plant_pedicel" if k == 0 else f"plant_pedicel{k}").id for k in range(self.n_tom)]
+                self._truss_geom = m.geom("plant_truss").id
+                self._tom_vis = [[g for g in range(m.ngeom) if m.geom_bodyid[g] == m.geom_bodyid[self.tom_geoms[k]]]
+                                 for k in range(self.n_tom)]
             self.att, self.ripe = [False] * self.n_tom, [2] * self.n_tom
             self.stalk = self.stalks[0]
             self.robot_bodies = set(range(1, m.body("hand").id + 1)) | {m.body(f).id for f in ("left_finger", "right_finger")}
@@ -630,7 +653,7 @@ class FlyPandaEnv(gym.Env):
         # through its centre otherwise hid it completely: from above, the stalk always crosses that ray)
         self._thin = {m.geom(f"plant_{n}").id for n in ["stem", "branch", "pedicel", "truss"] +
                       [f"pedicel{k}" for k in range(1, self.n_tom)]} if self.n_tom > 1 else set()
-        self.n_priv = n_priv(task)
+        self.n_priv = n_priv("pickmany" if self.many else task)
 
         self.n_vis = 2 * n_facets * N_CH
         # smell (task smell): per antenna and glomerulus type, the receptor response (left antenna first)
@@ -975,7 +998,40 @@ class FlyPandaEnv(gym.Env):
 
     def stalk_point(self):
         """harvest: where the current tomato's centre belongs while on the vine."""
-        return self.data.mocap_pos[self.plant_mocap] + np.array([-BRANCH_LEN, TRUSS_Y[self._tgt], -PED_LEN - TOM_R])
+        return self.data.mocap_pos[self.plant_mocap] + self._anchor[self._tgt] - np.array([0, 0, TOM_R])
+
+    def _layout_many(self, y_centre):
+        """phase 2c: draw this episode's truss (2-6 tomatoes, zig-zag, pedicels of different lengths); park the
+        unused tomatoes. Returns the truss centre's y, moved so every tomato stays within MANY_YMAX."""
+        m, rng = self.model, self.rng
+        n = int(rng.integers(MANY_N[0], MANY_N[1] + 1))
+        gaps = rng.uniform(*MANY_GAP, n - 1)
+        ys = np.concatenate([[0.0], np.cumsum(gaps)])
+        ys -= ys.mean()
+        half = float(np.abs(ys).max())
+        y_centre = float(np.clip(y_centre, -MANY_YMAX + half, MANY_YMAX - half)) if half < MANY_YMAX else 0.0
+        side = rng.choice([-1, 1])
+        slots = rng.permutation(self.n_tom)[:n]           # which tomato bodies are used this time
+        self.present = [False] * self.n_tom
+        for i, k in enumerate(slots):
+            dx = side * (1 if i % 2 else -1) * rng.uniform(*MANY_DX)
+            ped = rng.uniform(*MANY_PED)
+            self._anchor[k] = np.array([-BRANCH_LEN + dx, ys[i], -ped])
+            self.present[k] = True
+        for k in range(self.n_tom):
+            if not self.present[k]:
+                self._anchor[k] = np.array([-BRANCH_LEN, PARK_Y + 0.2 * k, -PED_LEN])
+            m.eq_data[self.stalks[k]][3:6] = self._anchor[k]
+            a = self._anchor[k]
+            m.geom_pos[self._ped_geoms[k]] = [a[0], a[1], a[2] / 2]
+            m.geom_size[self._ped_geoms[k]][1] = abs(a[2]) / 2
+        m.geom_size[self._truss_geom][1] = half + 0.01
+        return y_centre
+
+    def truss_mid(self):
+        """harvest: the middle of the tomatoes on the truss (the teacher's first look point aims here)."""
+        ks = [k for k in range(self.n_tom) if self.present[k]]
+        return self.data.mocap_pos[self.plant_mocap] + np.mean([self._anchor[k] for k in ks], 0) - np.array([0, 0, TOM_R])
 
     def stalk_force(self, k=None):
         """harvest: how hard the stalk is pulled or bent (N; 0 once picked). The stalk's force on the tomato
@@ -1123,6 +1179,8 @@ class FlyPandaEnv(gym.Env):
         if self.n_tom > 1:                      # which tomatoes are ripe, still on the vine, in the basket
             out += [[float(r == 2) for r in self.ripe], [float(a) for a in self.att],
                     [float(self.tom_in_basket(k)) for k in range(self.n_tom)], [float(self._unripe_picked > 0)]]
+            if self.many:
+                out += [[float(p) for p in self.present]]
         if self.task == "smell":
             out += [np.eye(2)[self._fruit]]
         if self.task == "sort":
@@ -1191,11 +1249,26 @@ class FlyPandaEnv(gym.Env):
             c = (BASKET if self.n_tom == 1 else BASKET3) + self.rng.uniform(-SORT_JITTER, SORT_JITTER, 2)
             d.mocap_pos[self.bin_mocap] = [c[0], c[1], 0.0 if self.n_tom == 1 else BASKET3_Z]
             tom = self.rng.uniform(TOM_LO, TOM_HI) if self.n_tom == 1 else self.rng.uniform(TOM_LO3, TOM_HI3)
+            if self.many:
+                tom[1] = self._layout_many(tom[1])
             d.mocap_pos[self.plant_mocap] = tom + np.array([BRANCH_LEN, 0, PED_LEN + TOM_R])
             d.mocap_pos[self.look_mocap] = [tom[0] + BRANCH_LEN, tom[1], 0.0]
-            toms = [tom + np.array([0, TRUSS_Y[k], 0]) for k in range(self.n_tom)]
+            toms = [d.mocap_pos[self.plant_mocap] + self._anchor[k] - np.array([0, 0, TOM_R]) for k in range(self.n_tom)]
             self.ripe = [2] * self.n_tom
-            if self.n_tom > 1:                          # phase 2: 1 or 2 ripe, the rest green or turning
+            if self.many:                               # phase 2c: 1-3 ripe among the tomatoes present
+                pres = [k for k in range(self.n_tom) if self.present[k]]
+                n_ripe = int(self.rng.integers(1, min(len(pres), MANY_RIPE_MAX) + 1))
+                order = self.rng.permutation(pres)
+                for i, k in enumerate(order):
+                    self.ripe[k] = 2 if i < n_ripe else int(self.rng.integers(0, 2))
+                for k in range(self.n_tom):
+                    if not self.present[k]:
+                        self.ripe[k] = 0
+                    for g in self._tom_vis[k]:          # absent: invisible (and 3 m away)
+                        m.geom_rgba[g][3] = 1.0 if self.present[k] else 0.0
+                    m.geom_rgba[self.tom_geoms[k]][:3] = RIPE_RGBA[self.ripe[k]][:3]
+                    m.geom_rgba[self._ped_geoms[k]][3] = 1.0 if self.present[k] else 0.0
+            elif self.n_tom > 1:                        # phase 2: 1 or 2 ripe, the rest green or turning
                 n_ripe = int(self.rng.integers(1, self.n_tom)) if self.ripe_max > 1 else 1
                 order = self.rng.permutation(self.n_tom)
                 for i, k in enumerate(order):
@@ -1207,8 +1280,9 @@ class FlyPandaEnv(gym.Env):
                 d.qpos[self.tom_q[k]:self.tom_q[k] + 7] = [*toms[k], 1, 0, 0, 0]
             self.att = [True] * self.n_tom
             self._unripe_picked = 0
+            ymid = np.mean([self._anchor[k][1] for k in range(self.n_tom) if self.present[k]])
             first = min((k for k in range(self.n_tom) if self.ripe[k] == 2),
-                        key=lambda k: abs(TRUSS_Y[k])) if self.n_tom > 1 else 0
+                        key=lambda k: abs(self._anchor[k][1] - ymid)) if self.n_tom > 1 else 0
             self._set_target(first)
             tom = toms[first]
             target = tom[:2]
@@ -1910,7 +1984,8 @@ def _harvest_teacher_raw(env):
         # the truss is one blur. So the teacher first brings the wrist eye close to the middle of the truss
         # (the same move whichever tomato is ripe), and only then goes for a ripe one. Its far moves give
         # nothing away that the student cannot see.
-        mid = env.data.mocap_pos[env.plant_mocap] + np.array([-BRANCH_LEN, 0, -PED_LEN - TOM_R])
+        # (phase 2c: the truss can be 30 cm wide, so it looks at the tomato it goes for, not at the middle)
+        mid = env.stalk_point() if env.many else env.truss_mid()
         if np.linalg.norm(tcp - mid) > LOOK_NEAR:
             a[3] = open_a
             a[:3] = np.clip((mid - LOOK_BACK * APPROACH - tcp) / STEP * 0.6, -1, 1)
@@ -1930,12 +2005,19 @@ def _harvest_teacher_raw(env):
             elif ahead >= 0.035 and lat > 0.012 and is_open:   # line up behind it on the approach line
                 target = tom - PRE_GRASP * APPROACH
                 a[3] = open_a
-            elif (np.linalg.norm(rel) > (0.005 if env.n_tom == 1 else 0.009) or np.linalg.norm(env.tcp_vel()) > 0.03) and is_open:
+            elif (np.linalg.norm(rel) > (0.005 if env.n_tom == 1 else 0.012 if env.many else 0.009)
+                  or np.linalg.norm(env.tcp_vel()) > 0.03) and is_open:
                 target = tom.copy()                            # straight in, open
                 a[3] = open_a
             else:
                 target = tom.copy()                            # there: close
                 a[3] = -1.0
+    elif env.is_grasped() and env.many and any(
+            np.linalg.norm(tom - env.tom_pos(k)) < CLEAR_NEAR for k in range(env.n_tom) if env.att[k] and env.present[k]):
+        # phase 2c: first back the picked tomato out of the truss (away from the plant, a little up), then carry
+        a[3] = -1.0
+        a[:3] = np.clip(-APPROACH * 0.4 + np.array([0, 0, 0.3]), -0.5, 0.5)
+        return a
     elif env.is_grasped():
         c = env.bin_pos()
         want = np.array([c[0], c[1], c[2] + env.rest_z + (HARVEST_CARRY_GENTLE if env.gentle else HARVEST_CARRY)])

@@ -17,6 +17,7 @@
     panda_smell   ripe or rotten by smell alone: identical-looking fruit, ripe -> left bin, rotten -> right
     panda_harvest greenhouse phase 1: pick a cherry tomato off a plant (hand sideways) into the basket
     panda_pickripe greenhouse phase 2: a truss of three tomatoes; pick only the ripe ones into the basket
+    panda_pickmany greenhouse phase 2c: a truss of 2-6 tomatoes at irregular places, 1-3 of them ripe
 """
 import numpy as np
 
@@ -40,6 +41,7 @@ ENVS["panda_sort"] = (FlyPandaEnv, {"task": "sort"})
 ENVS["panda_smell"] = (FlyPandaEnv, {"task": "smell"})
 ENVS["panda_harvest"] = (FlyPandaEnv, {"task": "harvest"})
 ENVS["panda_pickripe"] = (FlyPandaEnv, {"task": "pickripe"})
+ENVS["panda_pickmany"] = (FlyPandaEnv, {"task": "pickripe", "many": True})
 
 
 def build_env(name: str = "tray", seed: int | None = None, **overrides):

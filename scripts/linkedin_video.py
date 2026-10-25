@@ -21,6 +21,8 @@ REPO = "github.com/nihal4/connectome-tray-balance"
 TEXT = {    # env -> (title, one line on the task, label of the progress counter)
     "panda_pickripe": ("Picking only the ripe tomatoes",
                        "Three tomatoes on a truss, each green, turning or ripe. Pick only the ripe ones into the basket."),
+    "panda_pickmany": ("Picking every ripe tomato",
+                       "Two to six tomatoes on a truss, at irregular places. Pick every ripe one into the basket, gently."),
     "panda_harvest": ("Picking a tomato off the plant",
                       "Grip the cherry tomato, snap its stalk, carry it to the basket."),
     "panda_smell": ("Ripe or rotten, by smell alone",
@@ -114,7 +116,7 @@ class Presenter:
         if harvest:                                            # ripeness tags: a column left of the truss, with lines
             names = ("green", "turning", "ripe")
             cols = ((70, 170, 60), (235, 140, 40), (225, 45, 35))
-            shown = [k for k in range(env.n_tom) if env.att[k]]
+            shown = [k for k in range(env.n_tom) if env.att[k] and getattr(env, "present", [True] * env.n_tom)[k]]
             pts = {k: proj(env.tom_pos(k)) for k in shown}
             if pts:
                 xl = min(p_[0] for p_ in pts.values()) - 190 * s

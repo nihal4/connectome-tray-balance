@@ -21,7 +21,7 @@ import torch  # noqa: E402
 torch.set_num_threads(1)
 from ctb.envs import build_env  # noqa: E402
 from ctb.envs.panda import RIPENESS  # noqa: E402
-from scripts.evaluate import load, make_norm, run_env_kw  # noqa: E402
+from scripts.evaluate import load, make_norm, run_config, run_env_kw  # noqa: E402
 
 run, out = sys.argv[1], sys.argv[2]
 N = int(sys.argv[3]) if len(sys.argv) > 3 else 200
@@ -33,7 +33,7 @@ print("brain:", "best_model.zip" if BEST else "model.zip (latest)", flush=True)
 
 
 def episodes(n, seed0, **kw):
-    env = build_env('panda_pickripe', 0, **run_env_kw(run), **kw)
+    env = build_env(run_config(run)['env'], 0, **run_env_kw(run), **kw)
     res = []
     for i in range(n):
         obs, _ = env.reset(seed=seed0 + i)

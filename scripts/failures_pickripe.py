@@ -19,13 +19,13 @@ import mujoco  # noqa: E402
 
 import ctb.envs.panda as P  # noqa: E402
 from ctb.envs import build_env  # noqa: E402
-from scripts.evaluate import load, make_norm, run_env_kw  # noqa: E402
+from scripts.evaluate import load, make_norm, run_config, run_env_kw  # noqa: E402
 
 run = sys.argv[1]
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 200
 best = os.environ.get("BRAIN", "best") != "last"
 model, vn = load(run, best=best), make_norm(run, {}, best=best)
-env = build_env('panda_pickripe', 0, **run_env_kw(run))
+env = build_env(run_config(run)['env'], 0, **run_env_kw(run))
 STAGE = ("green", "turning", "ripe")
 causes, bruises = Counter(), Counter()
 
