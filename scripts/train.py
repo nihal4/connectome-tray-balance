@@ -515,7 +515,28 @@ def main():
                 vn.save(os.path.join(out, "best_vecnormalize.pkl"))
             return True
 
-    eval_cb = EvalCallback(eval_env, n_eval_episodes=cfg["eval_episodes"],
+    class BestBySolved(EvalCallback):
+        """EvalCallback that keeps as best_model.zip the brain that SOLVES most test episodes (return only breaks
+        ties): with several tomatoes per truss, partial harvests earn a lot of reward, and the highest-return
+        brain was not the one that finished most often. Score = solved fraction x 1000 + mean return."""
+        best_score = -np.inf
+
+        def _on_step(self):
+            n0 = len(self.evaluations_timesteps)
+            self.best_mean_reward = np.inf                 # (the parent never saves on its own)
+            keep_going = super()._on_step()
+            if len(self.evaluations_timesteps) > n0:
+                succ = np.mean(self._is_success_buffer) if len(self._is_success_buffer) else 0.0
+                score = 1000.0 * succ + self.last_mean_reward
+                if score > self.best_score:
+                    self.best_score = score
+                    print(f"New best brain: solved {succ:.0%}, return {self.last_mean_reward:.1f}", flush=True)
+                    self.model.save(os.path.join(out, "best_model"))
+                    if self.callback_on_new_best is not None:
+                        keep_going = self.callback_on_new_best.on_step() and keep_going
+            return keep_going
+
+    eval_cb = BestBySolved(eval_env, n_eval_episodes=cfg["eval_episodes"],
                            eval_freq=max(cfg["eval_every"] // cfg["n_envs"], 1),
                            log_path=out, best_model_save_path=out, deterministic=True, verbose=1,
                            callback_on_new_best=SaveBestNorm())
@@ -541,8 +562,12 @@ def main():
         # remember the best score so far: otherwise the first evaluation after a restart counts as
         # a "new best" and overwrites best_model.zip even when it is worse
         if keep.any():
-            eval_cb.best_mean_reward = float(old["results"][keep].mean(axis=1).max())
-            print(f"[train] best evaluation so far: {eval_cb.best_mean_reward:.1f} (best_model.zip kept until beaten)")
+            sc = old["results"][keep].mean(axis=1)
+            if "successes" in old.files and len(old["successes"]) == len(old["results"]):
+                sc = sc + 1000.0 * old["successes"][keep].mean(axis=1)
+            eval_cb.best_score = float(sc.max())
+            print(f"[train] best evaluation so far: score {eval_cb.best_score:.1f} (solved x 1000 + return; "
+                  "best_model.zip kept until beaten)")
     callbacks = [eval_cb]
     # Save model + normalisation every 50k steps, so a crashed or timed-out session
     # (Kaggle limit, laptop sleep) can continue with --resume instead of starting over.

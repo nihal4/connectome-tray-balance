@@ -265,8 +265,9 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         for key, v in (("results", rets), ("ep_lengths", lens), ("successes", succ)):
             hist[key] = np.concatenate([hist[key], v[None]])
         np.savez(ev_file, **hist)
-        if rets.mean() > state["best"]:
-            state["best"] = float(rets.mean())
+        score = 1000.0 * float(succ.mean()) + float(rets.mean())   # most solved first; return breaks ties
+        if score > state["best"]:
+            state["best"] = score
             state["best_round"] = k + 1
             model.save(os.path.join(out, "best_model.zip"))
             norm.save(os.path.join(out, "best_vecnormalize.pkl"))    # the inputs' scaling at this moment
@@ -301,7 +302,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     norm.training = True
     if save_fn is not None:
         save_fn()
-    log(f"[imitate] done: {state['steps']:,} steps, best student return {state['best']:.1f}; "
+    log(f"[imitate] done: {state['steps']:,} steps, best student score {state['best']:.1f} (solved x 1000 + return); "
         f"handing over to PPO with action std {final_std}")
     return model
 
