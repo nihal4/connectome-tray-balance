@@ -35,6 +35,7 @@ case "${1:-help}" in
     if [ "$ENV" = panda_pickmany ]; then                                       # phase 2c run names
       NAME="$ENV-connectome-real-s0-2cam-mem"
       case "$EXTRA" in *--bruise_end*) NAME="$NAME-strict" ;; esac
+      case "$EXTRA" in *--max_steps*) NAME="$NAME-long" ;; esac          # more time per truss
     fi
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;

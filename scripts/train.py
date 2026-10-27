@@ -105,6 +105,8 @@ def parse():
                          "episode ends when the harvest is done (with the remaining success reward paid at once)")
     ap.add_argument("--bruise_end", action="store_true", default=None,
                     help="with --gentle: the first bruised tomato ends the episode (a terminal safety violation)")
+    ap.add_argument("--max_steps", type=int, default=None,
+                    help="episode length in brain steps (25 per second); default per task (panda_pickmany: 400 = 16 s)")
     ap.add_argument("--init_last", action="store_true",
                     help="--init_from: start from the parent's LATEST brain (model.zip) instead of its best one")
     ap.add_argument("--gentle", action="store_true", default=None,
@@ -172,7 +174,7 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam", "smooth", "head_fovy", "bruise_end"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam", "smooth", "head_fovy", "bruise_end", "max_steps"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     _par = args.init_from if args.init_from and os.path.isdir(str(args.init_from)) else \
@@ -181,7 +183,7 @@ def main():
         # fine-tune: the same robot and task as the parent unless the job line says otherwise
         _saved = json.load(open(os.path.join(_par, "config.json")))
         for _k in ("grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam",
-                   "smooth", "head_fovy", "bruise_end"):
+                   "smooth", "head_fovy", "bruise_end", "max_steps"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -205,6 +207,9 @@ def main():
     if args.bruise_end:           # task definition: applies to training and evaluation
         env_kw["bruise_end"] = True
         print("[train] bruise_end: the first bruised tomato ends the episode")
+    if args.max_steps:            # task definition: time allowed per episode (training and evaluation)
+        env_kw["max_steps"] = args.max_steps
+        print(f"[train] episodes last up to {args.max_steps} steps ({args.max_steps / 25:g} s)")
     if args.smooth:               # task definition: applies to training and evaluation
         env_kw["smooth"] = True
         print("[train] smooth: touching other tomatoes costs a little; the episode ends when the harvest is done")
@@ -342,7 +347,7 @@ def main():
         parent = json.load(open(os.path.join(init, "config.json")))
         parent.update(lift_reward=args.lift_reward or "height", env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
                       random_start=args.random_start, eval_episodes=cfg["eval_episodes"], smooth=bool(args.smooth),
-                      head_fovy=args.head_fovy, bruise_end=bool(args.bruise_end),
+                      head_fovy=args.head_fovy, bruise_end=bool(args.bruise_end), max_steps=args.max_steps,
                       init_brain="latest" if args.init_last else "best")
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)

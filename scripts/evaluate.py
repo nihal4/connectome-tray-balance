@@ -107,6 +107,10 @@ def run_env_kw(run):
         kw["head_cam"] = cfg["head_cam"]
     if cfg.get("head_fovy"):                # robot property: zoomed front camera
         kw["head_fovy"] = cfg["head_fovy"]
+    if cfg.get("max_steps"):                # task definition: time allowed per episode
+        kw["max_steps"] = cfg["max_steps"]
+    if os.environ.get("MAX_STEPS"):         # (tests: give a brain more or less time than it trained with)
+        kw["max_steps"] = int(os.environ["MAX_STEPS"])
     if cfg.get("bruise_end"):               # task definition: a bruise ends the episode
         kw["bruise_end"] = True
     if cfg.get("smooth"):                   # task definition (panda_pickripe)
