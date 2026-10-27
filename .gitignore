@@ -11,7 +11,7 @@ runs/
 .venv/
 data/menagerie/
 
-# secrets: never in the repo (the Kaggle key lives in ~/.config/flybrain/secrets.env)
+# secrets: never in the repo
 .env
 *.env
 !*.env.example
