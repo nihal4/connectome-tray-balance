@@ -70,6 +70,7 @@ case "${1:-help}" in
       && echo "download on the Mac:  http://$(hostname -I | awk '{print $1}'):8080/exports/$(basename "$O")" ;;
   update)  git -C "$REPO" pull && "$ROOT/.venv/bin/python" -m pip install -q -r "$REPO/requirements.txt" && $U restart flybrain-watch && echo "code updated (fly restart to use it for training)" ;;
   eval)    cur; cd "$REPO" && "$ROOT/.venv/bin/python" scripts/evaluate.py --run "$ROOT/runs/$NAME" --robustness --episodes "${2:-20}" ;;
+  kaggle)  shift; exec bash "$REPO/scripts/desktop/fly_kaggle.sh" "$@" ;;      # Kaggle GPU jobs (fly kaggle help)
   showcase) cur; cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/showcase.py --run "$ROOT/runs/$NAME" --episodes "${2:-40}" ;;
   *) cat <<HELP
 fly job                       show the current job
@@ -78,6 +79,7 @@ fly start | stop | restart    control training (after a reboot: fly start resume
 fly status                    latest progress, eval, speed, CPU temperature
 fly log [N]                   follow the training log (Ctrl+C to leave; training continues)
 fly eval [EPISODES]           robustness tests on the best model
+fly kaggle help               Kaggle GPU jobs (key kept outside the repo)
 fly showcase [EPISODES]       film the best brain's successes on new random layouts (default 40 tried)
 fly export [RUN]              zip a run (curves, results, best model, latest progress video, log) to send
 fly linkedin [RUN] [ASPECT]   1080p presentation video of the best brain (ASPECT 16:9, 1:1 or 4:5) for posting

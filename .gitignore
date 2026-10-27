@@ -10,3 +10,11 @@ runs/
 .DS_Store
 .venv/
 data/menagerie/
+
+# secrets: never in the repo (the Kaggle key lives in ~/.config/flybrain/secrets.env)
+.env
+*.env
+!*.env.example
+kaggle.json
+.kaggle/
+secrets.*

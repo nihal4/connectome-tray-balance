@@ -466,7 +466,7 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False, n_tom=1):
             _vis_geom(bn, mujoco.mjtGeom.mjGEOM_CYLINDER, [0.35, 0.35, 0.38, 1], size=[0.012, BASKET3_Z / 2],
                       pos=[0, 0, -BASKET3_Z / 2])
     for i in range(n_decoys):
-        block(f"decoy{i}", [0.3, 0.3, 0.95, 1])
+        block(f"decoy{i}", [0.3, 0.3, 0.95, 1]).gravcomp = 1.0     # (reset switches gravity on when it is used)
     right, _, _, _ = eye_facets(n_facets)
     c_right = right.mean(0) / np.linalg.norm(right.mean(0))           # centre of the right eye's field
     c_left = c_right * np.array([1, -1, 1])
@@ -567,6 +567,8 @@ class FlyPandaEnv(gym.Env):
         self.decoy_q = [m.jnt_qposadr[m.body(f"decoy{i}").jntadr[0]] for i in range(self.n_decoys)]
         self.block_geom = m.geom("block").id
         self.decoy_geoms = [m.geom(f"decoy{i}").id for i in range(self.n_decoys)]
+        self._decoy_col = [(int(m.geom_contype[g]), int(m.geom_conaffinity[g])) for g in self.decoy_geoms]
+        self._decoy_body = [m.body(f"decoy{i}").id for i in range(self.n_decoys)]
         self.arm_dof = np.arange(7)
         self.jnt_lo, self.jnt_hi = m.jnt_range[:7, 0], m.jnt_range[:7, 1]
         self.finger_q = [m.jnt_qposadr[m.joint("finger_joint1").id], m.jnt_qposadr[m.joint("finger_joint2").id]]
@@ -1304,6 +1306,11 @@ class FlyPandaEnv(gym.Env):
             self._place(self.block_q, target)
         n_d = self.rng.integers(0, self.max_dist + 1) if self.max_dist > 0 else 0
         for i, qa in enumerate(self.decoy_q):
+            # a parked decoy does not collide and floats: under the table, the infinite floor plane used to
+            # shoot it up at ~300 m/s at every reset (12 deep contacts in the first steps)
+            g, used = self.decoy_geoms[i], i < n_d
+            m.geom_contype[g], m.geom_conaffinity[g] = self._decoy_col[i] if used else (0, 0)
+            m.body_gravcomp[self._decoy_body[i]] = 0.0 if used else 1.0
             if i < n_d:
                 for _ in range(100):
                     xy = self.rng.uniform(BLOCK_LO, BLOCK_HI)
