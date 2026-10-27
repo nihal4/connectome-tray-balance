@@ -105,6 +105,9 @@ def parse():
                          "episode ends when the harvest is done (with the remaining success reward paid at once)")
     ap.add_argument("--bruise_end", action="store_true", default=None,
                     help="with --gentle: the first bruised tomato ends the episode (a terminal safety violation)")
+    ap.add_argument("--reward", choices=["state", "events"], default=None, dest="reward_mode",
+                    help="panda_pickripe/pickmany: 'events' pays progress once when it is made (tomatoes in the basket "
+                         "are banked), +1 when done, -1 for an unripe pick; both end the episode. Default 'state'")
     ap.add_argument("--max_steps", type=int, default=None,
                     help="episode length in brain steps (25 per second); default per task (panda_pickmany: 400 = 16 s)")
     ap.add_argument("--init_last", action="store_true",
@@ -174,7 +177,7 @@ def main():
     if args.resume and os.path.exists(os.path.join(out, "config.json")):
         # keep the task / robot this run was last trained with, even if the job line leaves an option out
         _saved = json.load(open(os.path.join(out, "config.json")))
-        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam", "smooth", "head_fovy", "bruise_end", "max_steps"):
+        for _k in ("lift_reward", "grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam", "smooth", "head_fovy", "bruise_end", "max_steps", "reward_mode"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     _par = args.init_from if args.init_from and os.path.isdir(str(args.init_from)) else \
@@ -183,7 +186,7 @@ def main():
         # fine-tune: the same robot and task as the parent unless the job line says otherwise
         _saved = json.load(open(os.path.join(_par, "config.json")))
         for _k in ("grip_mode", "privileged", "eye_adapt", "wrist_cam", "ripe_max", "memory", "gentle", "head_cam",
-                   "smooth", "head_fovy", "bruise_end", "max_steps"):
+                   "smooth", "head_fovy", "bruise_end", "max_steps", "reward_mode"):
             if getattr(args, _k) is None and _saved.get(_k) is not None:
                 setattr(args, _k, _saved[_k])
     if args.grip_mode:            # robot property: applies to training and evaluation
@@ -207,6 +210,9 @@ def main():
     if args.bruise_end:           # task definition: applies to training and evaluation
         env_kw["bruise_end"] = True
         print("[train] bruise_end: the first bruised tomato ends the episode")
+    if args.reward_mode == "events":   # reward definition: applies to training (evaluation counts solved)
+        env_kw["reward_mode"] = "events"
+        print("[train] reward: progress paid once when made (banked), +1 when done, -1 unripe pick; both end it")
     if args.max_steps:            # task definition: time allowed per episode (training and evaluation)
         env_kw["max_steps"] = args.max_steps
         print(f"[train] episodes last up to {args.max_steps} steps ({args.max_steps / 25:g} s)")
@@ -345,7 +351,8 @@ def main():
         from ctb.policies import load_ppo
         shutil.copy(os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
         parent = json.load(open(os.path.join(init, "config.json")))
-        parent.update(lift_reward=args.lift_reward or "height", env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
+        parent_reward = parent.get("reward_mode") or "state"
+        parent.update(reward_mode=args.reward_mode, lift_reward=args.lift_reward or "height", env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
                       random_start=args.random_start, eval_episodes=cfg["eval_episodes"], smooth=bool(args.smooth),
                       head_fovy=args.head_fovy, bruise_end=bool(args.bruise_end), max_steps=args.max_steps,
                       init_brain="latest" if args.init_last else "best")
@@ -363,6 +370,14 @@ def main():
             print(f"[train] reset normalisation of {int(flat.sum())} input(s) unused in the parent task")
         model = load_ppo(out, os.path.join(init, src_model), env=norm, device=args.device,
                          custom={"learning_rate": lr, "lr_schedule": (lambda _: lr)})
+        if (args.reward_mode or "state") != parent_reward:
+            # a different reward: the parent's return scale and value estimates mean nothing for it
+            from stable_baselines3.common.running_mean_std import RunningMeanStd
+            norm.ret_rms = RunningMeanStd(shape=())
+            with torch.no_grad():
+                model.policy.value_net.weight.zero_()
+                model.policy.value_net.bias.zero_()
+            print(f"[train] reward changed ({parent_reward} -> {args.reward_mode}): return scaling and value head reset")
         if parent.get("memory"):
             from ctb.policies import SEQ_LEN, chunk_rollout_buffer
             chunk_rollout_buffer(model)

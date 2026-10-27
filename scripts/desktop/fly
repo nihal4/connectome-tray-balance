@@ -36,6 +36,7 @@ case "${1:-help}" in
       NAME="$ENV-connectome-real-s0-2cam-mem"
       case "$EXTRA" in *--bruise_end*) NAME="$NAME-strict" ;; esac
       case "$EXTRA" in *--max_steps*) NAME="$NAME-long" ;; esac          # more time per truss
+      case "$EXTRA" in *--reward\ events*) NAME="$NAME-events" ;; esac    # banked (event) reward
     fi
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;

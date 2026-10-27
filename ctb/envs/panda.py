@@ -155,6 +155,10 @@ GRIP_LIMIT = 3.0          # gripper actuator force cap -> median squeeze ~1.5 N 
 DAMAGE_FORCE = 5.0        # any robot contact on any tomato harder than this (N): bruised
 GUARD_FORCE = 2.0         # guarded: pressing a tomato (not held) harder than this stops the hand advancing into it
 BRUISE_END_REWARD = -1.0  # bruise_end: reward of the step that bruises a tomato (and ends the episode)
+EVENT_SUCCESS = 1.0       # reward_mode="events": bonus when the harvest is done (the episode ends there)
+EVENT_UNRIPE = -1.0       # reward_mode="events": picking an unripe tomato ends the episode with this
+EVENT_PENALTY_SCALE = 0.05  # events: the per-step penalties (plant, bump, touch) shrink with the reward: a whole
+                            # episode now pays ~2 instead of ~250, and touching the plant for 100 steps costs ~0.4
 TOUCH_PENALTY = 0.1       # smooth: per step touching a tomato other than the one being picked
 SUCCESS_GAMMA = 0.99      # smooth: PPO's discount, for the success reward paid at the end
 FLUNG_SPEED = 2.5         # m/s: a tomato this fast was flung / is falling far: episode over (failure)
@@ -529,7 +533,7 @@ class FlyPandaEnv(gym.Env):
                  grip_mode="delta", privileged=False, light_log=0.0, light_choices=None, eye_adapt=False,
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
                  wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, head_fovy=None, guarded=False,
-                 many=False, bruise_end=False, **_):
+                 many=False, bruise_end=False, reward_mode="state", **_):
         assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
@@ -717,6 +721,13 @@ class FlyPandaEnv(gym.Env):
         # bruise_end (gentle): the first bruise ends the episode (safe-RL style: a violation is terminal), so a
         # bruise can no longer be followed by more paid picks
         self.bruise_end = bool(bruise_end)
+        # pickripe reward: "state" = how far the harvest is, paid every step (the original); "events" = paid once,
+        # when progress is made (the change of the same progress measure), so tomatoes already in the basket
+        # are banked: with bruise_end, "state" put all of their future per-step reward at stake at every risky
+        # move, and the brain learned to stop after the first tomato (strict run: 31 of 76 failures)
+        assert reward_mode in ("state", "events"), reward_mode
+        self.reward_mode = reward_mode
+        self._phi_prev = None
         assert lift_reward in ("height", "goal"), lift_reward
         self.lift_reward = lift_reward
         # grip_mode: "delta" = each command nudges the finger target (old); "absolute" = the command
@@ -1384,6 +1395,7 @@ class FlyPandaEnv(gym.Env):
         self._target = self.tcp_pos()
         self._cmd = np.zeros(3)
         self._hold = 0
+        self._phi_prev = None
         self._last_action = np.zeros(4)
         if self.harvest:                                    # gentle: bruise bookkeeping
             self._bruised = [False] * self.n_tom
@@ -1505,6 +1517,7 @@ class FlyPandaEnv(gym.Env):
             r_cur, _, _ = self._reward_harvest_stage()
         n_done = len(done) - (k in done)
         r = (7.0 * n_done + r_cur) / (7.0 * len(ripe))
+        phi, pen = r, 0.0                                     # (events: progress, and this step's penalties)
         released = len(done) == len(ripe) and not any(self.grasped_tom(j) or self._touching(j) for j in ripe)
         self._hold = self._hold + 1 if (released and self._unripe_picked == 0) else 0
         success = self._hold >= LIFT_HOLD
@@ -1514,12 +1527,14 @@ class FlyPandaEnv(gym.Env):
         self._plant_hits += touched
         if touched:
             r -= PLANT_PENALTY / 7.0
+            pen -= PLANT_PENALTY / 7.0
         self._bruise_now = False
         if self.gentle:                                         # any bruise: costs reward, and the harvest fails
             before = sum(self._bruised)
             if self._damage_check():
                 self._bumps += 1
                 r -= BUMP_PENALTY / 7.0
+                pen -= BUMP_PENALTY / 7.0
             self._bruise_now = sum(self._bruised) > before
             if any(self._bruised):
                 success = False
@@ -1529,8 +1544,15 @@ class FlyPandaEnv(gym.Env):
             if self._touching_others():
                 self._touches += 1
                 r -= TOUCH_PENALTY / 7.0
+                pen -= TOUCH_PENALTY / 7.0
         if self._unripe_picked:
             r = -0.3
+        if self.reward_mode == "events":                      # progress made this step (+), lost (-), penalties
+            prev = phi if self._phi_prev is None else self._phi_prev
+            self._phi_prev = phi
+            r = (phi - prev) + EVENT_PENALTY_SCALE * pen + (EVENT_SUCCESS if success else 0.0)
+            if self._unripe_picked:
+                r = EVENT_UNRIPE
         return r, success, float(np.linalg.norm(self.tcp_pos() - self.block_pos()))
 
     def _pressed_tomatoes(self):
@@ -1709,6 +1731,9 @@ class FlyPandaEnv(gym.Env):
         terminated = False
         if self.bruise_end and getattr(self, "_bruise_now", False):
             r, terminated = BRUISE_END_REWARD, True             # a bruised tomato: the harvest is over
+        if self.reward_mode == "events" and self.n_tom > 1 and not terminated:
+            if success or self._unripe_picked:                  # the harvest is done, or failed for good
+                terminated = True
         if self.smooth and self.n_tom > 1 and success:
             # done: end here, and pay the success reward of the remaining steps at once (discounted with PPO's
             # gamma), exactly what staying solved until the time limit was worth
