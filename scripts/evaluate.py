@@ -111,6 +111,8 @@ def run_env_kw(run):
         kw["reward_mode"] = cfg["reward_mode"]
     if cfg.get("max_steps"):                # task definition: time allowed per episode
         kw["max_steps"] = cfg["max_steps"]
+    if os.environ.get("TRUSS_FILTER") == "0":   # (tests: fully random trusses, no feasibility filter)
+        kw["truss_filter"] = False
     if os.environ.get("MAX_STEPS"):         # (tests: give a brain more or less time than it trained with)
         kw["max_steps"] = int(os.environ["MAX_STEPS"])
     if cfg.get("bruise_end"):               # task definition: a bruise ends the episode

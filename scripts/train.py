@@ -83,6 +83,8 @@ def parse():
     ap.add_argument("--imitate_first_steps", type=int, default=30_000, help="teacher steps in the first imitation round")
     ap.add_argument("--imitate_epochs", type=float, default=6.0, help="passes over the imitation data per later round "
                     "(at most 2,000 updates; the first round makes 15 passes)")
+    ap.add_argument("--imitate_cap", type=int, default=120_000, help="imitation examples kept (the oldest drop out)")
+    ap.add_argument("--imitate_updates", type=int, default=2000, help="most gradient updates per later imitation round")
     ap.add_argument("--privileged", action="store_true", default=None,
                     help="give the training-only critic the true simulator state (asymmetric actor-critic); "
                          "the fly brain never receives it")
@@ -296,6 +298,9 @@ def main():
         mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
         parent.update(mask_inputs=mask)
         parent.update(memory=bool(args.memory), gentle=bool(args.gentle), head_cam=args.head_cam)
+        # the task / robot settings of THIS run (what the environments were built with), not the parent's
+        parent.update(head_fovy=args.head_fovy, smooth=bool(args.smooth), bruise_end=bool(args.bruise_end),
+                      reward_mode=args.reward_mode, max_steps=args.max_steps)
         parent.update(lift_reward=args.lift_reward or "height", grip_mode=args.grip_mode or "delta", privileged=True,
                       eye_adapt=bool(args.eye_adapt), wrist_cam=args.wrist_cam, ripe_max=args.ripe_max,
                       n_priv=N_PRIV, env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std,
@@ -521,6 +526,7 @@ def main():
         run_dagger(model, venv, eval_env, out, init, iters=args.imitate, steps=args.imitate_steps, remeasure=remeasure,
                    eval_episodes=cfg["eval_episodes"], seed=args.seed, final_std=args.std or 0.15,
                    epochs=args.imitate_epochs, first_steps=args.imitate_first_steps,
+                   cap=args.imitate_cap, max_updates=args.imitate_updates,
                    log=lambda m: print(m, flush=True), save_fn=save)
         if model.num_timesteps >= cfg["total_steps"]:
             print(f"[train] finished after imitation. Saved to {out}.")
