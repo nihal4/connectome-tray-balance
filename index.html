@@ -216,6 +216,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t11"><span class="n">11</span><span class="t">Greenhouse: pick a tomato off the plant</span><span class="tag done">Done</span></a></li>
     <li><a href="#t12"><span class="n">12</span><span class="t">Greenhouse: pick only the ripe tomato</span><span class="tag done">Done</span></a></li>
     <li><a href="#t13"><span class="n">13</span><span class="t">Greenhouse: pick every ripe tomato</span><span class="tag done">Done</span></a></li>
+    <li><a href="#t14"><span class="n">14</span><span class="t">Greenhouse: any truss</span><span class="tag done">Done</span></a></li>
     <li><a href="#roadmap"><span class="n">14+</span><span class="t">Full greenhouse harvesting robot</span><span class="tag next">Planned</span></a></li>
   </ul>
 </header>
@@ -1096,12 +1097,44 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     </details>
   </section>
 
+  <!-- 14 ----------------------------------------------------------------- -->
+  <section class="task" id="t14">
+    <div class="task-head"><span class="num">14</span><h3>Greenhouse, phase 2c: any truss</h3><span class="tag done">Done</span></div>
+    <p><strong>No two trusses alike.</strong> Two to six tomatoes hang on irregular stalks along a zig-zag stem;
+      one to three are ripe. Same robot and fly brain as task 13 (two depth cameras, smell, memory, a gripper
+      that cannot squeeze hard). A bruise of any tomato, by a knock above 5&nbsp;N or a hard landing, fails the
+      harvest. The scripted teacher it learned from solves 75&ndash;83&nbsp;% of these trusses.</p>
+    <ul class="facts"><li>Solved: <b>67 %</b> of 200</li><li>Three ripe: <b>~51 %</b></li><li>Bruised: <b>14 %</b> of layouts</li><li>Time: <b>5.6 s</b></li></ul>
+    <details open>
+      <summary>Each step, measured on the same 200 layouts</summary>
+      <table>
+        <thead><tr><th>Brain</th><th>Solved</th><th>3 ripe</th><th>Ripe in basket</th><th>Bruised</th></tr></thead>
+        <tbody>
+          <tr><td>Teacher, then practice (4M steps)</td><td class="num">60 %</td><td class="num">~42 %</td><td class="num">324 / 373</td><td class="num">28 %</td></tr>
+          <tr><td>+ a bruise ends the try</td><td class="num">62 %</td><td class="num">~31 %</td><td class="num">292 / 373</td><td class="num yes">15 %</td></tr>
+          <tr><td>+ each tomato paid once (final)</td><td class="num yes">67 %</td><td class="num yes">~51 %</td><td class="num yes">321 / 373</td><td class="num">14 %</td></tr>
+        </tbody>
+      </table>
+      <p>Ending the try at the first bruise halved the bruising, but the arm learned to stop after its first
+        tomato: following the hand showed it standing back for the rest of the time, never trying again, and
+        more time did not help. The reason was the reward: every tomato already in the basket kept paying a
+        little each moment, and a bruise would end all of it, so not trying was the safe choice. Paying each
+        tomato once, when it lands, banks it; finishing the truss pays the rest.</p>
+    </details>
+    <details>
+      <summary>Honest limits</summary>
+      <p>Bruises still fail 14 % of layouts (mostly the fingers closing on the ripe tomato, or knocking a
+        neighbour on the way in); in 10 % the arm still stops before the last ripe tomato; tinted or uneven light
+        breaks the cameras (no white balance); one training run. Training on a GPU (MuJoCo MJX, Kaggle T4) was
+        measured and was slower than the training PC for this contact-rich scene, so it stays on the CPU.</p>
+    </details>
+  </section>
+
   <!-- roadmap ------------------------------------------------------------- -->
   <h2 id="roadmap">What's next</h2>
   <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
     arm, and then to use the senses a fly is best at.</p>
   <ol class="road">
-    <li><b>Any number of tomatoes</b><span class="why">trusses with 2&ndash;6 fruit at irregular positions, any number ripe; a gentler final approach</span></li>
     <li><b>Rotten and infected fruit</b><span class="why">grey mould and rot by look and smell, into a separate reject bin so it does not spread</span></li>
     <li><b>A real plant</b><span class="why">leaves that hide fruit, bending stems, fruit at different heights, leaf shadows (uneven light)</span></li>
     <li><b>The greenhouse loop</b><span class="why">the arm on a cart driving a loop through the rows, stopping at each plant, unloading after each lap</span></li>

@@ -1,0 +1,118 @@
+{
+ "task": "panda_pickmany: trusses of 2-6 tomatoes at irregular places, 1-3 ripe; pick every ripe one into the basket, no unripe, no bruise",
+ "test": "scripts/precision_pickripe.py, 200 new layouts (seeds 140000+), the same for every brain; 3-ripe figures derived from the totals",
+ "teacher_solved": "75-83 % (scripted, privileged)",
+ "brains": {
+  "2cam-mem latest (4M steps)": {
+   "solved": 0.6,
+   "one_ripe": 0.71,
+   "two_ripe": 0.6,
+   "three_ripe_derived": 0.42,
+   "ripe_in_basket": "324/373",
+   "unripe_picked_layouts": 0.04,
+   "bruised_layouts": 0.28
+  },
+  "2cam-mem best (4M steps)": {
+   "solved": 0.54
+  },
+  "strict latest (+bruise_end, 2M)": {
+   "solved": 0.62,
+   "one_ripe": 0.78,
+   "two_ripe": 0.65,
+   "three_ripe_derived": 0.31,
+   "ripe_in_basket": "292/373",
+   "unripe_picked": "3/227",
+   "bruised_layouts": 0.15,
+   "steps_median": 145
+  },
+  "strict best": {
+   "solved": 0.55,
+   "one_ripe": 0.79,
+   "two_ripe": 0.54,
+   "bruised_layouts": 0.18
+  },
+  "strict latest, 520 steps": {
+   "solved": 0.62,
+   "two_ripe": 0.67,
+   "ripe_in_basket": "297/373"
+  },
+  "events latest (+reward events, 2M)": {
+   "solved": 0.62,
+   "one_ripe": 0.81,
+   "two_ripe": 0.54,
+   "three_ripe_derived": 0.47,
+   "ripe_in_basket": "296/373",
+   "unripe_picked": "0/227",
+   "bruised_layouts": 0.11,
+   "steps_median": 143
+  },
+  "events best (FINAL)": {
+   "solved": 0.67,
+   "one_ripe": 0.81,
+   "two_ripe": 0.64,
+   "three_ripe_derived": 0.51,
+   "ripe_in_basket": "321/373",
+   "unripe_picked": "6/227",
+   "unripe_picked_layouts": 0.03,
+   "bruised_layouts": 0.14,
+   "tomatoes_bruised": 36,
+   "steps_median": 140.5,
+   "touching_others_layouts": 0.36
+  }
+ },
+ "final_senses_50_layouts": {
+  "no_smell": {
+   "solved": 0.0
+  },
+  "all_look_ripe": {
+   "solved": 0.44,
+   "unripe_picked_layouts": 0.48
+  },
+  "turning_smells_ripe": {
+   "solved": 0.56,
+   "unripe_picked_layouts": 0.12
+  }
+ },
+ "failures_final": {
+  "bruised a tomato": 25,
+  "a later ripe one never picked": 20,
+  "never picked the first ripe one": 8,
+  "ripe one picked but not in the basket": 7,
+  "picked an unripe one": 5,
+  "tomato flung": 1
+ },
+ "failures_2cam_mem": {
+  "bruised": 45,
+  "second ripe never picked": 12,
+  "unripe picked": 9,
+  "dropped": 7,
+  "flung": 3,
+  "first never picked": 3
+ },
+ "failures_strict": {
+  "a later ripe one never picked": 31,
+  "bruised": 29,
+  "dropped": 6,
+  "first never picked": 5,
+  "unripe": 3,
+  "flung": 1
+ },
+ "later_ripe_never_picked": {
+  "strict_520_steps": {
+   "layouts": 31,
+   "hand_elsewhere": 0.96,
+   "last_drop_step_median": 76,
+   "time_left_s": 17.8,
+   "speed_cm_s": 8.6,
+   "grasp_attempts": 0
+  },
+  "final": {
+   "layouts": 20,
+   "hand_elsewhere": 0.93,
+   "last_drop_step_median": 74,
+   "time_left_s": 13.1,
+   "speed_cm_s": 10.1,
+   "grasp_attempts": 0
+  }
+ }
+}
