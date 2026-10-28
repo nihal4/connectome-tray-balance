@@ -518,9 +518,12 @@ def main():
         remeasure = None
         F = env_kw["n_facets"]
         nv = 2 * F * 3
-        if args.wrist_cam:                  # the wrist-eye inputs (image and its change) now come from the camera
+        # (only inputs whose source changed from the parent: re-measuring a camera the parent already had gave
+        # the copied brain differently scaled images, and the student fell from 72 % to 0 %)
+        _pc = json.load(open(os.path.join(init, "config.json")))
+        if args.wrist_cam and _pc.get("wrist_cam") != args.wrist_cam:   # wrist-eye inputs now from the camera
             remeasure = np.r_[F * 3:2 * F * 3, nv + F * 3:nv + 2 * F * 3]
-        if args.head_cam:                   # the head-eye inputs now come from the front camera
+        if args.head_cam and (_pc.get("head_cam") != args.head_cam or _pc.get("head_fovy") != args.head_fovy):
             head = np.r_[0:F * 3, nv:nv + F * 3]
             remeasure = head if remeasure is None else np.r_[remeasure, head]
         run_dagger(model, venv, eval_env, out, init, iters=args.imitate, steps=args.imitate_steps, remeasure=remeasure,

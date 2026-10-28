@@ -103,7 +103,9 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         log(f"[imitate] resumed at round {state['round']} ({state['steps']:,} steps)")
     else:
         # brain inputs: keep the parent's normalisation (the brain was trained with it)
-        with open(os.path.join(parent_dir, "vecnormalize.pkl"), "rb") as f:
+        # (the statistics that go with the parent's BEST brain, which is the one copied: the latest ones had drifted)
+        _vn = "best_vecnormalize.pkl" if os.path.exists(os.path.join(parent_dir, "best_vecnormalize.pkl")) else "vecnormalize.pkl"
+        with open(os.path.join(parent_dir, _vn), "rb") as f:
             parent = pickle.load(f)
         # eyes + body sense: the parent's statistics (the parent may have had privileged inputs after
         # them; a grown brain has new smell inputs after them, measured in round 1 like the critic's)

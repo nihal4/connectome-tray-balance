@@ -196,7 +196,7 @@ RIPENESS = ("green", "turning", "ripe")
 RIPE_RGBA = ([0.36, 0.62, 0.18, 1], [0.92, 0.50, 0.14, 1], [0.85, 0.12, 0.08, 1])
 RIPE_SMELL = (0.1, 0.4, 1.0)              # how strongly each stage smells of ripe fruit (fewer esters when unripe)
 PICK_OPEN = 0.35                          # teacher: open the hand only this far (5.5 cm) between neighbours
-PICK_OPEN_MANY = 0.0                      # teacher v2 (2c): open to 4 cm (a tomato is 3.2): 9 mm from neighbours
+PICK_OPEN_MANY = 0.25                     # teacher v2 (2c): open to 5 cm (a tomato is 3.2; the old teacher 5.4)
 SCAN_CENTRE = np.array([0.54, 0.0, 0.17])  # middle of the area the trusses hang in (the camera looks along APPROACH)
 SCAN_BACK = 0.25                          # observation pose: the wrist camera this far from SCAN_CENTRE, looking at it
 SCAN_CAM_FWD = np.array([-0.262, 0.0, -0.965])   # wrist camera's viewing direction with the hand in its harvest tilt
@@ -2160,9 +2160,12 @@ def _harvest_teacher_raw(env):
     return a
 
 
-GRASP_Y_TOL = 0.003      # teacher v2 (2c): sideways error allowed on the final approach (the fingers open along y)
-GRASP_O_TOL = 0.006      # ... and in the other direction across the approach line
-GRASP_AT = 0.004         # close when the TCP is this near the tomato's centre
+# teacher v2 (2c) tolerances: as loose as the old teacher's. 3 mm / 6 mm / 4 mm solved the same 98 % of trusses,
+# but a brain that sees 16 x 10 camera pixels could not tell when to move in or close: it learned to hover (the
+# "unrealizable teacher" problem), and fell to 0 % on its own
+GRASP_Y_TOL = 0.010      # sideways error allowed on the final approach (the fingers open along y)
+GRASP_O_TOL = 0.015      # ... and in the other direction across the approach line
+GRASP_AT = 0.012         # close when the TCP is this near the tomato's centre
 GRASP_SPEED = 0.004      # m per step along the approach line on the way in (10 cm/s)
 GRASP_GAIN = 0.6         # servo gain of the final approach (1.0: the hand, lagging its set-point, swung across)
 PULL_MANY = np.array([-0.015, 0, -0.004])   # pull-off per step: back, nearly horizontal (tension detaches fruit;
