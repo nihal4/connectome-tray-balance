@@ -80,8 +80,9 @@ always find the next tomato again.
 
 ## Files
 
-- `showcase_2000k.mp4`: the final brain on new trusses (not the 200 test layouts): three solved, then one miss
-  (red frame); insets show both cameras, what the brain receives from each, and the smell at the hand
+- `showcase_2000k.mp4`: the final brain on four new trusses (not the 200 test layouts): two solved (green
+  frame), two missed (red): a three-ripe truss lost early, and a two-ripe truss where the hand hesitates at the
+  turning tomatoes; insets show both cameras, what the brain receives from each, and the smell at the hand
 - `curves.png`: the last fine-tune (20-layout tests swing by +-15 points; the 200-layout test is the measure)
 - `precision_summary.json`: every number above (all brains, senses tests, failure counts)
 - `config_final.json`: the final run's settings
