@@ -83,6 +83,9 @@ def parse():
     ap.add_argument("--imitate_first_steps", type=int, default=30_000, help="teacher steps in the first imitation round")
     ap.add_argument("--imitate_epochs", type=float, default=6.0, help="passes over the imitation data per later round "
                     "(at most 2,000 updates; the first round makes 15 passes)")
+    ap.add_argument("--neuron_tau", action="store_true", default=None,
+                    help="fly brain: every neuron learns its own time constant (as connectome-constrained models of "
+                         "the fly do per cell type); the wiring stays the real one")
     ap.add_argument("--imitate_cap", type=int, default=120_000, help="imitation examples kept (the oldest drop out)")
     ap.add_argument("--imitate_updates", type=int, default=2000, help="most gradient updates per later imitation round")
     ap.add_argument("--privileged", action="store_true", default=None,
@@ -296,7 +299,7 @@ def main():
         n_smell = int(venv.get_attr("n_smell")[0])                 # smell inputs come after the body sense
         body_end = n_brain - n_smell
         mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
-        parent.update(mask_inputs=mask)
+        parent.update(mask_inputs=mask, neuron_tau=bool(args.neuron_tau))
         parent.update(memory=bool(args.memory), gentle=bool(args.gentle), head_cam=args.head_cam)
         # the task / robot settings of THIS run (what the environments were built with), not the parent's
         parent.update(head_fovy=args.head_fovy, smooth=bool(args.smooth), bruise_end=bool(args.bruise_end),
@@ -312,7 +315,7 @@ def main():
         norm = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
         policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=parent["k_steps"],
                              leak=parent["leak"], gain=parent["gain"], wiring=parent.get("wiring", "real"),
-                             log_std_init=-0.5, n_priv=N_PRIV, mask_inputs=mask)
+                             log_std_init=-0.5, n_priv=N_PRIV, mask_inputs=mask, neuron_tau=bool(args.neuron_tau))
         if args.memory:
             from sb3_contrib import RecurrentPPO
             from ctb.policies import recurrent_policy_class
@@ -471,7 +474,8 @@ def main():
         import shutil
         shutil.copy(args.subset, os.path.join(out, "subset.npz"))
         policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
-                             leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5)
+                             leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5,
+                             neuron_tau=bool(args.neuron_tau))
         core = ConnectomeCore(obs_dim, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
         actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
         del core
