@@ -446,7 +446,7 @@ layouts, unripe picked in 3 %.** Two fine-tunes, each found by measuring:
 from 75-83 % to 98.0 % (1,000 new trusses; the v19 brain scores 72 % on that version of the task), and the
 brain was pushed towards 95 %: five imitation variants (best 26 % alone), two biologically grounded brain
 changes (a learned time constant per neuron; all 156 descending neurons as outputs instead of 64: no effect)
-and teacher-guided reward practice (Jump-Start RL: no gain) all stayed at or below 67-72 %. A generic learner
+and teacher-guided reward practice (Jump-Start RL: 71 % on the 200 layouts, no gain) all stayed at or below 67-72 %. A generic learner
 reads the teacher's "close now" moment from the same camera inputs (AUC 0.998, distance to 0.3 mm), so the
 limit is not what the brain senses but how much of the step-by-step decisions it learns. Details:
 `results/v19_panda_pickmany/README.md`. Phase 3 (rotten fruit to a reject bin) is not attempted.

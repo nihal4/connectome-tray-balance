@@ -125,12 +125,14 @@ What the diagnostics showed (`scripts/diag_close_cue.py`, `scripts/diag_student_
 `--guide 200`: in each training episode the teacher drives a random 0-200 steps (at most until the last ripe
 tomato is picked), then the brain takes over and is paid only for what it does; the teacher's share falls to 0
 over training. From the v19 brain, stopped at 1.0M of 2M steps: 20-truss tests averaged ~70 % over the
-first 0.5M (the starting level) and ~58 % over the second, best single test 85 %.
+first 0.5M (the starting level) and ~58 % over the second, best single test 85 %. Its best brain on the 200
+layouts: **71 %** (one / two / three ripe 79 / 71 / ~57 %), 334 / 373 ripe in the basket, unripe picked in 2 %,
+bruised 13 %; the v19 brain on the same task version: 72 %, 336 / 373, bruised 16 %. The same level.
 
 ### Conclusion
 
 On phase 2c the fly brain reaches **67-72 %** and stays there: plain reward fine-tuning, five imitation
-variants (best 26 %), two biologically grounded brain changes (no effect) and teacher-guided practice all
+variants (best 26 %), two biologically grounded brain changes (no effect) and teacher-guided practice (71 %) all
 end at or below it. The teacher, with true positions, solves 98 %; the brain's cameras carry the same
 information, and a generic learner reads it from them. The limit is how much of the teacher's step-by-step
 decisions this connectome-shaped network learns, not what it senses: a measured edge of how far the fly

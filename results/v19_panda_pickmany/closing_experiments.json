@@ -101,7 +101,19 @@
     "stopped_at_steps": 1000000,
     "eval_20_trusses_mean_first_0.5M": "~0.70",
     "eval_20_trusses_mean_second_0.5M": "~0.58",
-    "best_single_test": 0.85
+    "best_single_test": 0.85,
+    "best_brain_200_layouts": {
+      "solved": 0.71,
+      "by_ripe": {
+        "1": 0.79,
+        "2": 0.71,
+        "3": "~0.57"
+      },
+      "ripe_in_basket": "334/373",
+      "unripe_picked_layouts": 0.02,
+      "bruised_layouts": 0.13,
+      "compare_v19_same_task": 0.72
+    }
   },
   "conclusion": "phase 2c plateau of the fly brain: 67-72 %; teacher 98 %"
 }
