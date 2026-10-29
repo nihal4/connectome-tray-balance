@@ -121,12 +121,29 @@ class WasteSortEnv(FlyPandaEnv):
         mujoco.mj_forward(m, d)
         for _ in range(30):
             mujoco.mj_step(m, d)
-        self._target = self.tcp_pos()
+        if self.grasp_start > 0 and self.rng.random() < self.grasp_start:
+            # training only (curriculum, as in the lift / place tasks): start with the item already held, the hand
+            # somewhere between the belt and the bins, so carrying and dropping are found too. Without it, PPO
+            # learned to suck the item up and then sat on the belt holding it (700k steps, 0 % sorted).
+            tcp = np.r_[self.rng.uniform([0.38, -0.22], [0.58, 0.22]), self.rng.uniform(0.04, 0.16)]
+            q = self._ik_solve(tcp, self._home, iters=60)
+            d.qpos[:7] = d.ctrl[:7] = q
+            mujoco.mj_forward(m, d)
+            tcp = self.tcp_pos()
+            d.qpos[qa:qa + 3] = tcp - np.array([0, 0, half[2] + 0.001])
+            d.qvel[:] = 0
+            mujoco.mj_forward(m, d)
+            self._attach()
+            self._suck = True
+            self._last_action = np.array([0, 0, 0, 1.0])
+            for _ in range(10):
+                mujoco.mj_step(m, d)
         self._hold, self._steps = 0, 0
         self._prev_img, self._adapt = None, None
         self._cmd = np.zeros(3)
-        self._last_action = np.zeros(4)
-        return self._get_obs(), {"item": name, "material": MATERIALS[mat]}
+        if not self._held:
+            self._last_action = np.zeros(4)
+        return self._get_obs(), {"item": name, "material": MATERIALS[mat], "held_start": self._held}
 
     # ------------------------------------------------------------------ senses
     def cup_touching(self):
