@@ -80,9 +80,16 @@ def _load_stats(norm, path):
 
 def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, cap=120_000, epochs=6,
                batch=256, lr=1e-3, eval_episodes=50, seed=0, log=print, final_std=0.15, save_fn=None,
-               first_steps=30_000, first_epochs=15, max_updates=2000, teacher_noise=0.15, remeasure=None):
+               first_steps=30_000, first_epochs=15, max_updates=2000, teacher_noise=0.15, remeasure=None,
+               grip_w=1.0, segment=0):
     """model: PPO whose policy has n_priv = N_PRIV; norm / eval_norm: VecNormalize around the
-    training / evaluation envs (privileged obs). Writes the run folder and returns the model."""
+    training / evaluation envs (privileged obs). Writes the run folder and returns the model.
+    grip_w: weight of the gripper error on the steps where the teacher decides to close an open hand (a rare,
+    one-step event among many 'keep open' steps: with a plain mean error the student learned the average,
+    0.18 instead of -1, and hovered at the tomato for the rest of the episode).
+    segment > 0: who drives (teacher with probability beta, else the student) is decided per stretch of this many
+    steps instead of per step, so the student's own mistakes run on and get labelled (as in HG-DAgger: the novice
+    drives, the expert labels); per step, the teacher took over every few steps and the hover never happened."""
     venv = norm.venv
     n_envs = venv.num_envs
     ext = model.policy.mlp_extractor
@@ -133,13 +140,15 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
 
     opt = torch.optim.Adam(_actor_params(model.policy), lr=lr)
     X = np.zeros((0, BLOCK, nb) if mem else (0, nb), np.float16)
-    Y = np.zeros((0, BLOCK, 4) if mem else (0, 4), np.float32)
+    Y = np.zeros((0, BLOCK, 5) if mem else (0, 5), np.float32)     # teacher action (4) + gripper weight
     S = np.zeros((0, BLOCK), bool)                 # memory: episode starts (neuron state reset there)
     H = np.zeros((0, BLOCK // H_EVERY, n_neur), np.float16)   # memory: the student's neuron state, every H_EVERY steps
     data_f = os.path.join(out, "imitate_data.npz")
     if state["round"] > 0 and os.path.exists(data_f):      # the data collected so far (DAgger aggregates it)
         with np.load(data_f) as d:
             X, Y = d["X"], d["Y"]
+            if Y.shape[-1] == 4:                   # (data from before the gripper weight)
+                Y = np.concatenate([Y, np.ones(Y.shape[:-1] + (1,), np.float32)], -1)
             if mem:
                 S, H = d["S"], d["H"]
         log(f"[imitate] data set restored: {len(X) * (BLOCK if mem else 1):,} examples")
@@ -179,6 +188,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         cur = np.zeros(n_envs)
         h = torch.zeros(n_envs, n_neur)            # memory: the student's neuron state follows its own perception
         start = np.ones(n_envs, bool)
+        use_teacher = rng.random(n_envs) < beta
         hs = []
         priv_raw = []
         for j in range(n_steps // n_envs):
@@ -194,12 +204,18 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
                     student = student.clamp(-1, 1).numpy()
                 else:
                     student = _actor_mean(model.policy, torch.as_tensor(nobs[:, :nb], dtype=torch.float32)).clamp(-1, 1).numpy()
-            use_teacher = rng.random(n_envs) < beta
+            if segment > 0:                        # driver decided per stretch (and at every episode start)
+                new = start | (j % segment == 0)
+                use_teacher = np.where(new, rng.random(n_envs) < beta, use_teacher)
+            else:
+                use_teacher = rng.random(n_envs) < beta
             # a little noise on whoever drives, so the data covers slightly-off situations too
             drive = np.where(use_teacher[:, None], teacher, student)
             act = np.clip(drive + rng.normal(0, teacher_noise, drive.shape), -1, 1)
             xs.append(nobs[:, :nb].astype(np.float16))
-            ys.append(teacher)
+            grip = np.array(venv.get_attr("_grip_ctrl"), dtype=np.float32)
+            decide = (teacher[:, 3] < 0) & (grip >= 40)        # the teacher closes a hand that is still open
+            ys.append(np.c_[teacher, np.where(decide, grip_w, 1.0).astype(np.float32)])
             ss.append(start.copy())
             obs, r, done, info = venv.step(act)
             start = done.astype(bool)
@@ -245,7 +261,7 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             else:
                 b = rng.integers(0, len(X), batch)
                 pred = _actor_mean(model.policy, torch.as_tensor(X[b], dtype=torch.float32))
-                loss = ((pred - torch.as_tensor(Y[b])) ** 2).mean()
+                loss = _weighted_err(pred, torch.as_tensor(Y[b]))
             if not torch.isfinite(loss):           # never let one bad batch poison the brain
                 losses.append(float("nan"))
                 continue
@@ -329,4 +345,11 @@ def _sequence_loss(policy, X, Y, S, H, rng):
     for t in range(BURN, BURN + CHUNK):
         a, h = _actor_step(policy, x[:, t], h * keep[:, t:t + 1])
         preds.append(a)
-    return ((torch.stack(preds, 1) - y) ** 2).mean()
+    return _weighted_err(torch.stack(preds, 1), y)
+
+
+def _weighted_err(pred, y):
+    """Mean squared imitation error; the gripper's error weighted by y[..., 4] (see run_dagger's grip_w)."""
+    err = (pred - y[..., :4]) ** 2
+    err = torch.cat([err[..., :3], err[..., 3:] * y[..., 4:5]], -1)
+    return err.mean()

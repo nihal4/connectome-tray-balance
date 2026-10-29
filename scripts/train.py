@@ -111,6 +111,11 @@ def parse():
     ap.add_argument("--all_dn", action="store_true", default=None,
                     help="fly brain: read every descending neuron the brain contains (156), not only the 64 strongest; "
                          "the added ones start with zero action weight (the copied brain acts as before)")
+    ap.add_argument("--imitate_grip_w", type=float, default=1.0,
+                    help="imitation: weight of the gripper error where the teacher closes an open hand (rare one-step "
+                         "decision; 1 = plain mean error)")
+    ap.add_argument("--imitate_segment", type=int, default=0,
+                    help="imitation: decide who drives per stretch of this many steps (0 = per step)")
     ap.add_argument("--imitate_cap", type=int, default=120_000, help="imitation examples kept (the oldest drop out)")
     ap.add_argument("--imitate_updates", type=int, default=2000, help="most gradient updates per later imitation round")
     ap.add_argument("--privileged", action="store_true", default=None,
@@ -570,6 +575,7 @@ def main():
                    eval_episodes=cfg["eval_episodes"], seed=args.seed, final_std=args.std or 0.15,
                    epochs=args.imitate_epochs, first_steps=args.imitate_first_steps,
                    cap=args.imitate_cap, max_updates=args.imitate_updates,
+                   grip_w=args.imitate_grip_w, segment=args.imitate_segment,
                    log=lambda m: print(m, flush=True), save_fn=save)
         if model.num_timesteps >= cfg["total_steps"]:
             print(f"[train] finished after imitation. Saved to {out}.")
