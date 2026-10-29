@@ -43,6 +43,9 @@ from ctb.envs.panda import N_PRIV
 
 def _actor_params(policy):
     ext = policy.mlp_extractor
+    if not hasattr(ext, "core"):                   # a baseline actor (MLP): everything but the critic
+        return [p for n, p in policy.named_parameters()
+                if not n.startswith(("mlp_extractor.critic", "value_net", "log_std"))]
     extra = [ext.mem_logit] if hasattr(ext, "mem_logit") else []          # memory: the carry-over gates
     dn = list(ext.readout_norm_dn.parameters()) if getattr(ext, "readout_norm_dn", None) is not None else []
     return list(ext.core.parameters()) + list(ext.readout_norm.parameters()) + dn + list(policy.action_net.parameters()) + extra
@@ -51,6 +54,8 @@ def _actor_params(policy):
 def _actor_mean(policy, obs_brain):
     """Fly-brain action (before clipping) from the brain's own inputs only."""
     ext = policy.mlp_extractor
+    if not hasattr(ext, "core"):                   # a baseline actor (MLP) on the same inputs
+        return policy.action_net(ext.forward_actor(obs_brain))
     if len(ext.mask_idx):                          # same input mask as the policy itself
         obs_brain = obs_brain.clone()
         obs_brain[:, ext.mask_idx] = 0.0
@@ -95,10 +100,10 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
     n_envs = venv.num_envs
     ext = model.policy.mlp_extractor
     nb = ext.n_brain
-    n_smell = getattr(ext.core, "n_smell", 0)
+    n_smell = getattr(getattr(ext, "core", None), "n_smell", 0)
     rng = np.random.default_rng(seed)
     mem = hasattr(model.policy, "lstm_actor")      # recurrent fly brain (memory)
-    n_neur = ext.core.n
+    n_neur = ext.core.n if mem else 1
     ckpt = os.path.join(out, "imitate_state.json")
     ev_file = os.path.join(out, "evaluations.npz")
     state = json.load(open(ckpt)) if os.path.exists(ckpt) else {"round": 0, "steps": 0, "best": -1e9}
@@ -110,6 +115,17 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
         model.policy.load_state_dict(torch.load(os.path.join(out, "imitate_policy.pt")))
         _load_stats(norm, os.path.join(out, "imitate_obs_stats.pkl"))
         log(f"[imitate] resumed at round {state['round']} ({state['steps']:,} steps)")
+    elif parent_dir is None:
+        # a fresh controller (no parent): the input statistics from a teacher-driven warm-up, before any example
+        obs = venv.reset()
+        raw = []
+        for _ in range(max(1, 8000 // n_envs)):
+            t_act = np.array(venv.env_method("teacher_action"), dtype=np.float32)
+            obs, _, _, _ = venv.step(np.clip(t_act + rng.normal(0, teacher_noise, t_act.shape), -1, 1))
+            raw.append(obs.copy())
+        raw = np.concatenate(raw)
+        norm.obs_rms.mean[:], norm.obs_rms.var[:], norm.obs_rms.count = raw.mean(0), raw.var(0) + 1e-6, len(raw)
+        log(f"[imitate] input statistics measured on {len(raw):,} teacher steps (fresh controller)")
     else:
         # brain inputs: keep the parent's normalisation (the brain was trained with it)
         # (the statistics that go with the parent's BEST brain, which is the one copied: the latest ones had drifted)

@@ -149,6 +149,16 @@ class WasteSortEnv(FlyPandaEnv):
             self._last_action = np.zeros(4)
         return self._get_obs(), {"item": name, "material": MATERIALS[mat], "held_start": self._held}
 
+    @property
+    def _grip_ctrl(self):
+        """For code written for the finger gripper (imitation's gripper-decision weighting): gripping = a closed
+        hand (0), venting = an open one (255)."""
+        return 0.0 if getattr(self, "_suck", True) else 255.0
+
+    @_grip_ctrl.setter
+    def _grip_ctrl(self, v):
+        pass                                           # (the base class sets the finger target; the cup ignores it)
+
     # ------------------------------------------------------------------ senses
     def cup_touching(self):
         d = self.data

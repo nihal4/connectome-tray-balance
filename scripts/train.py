@@ -460,6 +460,10 @@ def main():
             model = load_ppo(out, model_path + ".bak", env=norm, device=args.device)
             model_path_used = model_path + ".bak"
         venv = norm
+        _ist = os.path.join(out, "imitate_state.json")
+        if args.imitate and os.path.exists(_ist) and json.load(open(_ist)).get("round", 0) < args.imitate:
+            do_imitate = True               # stopped during the imitation rounds: continue them (run_dagger resumes)
+            print("[train] resuming the imitation rounds")
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
         if json.load(open(os.path.join(out, "config.json"))).get("memory"):
             from ctb.policies import SEQ_LEN, chunk_rollout_buffer
@@ -559,6 +563,11 @@ def main():
             ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0,
         )
         reset = True
+        if args.imitate:                    # fresh controller taught by the scripted teacher first (any --policy)
+            if not args.privileged:
+                raise SystemExit("--imitate needs --privileged (the critic for the PPO phase)")
+            do_imitate, init = True, None
+            print(f"[train] teacher -> fresh {args.policy} controller: {args.imitate} imitation rounds, then PPO (lr {lr})")
         cfg_dump = dict(vars(args), **cfg, actor_params=int(actor_params), obs_dim=obs_dim, act_dim=act_dim,
                         n_priv=n_priv_fresh, graph_seed=args.seed)
         with open(os.path.join(out, "config.json"), "w") as f:
@@ -597,7 +606,7 @@ def main():
         nv = 2 * F * 3
         # (only inputs whose source changed from the parent: re-measuring a camera the parent already had gave
         # the copied brain differently scaled images, and the student fell from 72 % to 0 %)
-        _pc = json.load(open(os.path.join(init, "config.json")))
+        _pc = json.load(open(os.path.join(init, "config.json"))) if init else {}
         if args.wrist_cam and _pc.get("wrist_cam") != args.wrist_cam:   # wrist-eye inputs now from the camera
             remeasure = np.r_[F * 3:2 * F * 3, nv + F * 3:nv + 2 * F * 3]
         if args.head_cam and (_pc.get("head_cam") != args.head_cam or _pc.get("head_fovy") != args.head_fovy):
