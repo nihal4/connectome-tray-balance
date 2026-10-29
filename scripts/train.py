@@ -112,8 +112,8 @@ def parse():
                     help="fly brain: read every descending neuron the brain contains (156), not only the 64 strongest; "
                          "the added ones start with zero action weight (the copied brain acts as before)")
     ap.add_argument("--imitate_grip_w", type=float, default=1.0,
-                    help="imitation: weight of the gripper error where the teacher closes an open hand (rare one-step "
-                         "decision; 1 = plain mean error)")
+                    help="imitation: weight of the gripper error where the teacher closes an open hand or opens a closed "
+                         "one (rare one-step decisions; 1 = plain mean error)")
     ap.add_argument("--imitate_segment", type=int, default=0,
                     help="imitation: decide who drives per stretch of this many steps (0 = per step)")
     ap.add_argument("--imitate_cap", type=int, default=120_000, help="imitation examples kept (the oldest drop out)")

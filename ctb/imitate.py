@@ -84,9 +84,10 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
                grip_w=1.0, segment=0):
     """model: PPO whose policy has n_priv = N_PRIV; norm / eval_norm: VecNormalize around the
     training / evaluation envs (privileged obs). Writes the run folder and returns the model.
-    grip_w: weight of the gripper error on the steps where the teacher decides to close an open hand (a rare,
-    one-step event among many 'keep open' steps: with a plain mean error the student learned the average,
-    0.18 instead of -1, and hovered at the tomato for the rest of the episode).
+    grip_w: weight of the gripper error on the steps where the teacher changes the gripper: closes an open hand
+    or opens a closed one (rare, one-step events among many 'keep as it is' steps: with a plain mean error the
+    student learned the average, 0.18 instead of -1, and hovered at the tomato for the rest of the episode;
+    with only the close weighted, it then carried the tomato over the basket and never let go).
     segment > 0: who drives (teacher with probability beta, else the student) is decided per stretch of this many
     steps instead of per step, so the student's own mistakes run on and get labelled (as in HG-DAgger: the novice
     drives, the expert labels); per step, the teacher took over every few steps and the hover never happened."""
@@ -214,7 +215,9 @@ def run_dagger(model, norm, eval_norm, out, parent_dir, iters=10, steps=15_000, 
             act = np.clip(drive + rng.normal(0, teacher_noise, drive.shape), -1, 1)
             xs.append(nobs[:, :nb].astype(np.float16))
             grip = np.array(venv.get_attr("_grip_ctrl"), dtype=np.float32)
-            decide = (teacher[:, 3] < 0) & (grip >= 40)        # the teacher closes a hand that is still open
+            # the teacher's gripper decisions: close a hand that is still open, open one that is still closed
+            # (releasing over the basket, letting go after a miss)
+            decide = ((teacher[:, 3] < 0) & (grip >= 40)) | ((teacher[:, 3] > 0) & (grip < 40))
             ys.append(np.c_[teacher, np.where(decide, grip_w, 1.0).astype(np.float32)])
             ss.append(start.copy())
             obs, r, done, info = venv.step(act)
