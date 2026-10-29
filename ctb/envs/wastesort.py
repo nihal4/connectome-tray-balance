@@ -55,6 +55,7 @@ CARRY_Z = 0.12                                 # teacher: carry height of the cu
 DROP_Z = 0.015                                 # teacher: let go with the item's underside this high above the bin floor
 WS_LO_W = np.array([0.30, -0.32, 0.002])       # the cup may go down to the belt (thin paper is 6 mm high)
 WRONG_BIN_REWARD = -1.0
+LIFT_CLEAR = 0.06                              # reward: a held item this high above the belt is clear of the rims
 
 
 class WasteSortEnv(FlyPandaEnv):
@@ -258,17 +259,21 @@ class WasteSortEnv(FlyPandaEnv):
         return obs, float(np.nan_to_num(r)), terminated, truncated and not terminated, info
 
     def _reward(self):
-        """Staged, every stage pays more than the one before: reach the item's top (0..1) -> held (+1) -> carried
-        over its bin (+2 x closeness) -> lowered (+0.5) -> in the bin, released (5) -> stays 0.2 s: success (6)."""
+        """Staged, every stage pays more than the one before: reach the item's top (0..1) -> held (+1, lifted clear
+        +0.5) -> carried over its bin (+2 x closeness) -> lowered (+0.5) -> in the bin, released (5) -> stays 0.2 s:
+        success (6)."""
         tcp, it, c = self.tcp_pos(), self.block_pos(), self.bin_pos()
         top = it + np.array([0, 0, self.model.geom_size[self.block_geom][2]])
         d_t = float(np.linalg.norm(tcp - top))
         dxy = float(np.linalg.norm(it[:2] - c[:2]))
         r = 1 - np.tanh(5 * d_t)
         if self._held:
-            r += 1.0 + 2.0 * (1 - np.tanh(5 * dxy))
+            # (tanh(3 x): still a clear pull from 30 cm away; lifted: the bins' rims are 4 cm high)
+            r += 1.0 + 2.0 * (1 - np.tanh(3 * dxy))
             if dxy < 0.03:
                 r += 0.5 * (1 - np.tanh(10 * max(0.0, it[2] - self.rest_z - DROP_Z)))   # lowered into it
+            else:
+                r += 0.5 * min(1.0, max(0.0, it[2] - self.model.geom_size[self.block_geom][2]) / LIFT_CLEAR)
         released = self.in_bin() and not self._held
         if released:
             r = 5.0
