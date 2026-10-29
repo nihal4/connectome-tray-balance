@@ -25,7 +25,7 @@ import mujoco
 import numpy as np
 
 from .panda import (BIN_FLOOR, FRAME_SKIP, LIFT_HOLD, SMELL_ANTENNAE, SMELL_FLICKER, SMELL_NOISE, SMELL_SIGMA, STEP,
-                    SUCCESS_GAMMA, WS_HI, WS_LO, FlyPandaEnv)
+                    WS_HI, WS_LO, FlyPandaEnv)
 
 MATERIALS = ("plastic", "metal", "paper", "glass")
 WASTE_BINS = np.array([[0.62, 0.24], [0.62, 0.08], [0.62, -0.08], [0.62, -0.24]])   # in MATERIALS order
@@ -57,6 +57,7 @@ CARRY_Z = 0.12                                 # teacher: carry height of the cu
 DROP_Z = 0.015                                 # teacher: let go with the item's underside this high above the bin floor
 WS_LO_W = np.array([0.30, -0.32, 0.002])       # the cup may go down to the belt (thin paper is 6 mm high)
 WRONG_BIN_REWARD = -1.0
+SORT_REWARD = 2.0                              # the item sorted into the right bin (the episode ends)
 OVER_Z = 0.08                                  # reward: carry towards this height above the bin floor (rims: 4 cm)
 
 
@@ -142,6 +143,7 @@ class WasteSortEnv(FlyPandaEnv):
                 mujoco.mj_step(m, d)
         self._hold, self._steps = 0, 0
         self._prev_img, self._adapt = None, None
+        self._phi_prev = None
         self._cmd = np.zeros(3)
         if not self._held:
             self._last_action = np.zeros(4)
@@ -256,7 +258,13 @@ class WasteSortEnv(FlyPandaEnv):
                 self._attach()
         self._steps += 1
         self._last_action = a
-        r, success, d_t = self._reward()
+        phi, success, d_t = self._reward()
+        # reward paid once, when progress is made (the change of the staged measure: potential-based shaping, Ng
+        # et al. 1999), plus SORT_REWARD for the right bin; a wrong bin costs WRONG_BIN_REWARD. Paid per step
+        # instead, holding the item over a bin earned 0.75 a step, nearly what sorting earns, and dropping into a
+        # wrong bin ended it: PPO learned to hold forever (0 % sorted, 700k steps, small and large MLP alike)
+        r = phi - (self._phi_prev if self._phi_prev is not None else phi)
+        self._phi_prev = phi
         truncated = self._steps >= self.max_steps
         unstable = self._bad_count() > bad0 or not np.isfinite(d.qpos).all()
         terminated = False
@@ -265,10 +273,8 @@ class WasteSortEnv(FlyPandaEnv):
             r, success, truncated = 0.0, False, True
         elif wrong:
             r, terminated, self._wrong = WRONG_BIN_REWARD, True, True
-        elif success:                                  # done: pay what staying solved until the end was worth
-            rem = self.max_steps - self._steps
-            r += SUCCESS_GAMMA * (1 - SUCCESS_GAMMA ** rem) / (1 - SUCCESS_GAMMA)
-            terminated = True
+        elif success:
+            r, terminated = r + SORT_REWARD, True
         info = {"is_success": bool(success), "dist": d_t, "sim_unstable": unstable, "wrong_bin": bool(wrong),
                 "held": self._held, "in_bin": self.in_bin(), "item": ITEMS[self._item][0],
                 "material": MATERIALS[self._mat]}
