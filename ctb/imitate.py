@@ -44,7 +44,8 @@ from ctb.envs.panda import N_PRIV
 def _actor_params(policy):
     ext = policy.mlp_extractor
     extra = [ext.mem_logit] if hasattr(ext, "mem_logit") else []          # memory: the carry-over gates
-    return list(ext.core.parameters()) + list(ext.readout_norm.parameters()) + list(policy.action_net.parameters()) + extra
+    dn = list(ext.readout_norm_dn.parameters()) if getattr(ext, "readout_norm_dn", None) is not None else []
+    return list(ext.core.parameters()) + list(ext.readout_norm.parameters()) + dn + list(policy.action_net.parameters()) + extra
 
 
 def _actor_mean(policy, obs_brain):
@@ -53,7 +54,7 @@ def _actor_mean(policy, obs_brain):
     if len(ext.mask_idx):                          # same input mask as the policy itself
         obs_brain = obs_brain.clone()
         obs_brain[:, ext.mask_idx] = 0.0
-    return policy.action_net(ext.readout_norm(ext.core(obs_brain)))
+    return policy.action_net(ext.readout(ext.core(obs_brain)))
 
 
 def _actor_step(policy, obs_brain, h):

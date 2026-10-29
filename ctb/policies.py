@@ -77,7 +77,8 @@ def _inv_softplus(y):
 
 class ConnectomeCore(nn.Module):
     def __init__(self, obs_dim: int, subset_path: str, k_steps: int = 4, leak: float = 0.5,
-                 gain: float = 1.5, wiring: str = "real", seed: int = 0, neuron_tau: bool = False):
+                 gain: float = 1.5, wiring: str = "real", seed: int = 0, neuron_tau: bool = False,
+                 all_dn: bool = False):
         super().__init__()
         d = np.load(subset_path)
         n = int(d["n"])
@@ -110,7 +111,15 @@ class ConnectomeCore(nn.Module):
         self.register_buffer("post", post)
         self.register_buffer("sign", sign)
         self.register_buffer("input_idx", torch.as_tensor(d["input_idx"], dtype=torch.long))
-        self.register_buffer("output_idx", torch.as_tensor(d["output_idx"], dtype=torch.long))
+        out_idx = d["output_idx"]
+        self.n_out_base = len(out_idx)
+        # all_dn: read EVERY descending neuron in the brain (the brain's own commands to the body), not only the
+        # 64 strongest; the extra ones come after the original outputs (see scripts/add_all_dn.py)
+        if all_dn:
+            if "dn_extra_idx" not in d.files:
+                raise ValueError(f"{subset_path} has no dn_extra_idx (run scripts/add_all_dn.py on it)")
+            out_idx = np.concatenate([out_idx, d["dn_extra_idx"]])
+        self.register_buffer("output_idx", torch.as_tensor(out_idx, dtype=torch.long))
         self.theta = nn.Parameter(_inv_softplus(w0.clamp_min(1e-4)))   # strength > 0 always
         self.bias = nn.Parameter(torch.zeros(n))
         self.out_dim = len(self.output_idx)
@@ -219,20 +228,25 @@ class ConnectomeExtractor(nn.Module):
     """SB3 'mlp_extractor': returns (actor latent, critic latent)."""
 
     def __init__(self, obs_dim, subset_path, k_steps, leak, gain, wiring, critic_hidden=64, n_priv=0, mask_inputs=(),
-                 neuron_tau=False):
+                 neuron_tau=False, all_dn=False):
         super().__init__()
         # n_priv > 0: the LAST n_priv observation values are the simulator's true state (block,
         # goal, grasp ...). Only the critic gets them (asymmetric actor-critic, Pinto et al. 2017);
         # the fly brain is built for, and only ever receives, the first obs_dim - n_priv values.
         self.n_priv = n_priv
         self.n_brain = obs_dim - n_priv
-        self.core = ConnectomeCore(self.n_brain, subset_path, k_steps, leak, gain, wiring, neuron_tau=neuron_tau)
+        self.core = ConnectomeCore(self.n_brain, subset_path, k_steps, leak, gain, wiring, neuron_tau=neuron_tau,
+                                   all_dn=all_dn)
         # brain inputs held at zero (e.g. the previous command: copying it is the classic
         # "copycat" shortcut in imitation learning, so the student must read its eyes instead)
         self.register_buffer("mask_idx", torch.as_tensor(list(mask_inputs), dtype=torch.long), persistent=False)
         # The output neurons' activity is small and similar across inputs at init.
         # A LayerNorm readout rescales it so the action head gets a usable signal.
-        self.readout_norm = nn.LayerNorm(self.core.out_dim)
+        # all_dn: the original command neurons keep their own LayerNorm (so a copied brain reads them exactly as
+        # before) and the added ones get a second one; their action weights start at zero (train.py)
+        nb = self.core.n_out_base
+        self.readout_norm = nn.LayerNorm(nb)
+        self.readout_norm_dn = nn.LayerNorm(self.core.out_dim - nb) if self.core.out_dim > nb else None
         crit_in = n_priv if n_priv else obs_dim
         if n_priv:
             critic_hidden = max(critic_hidden, 128)
@@ -249,7 +263,13 @@ class ConnectomeExtractor(nn.Module):
         if len(self.mask_idx):
             x = x.clone()
             x[:, self.mask_idx] = 0.0
-        return self.readout_norm(self.core(x))
+        return self.readout(self.core(x))
+
+    def readout(self, out):
+        if self.readout_norm_dn is None:
+            return self.readout_norm(out)
+        nb = self.core.n_out_base
+        return torch.cat([self.readout_norm(out[:, :nb]), self.readout_norm_dn(out[:, nb:])], 1)
 
     def forward_critic(self, x):
         return self.critic(x[:, self.n_brain:] if self.n_priv else x)
@@ -261,15 +281,15 @@ class ConnectomeExtractor(nn.Module):
             x = x.clone()
             x[:, self.mask_idx] = 0.0
         out, h = self.core.step(x, h)
-        return self.readout_norm(out), h
+        return self.readout(out), h
 
 
 class ConnectomePolicy(ActorCriticPolicy):
     def __init__(self, *args, subset_path: str = "", k_steps: int = 4, leak: float = 0.5,
                  gain: float = 1.5, wiring: str = "real", n_priv: int = 0, mask_inputs=(), neuron_tau: bool = False,
-                 **kwargs):
+                 all_dn: bool = False, **kwargs):
         self._cfg = dict(subset_path=subset_path, k_steps=k_steps, leak=leak, gain=gain, wiring=wiring, n_priv=n_priv,
-                         mask_inputs=tuple(mask_inputs), neuron_tau=bool(neuron_tau))
+                         mask_inputs=tuple(mask_inputs), neuron_tau=bool(neuron_tau), all_dn=bool(all_dn))
         kwargs["ortho_init"] = False   # keep the connectome-based initial weights
         super().__init__(*args, **kwargs)
 
@@ -303,7 +323,8 @@ def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu", custo
                   leak=cfg.get("leak") if cfg.get("leak") is not None else 0.5,
                   gain=cfg.get("gain") if cfg.get("gain") is not None else 1.5,
                   wiring=cfg.get("wiring", "real"), log_std_init=-0.5, n_priv=int(cfg.get("n_priv", 0) or 0),
-                  mask_inputs=tuple(cfg.get("mask_inputs", ()) or ()), neuron_tau=bool(cfg.get("neuron_tau")))
+                  mask_inputs=tuple(cfg.get("mask_inputs", ()) or ()), neuron_tau=bool(cfg.get("neuron_tau")),
+                  all_dn=bool(cfg.get("all_dn")))
     if cfg.get("memory"):                       # fly brain with memory (recurrent PPO, sb3-contrib)
         from sb3_contrib import RecurrentPPO
         return RecurrentPPO.load(model_path, env=env, device=device,
@@ -385,9 +406,10 @@ def _make_recurrent_policy_class():
 
         def __init__(self, observation_space, action_space, lr_schedule, *args, subset_path: str = "",
                      k_steps: int = 4, leak: float = 0.5, gain: float = 1.5, wiring: str = "real", n_priv: int = 0,
-                     mask_inputs=(), neuron_tau: bool = False, **kwargs):
+                     mask_inputs=(), neuron_tau: bool = False, all_dn: bool = False, **kwargs):
             self._cfg = dict(subset_path=subset_path, k_steps=k_steps, leak=leak, gain=gain, wiring=wiring,
-                             n_priv=n_priv, mask_inputs=tuple(mask_inputs), neuron_tau=bool(neuron_tau))
+                             n_priv=n_priv, mask_inputs=tuple(mask_inputs), neuron_tau=bool(neuron_tau),
+                             all_dn=bool(all_dn))
             kwargs.update(ortho_init=False, lstm_hidden_size=1, n_lstm_layers=1, shared_lstm=False,
                           enable_critic_lstm=False)
             super().__init__(observation_space, action_space, lr_schedule, *args, **kwargs)

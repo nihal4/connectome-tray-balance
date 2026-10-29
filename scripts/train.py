@@ -36,6 +36,28 @@ sys.path.insert(0, ROOT)
 from ctb.profiles import ENV_NAMES, PROFILES  # noqa: E402 (no heavy imports)
 
 
+def _add_dn(subset):
+    """--all_dn: give a run's brain file the list of its other descending neurons (dn_extra_idx), taken from the
+    brain file in data/ with exactly the same neurons (scripts/add_all_dn.py made it)."""
+    import glob
+    import numpy as np
+    d = dict(np.load(subset, allow_pickle=True))
+    if "dn_extra_idx" in d:
+        return
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for f in sorted(glob.glob(os.path.join(root, "data", "*.npz"))):
+        with np.load(f, allow_pickle=True) as s:
+            if ("dn_extra_idx" in s.files and "root_ids" in s.files and "root_ids" in d
+                    and np.array_equal(s["root_ids"], d["root_ids"]) and np.array_equal(s["output_idx"], d["output_idx"])):
+                d["dn_extra_idx"] = s["dn_extra_idx"]
+                np.savez_compressed(subset, **d)
+                print(f"[train] all_dn: {len(d['output_idx'])} + {len(d['dn_extra_idx'])} descending neurons read "
+                      f"(list from {os.path.basename(f)})")
+                return
+    raise SystemExit("--all_dn: no brain file in data/ lists this brain's other descending neurons "
+                     "(run scripts/add_all_dn.py on it)")
+
+
 def parse():
     ap = argparse.ArgumentParser()
     ap.add_argument("--env", choices=ENV_NAMES, default="tray")
@@ -86,6 +108,9 @@ def parse():
     ap.add_argument("--neuron_tau", action="store_true", default=None,
                     help="fly brain: every neuron learns its own time constant (as connectome-constrained models of "
                          "the fly do per cell type); the wiring stays the real one")
+    ap.add_argument("--all_dn", action="store_true", default=None,
+                    help="fly brain: read every descending neuron the brain contains (156), not only the 64 strongest; "
+                         "the added ones start with zero action weight (the copied brain acts as before)")
     ap.add_argument("--imitate_cap", type=int, default=120_000, help="imitation examples kept (the oldest drop out)")
     ap.add_argument("--imitate_updates", type=int, default=2000, help="most gradient updates per later imitation round")
     ap.add_argument("--privileged", action="store_true", default=None,
@@ -289,6 +314,8 @@ def main():
         shutil.copy(args.subset if grown else os.path.join(init, "subset.npz"), os.path.join(out, "subset.npz"))
         if grown:
             print(f"[train] brain grown from the parent's: {args.subset}")
+        if args.all_dn:
+            _add_dn(os.path.join(out, "subset.npz"))
         parent = json.load(open(os.path.join(init, "config.json")))
         if grown:
             parent["subset"] = os.path.abspath(args.subset)
@@ -299,7 +326,7 @@ def main():
         n_smell = int(venv.get_attr("n_smell")[0])                 # smell inputs come after the body sense
         body_end = n_brain - n_smell
         mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
-        parent.update(mask_inputs=mask, neuron_tau=bool(args.neuron_tau))
+        parent.update(mask_inputs=mask, neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn))
         parent.update(memory=bool(args.memory), gentle=bool(args.gentle), head_cam=args.head_cam)
         # the task / robot settings of THIS run (what the environments were built with), not the parent's
         parent.update(head_fovy=args.head_fovy, smooth=bool(args.smooth), bruise_end=bool(args.bruise_end),
@@ -315,7 +342,8 @@ def main():
         norm = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
         policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=parent["k_steps"],
                              leak=parent["leak"], gain=parent["gain"], wiring=parent.get("wiring", "real"),
-                             log_std_init=-0.5, n_priv=N_PRIV, mask_inputs=mask, neuron_tau=bool(args.neuron_tau))
+                             log_std_init=-0.5, n_priv=N_PRIV, mask_inputs=mask, neuron_tau=bool(args.neuron_tau),
+                             all_dn=bool(args.all_dn))
         if args.memory:
             from sb3_contrib import RecurrentPPO
             from ctb.policies import recurrent_policy_class
@@ -343,6 +371,12 @@ def main():
             if k in src and k in dst and src[k].shape != dst[k].shape and src[k].shape[0] < dst[k].shape[0]:
                 dst[k][:src[k].shape[0]] = src[k]
                 grew.append(f"{k.split('.')[-1]} {src[k].shape[0]}/{dst[k].shape[0]}")
+        # all_dn: the parent's action weights for its 64 command neurons carry over; the added ones start at 0
+        k = "action_net.weight"
+        if k in src and src[k].shape[0] == dst[k].shape[0] and src[k].shape[1] < dst[k].shape[1]:
+            dst[k].zero_()
+            dst[k][:, :src[k].shape[1]] = src[k]
+            grew.append(f"command neurons {src[k].shape[1]}/{dst[k].shape[1]} (added ones start silent)")
         if grew:
             print("[train] grown brain: learned values copied for " + ", ".join(grew))
             same += grew
@@ -475,7 +509,9 @@ def main():
         shutil.copy(args.subset, os.path.join(out, "subset.npz"))
         policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
                              leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5,
-                             neuron_tau=bool(args.neuron_tau))
+                             neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn))
+        if args.all_dn:
+            _add_dn(os.path.join(out, "subset.npz"))
         core = ConnectomeCore(obs_dim, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
         actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
         del core

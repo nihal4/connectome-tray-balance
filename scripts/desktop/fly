@@ -39,6 +39,7 @@ case "${1:-help}" in
       case "$EXTRA" in *--reward\ events*) NAME="$NAME-events" ;; esac    # banked (event) reward
       case "$EXTRA" in *--imitate*) NAME="$NAME-teacher2" ;; esac       # re-taught by teacher v2
       case "$EXTRA" in *--neuron_tau*) NAME="$NAME-tau" ;; esac         # brain: per-neuron time constants
+      case "$EXTRA" in *--all_dn*) NAME="$NAME-dn" ;; esac              # brain: reads all its descending neurons
     fi
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;
