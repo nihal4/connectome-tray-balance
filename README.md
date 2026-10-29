@@ -1,12 +1,44 @@
 # connectome-tray-balance
 
-**Fly-brain-wired controllers for robot-arm balance and maze puzzles**
+**Robots run by the wiring of a fruit fly's brain: from balancing a ball to harvesting tomatoes**
 
-A robot arm in MuJoCo learns to balance a ball on a tray and then to solve **tilt-maze puzzles** (roll the ball through a maze to the goal). Its "brain" (the policy) is a recurrent network whose **wiring is copied from the fruit-fly connectome** (FlyWire v783). Only the fly-brain network is studied here.
+Every robot here is controlled by a recurrent network whose **wiring is copied from the fruit-fly connectome**
+(FlyWire v783): the robot sees through the fly's eye neurons, feels its body through the fly's body-sense
+neurons and moves through the fly's command (descending) neurons. Who connects to whom and the sign of each
+connection are fixed; only the connection strengths are learned (PPO, and imitation of a scripted teacher).
+It started with an arm balancing a ball on a tray and tilt-maze puzzles, and grew into a Franka Panda arm that
+grasps, sorts by colour, smells ripe fruit and harvests cherry tomatoes off a plant (in MuJoCo).
 
-This is a feasibility / reproduction setup, not a finished study.
+**Status: concluded (October 2026).** Exploratory, one training seed per experiment, so read the numbers as
+first results, not a benchmark.
+
+### What it found
+
+| | Task | Fly brain alone |
+|---|---|---|
+| v5 | balance a ball, seeing only a camera | 100 % |
+| v7 | tilt maze through the camera (one maze) | 100 % (0 % on unseen mazes) |
+| v10 | Panda arm: grasp and lift a block it finds by eye | ~90 % |
+| v12 / v14 | sort blocks by colour; with light-adapting fly eyes | 95 % / 98 %, 100 % at x0.4-2.5 brightness |
+| v15 | ripe or rotten by smell alone (fly smell pathway) | 98 % |
+| v16 | pick a tomato off the plant | 98 % |
+| v17 | pick only the ripe tomato (depth camera into the eye neurons) | 98 %, 0 of 400 unripe |
+| v18 | pick every ripe tomato, gently | 79-82 % |
+| v19 | any truss of 2-6 tomatoes, 1-3 ripe | **67-72 %: its plateau** |
+
+- The fly wiring, trained end to end, learned every handling task up to picking ripe tomatoes off a plant by
+  sight and smell, with the same brain grown step by step (camera, light adaptation, smell, memory).
+- **Where it stops (v19):** a scripted teacher solves the any-truss task 98 %, and the teacher's "close now"
+  moment can be read from the brain's own camera inputs almost perfectly (AUC 0.998, distance to 0.3 mm). Yet
+  imitation (five variants, best 26 %), two biologically grounded brain changes (no effect) and teacher-guided
+  practice (71 %) all stayed at or below 67-72 %. The limit is how much of the step-by-step decisions this
+  network learns, not what it senses. Details: `results/v19_panda_pickmany/README.md`.
+- Honest negatives along the way: random mazes were never learned (v3, v7), a camera-noise test broke the
+  vision brains (v5), the drone was put on hold, and bruising tomatoes stayed a 10-15 % failure.
 
 **Project page with videos:** https://nihal4.github.io/connectome-tray-balance/ (from `index.html`; enable it under Settings → Pages → Deploy from branch `main`, folder `/ (root)`).
+
+The first brain (v1-v3: tray and numeric mazes); the fly-robot brain used from v4 on is described below.
 
 ![maze](results/previews/maze4.png)
 
@@ -572,6 +604,15 @@ scripts/desktop/             always-on Ubuntu PC: setup.sh, fly command, auto-re
 scripts/watch_maze.py        maze diagnostic videos (real start, and k cells before the goal)
 scripts/build_flybrain.py    fly-robot brain: eye/body-sense inputs, command outputs, pathways
                              (--eye compound: the drone's two compound eyes)
+scripts/grow_smell_brain.py  grow a brain with the fly's smell pathway (antennae -> glomeruli -> commands)
+scripts/add_all_dn.py        list every descending neuron in a brain (--all_dn reads all 156)
+ctb/imitate.py               teacher -> student imitation (DAgger, memory brains, gripper-decision weighting)
+scripts/precision_*.py       the fixed test sets per task (e.g. precision_pickripe.py: the 200 truss layouts)
+scripts/failures_pickripe.py where and why a harvest failed (follows the hand after its last drop)
+scripts/teacher_check.py     the scripted harvest teacher on 1,000 trusses, failures by cause
+scripts/diag_close_cue.py    is the teacher's "close now" moment readable from the brain's inputs?
+scripts/diag_student_vs_teacher.py  run a brain and ask the teacher at every step where it stalls
+scripts/showcase.py, linkedin_video.py  result videos with the camera / smell insets
 notebooks/kaggle_train.ipynb 1,000-neuron network, ball/maze given as numbers
 notebooks/kaggle_flyrobot.ipynb  fly-robot brain, camera tasks (train, test videos, export zip)
 notebooks/kaggle_drone.ipynb fly-brain drone with compound eyes
@@ -641,7 +682,7 @@ or power cut, `fly start` resumes from the last checkpoint (training never start
 
 Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind** (ball position and velocity hidden), heavy ball (3×), random pushes. These are the tests for later research questions, in the spirit of FLYNN (robustness to sensory loss).
 
-## Results so far
+## Results
 
 - **v1, tray balance** (`results/v1_tray_balance/`): the 1,000-neuron network solves it by 100k steps and is robust to noise, a heavy ball and pushes; it fails when the ball is hidden.
 - **v2, fixed maze** (`results/v2_maze_fixed3_local/`, local, 400k steps): not solved yet; it often reaches the goal but cannot stop the ball there.
@@ -663,14 +704,15 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v17, greenhouse phase 2a: pick only the ripe tomato** (`results/v17_panda_pickripe_cam/`): wrist depth camera into the fly's wrist-eye neurons; 98 % of 200 layouts, 0 of 400 unripe picked.
 - **v18, greenhouse phase 2b: pick every ripe tomato** (`results/v18_panda_pickripe_2ripe/`): wrist and front depth cameras, smell, memory, gentle handling; 79-82 % of 200 layouts (one ripe 86 %, two ripe 74 %), 1 of 290 unripe picked, 4.9 s; bruises in 10 % of layouts remain the main failure.
 - **v19, greenhouse phase 2c: any truss** (`results/v19_panda_pickmany/`): 2-6 tomatoes at irregular places, 1-3 ripe; 67 % of 200 layouts (three ripe ~51 %), bruised in 14 % of layouts; a bruise ends the episode, and each tomato is paid once (banked) so the brain does not stop after the first. Closing experiments (teacher 98 %, imitation, brain changes, guided practice) found a plateau at 67-72 %: the end of the arm series.
-- **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
-- **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
+- **Not continued:** greenhouse phase 3 (rotten fruit to a reject bin), a real plant and a cart loop through the rows (they add more of the decisions the brain plateaued on); `maze3_vision` (random mazes by camera); the compound-eye drone (`drone_reach`, ready to train with `notebooks/kaggle_drone.ipynb`).
 
 ## Notes and limits
 
 - The arm's forearm visibly passes through the tray in some poses. It is cosmetic: arm parts are in a separate collision group and never touch the ball.
-- The connectome subset is the 1000 most strongly connected neurons and the connections between them. It is not a specific brain region, and the "input" and "output" neurons are chosen by graph structure, not biology.
-- The network has no memory across time steps (state resets every step). That is enough for the mazes because the layout is in every observation; memory is a natural next experiment (e.g. show the layout only at the start).
+- The first brain (tray and numeric mazes, v1-v3) is the 1000 most strongly connected neurons; its inputs and outputs are chosen by graph structure, not biology. From v4 on ("fly-robot mode") the brain follows the real pathways from photoreceptors and ascending neurons to descending neurons (2,000-4,476 neurons, real cell types).
+- Memory: up to v17 the neuron state is reset every step; from v18 on (`--memory`) each neuron learns how much of its activity to carry over.
+- The depth cameras of v17-v19 are robot hardware (like an Intel RealSense), fed into the eye neurons by layout; flies judge distance mainly from motion (parallax, looming), not from stereo depth.
+- Rate neurons, not spiking cells; trained with PPO and imitation, not how a fly learns. One training seed per result.
 - `--wiring shuffled` keeps the same edges, signs and weights but connects them randomly; compare against it before claiming the real wiring helps.
 
 ## Data and credits

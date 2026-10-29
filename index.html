@@ -141,6 +141,7 @@ details[open] summary { margin-bottom: 0.3rem; }
 
 /* tables */
 table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.92rem; }
+@media (max-width: 600px) { table { display: block; overflow-x: auto; } }   /* wide tables scroll, not the page */
 th, td { text-align: left; padding: 0.45rem 0.6rem 0.45rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
 th { font-family: "Archivo", sans-serif; font-stretch: 90%; font-weight: 650; }
 td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -197,7 +198,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     map of the fly brain. Only the connection strengths are learned.</p>
   <p class="byline">
     <a href="https://github.com/nihal4/connectome-tray-balance">Code on GitHub</a>
-    <a href="#roadmap">What's next</a>
+    <a href="#findings">What it found</a>
     <a href="#run-it">Run it yourself</a>
     <span>by S. M. Nihal Ahmed</span>
   </p>
@@ -217,11 +218,27 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
     <li><a href="#t12"><span class="n">12</span><span class="t">Greenhouse: pick only the ripe tomato</span><span class="tag done">Done</span></a></li>
     <li><a href="#t13"><span class="n">13</span><span class="t">Greenhouse: pick every ripe tomato</span><span class="tag done">Done</span></a></li>
     <li><a href="#t14"><span class="n">14</span><span class="t">Greenhouse: any truss</span><span class="tag done">Done</span></a></li>
-    <li><a href="#roadmap"><span class="n">14+</span><span class="t">Full greenhouse harvesting robot</span><span class="tag next">Planned</span></a></li>
+    <li><a href="#roadmap"><span class="n">15+</span><span class="t">Rotten fruit, real plant, greenhouse loop</span><span class="tag hold">Ended</span></a></li>
   </ul>
 </header>
 
 <main class="wrap prose">
+
+  <h2 id="findings">What it found</h2>
+  <p><b>Project concluded, October 2026.</b> The same fly wiring, grown step by step with a camera, light-adapting
+    eyes, the fly's smell pathway and memory, learned every handling task up to picking only the ripe tomatoes off a
+    plant, by sight and smell, at 98&nbsp;%. On any truss of two to six tomatoes it plateaus at
+    <b>67&ndash;72&nbsp;%</b> (task&nbsp;14), while a scripted teacher solves 98&nbsp;%.</p>
+  <ul>
+    <li><b>The senses are not the limit.</b> A standard machine-learning model reads the teacher's &ldquo;close
+      now&rdquo; moment from exactly the brain's camera inputs almost perfectly, and the distance to the tomato
+      to 0.3&nbsp;mm.</li>
+    <li><b>The decisions are.</b> Copying the teacher (five variants) never passed 26&nbsp;%; a learned speed for
+      every neuron and reading all 156 of its command neurons changed nothing; letting the teacher start each
+      practice try gave 71&nbsp;%. The brain learns the open-and-close moments of the hand only partly.</li>
+    <li><b>Honest negatives:</b> random mazes were never learned, camera noise broke the early vision brains, the
+      drone is on hold, and bruising stayed a 10&ndash;15&nbsp;% failure in the harvest tasks.</li>
+  </ul>
 
   <h2>How the robots are wired</h2>
   <p>The fly brain has been mapped neuron by neuron: about 139,000 neurons and 15 million
@@ -1104,7 +1121,7 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
       one to three are ripe. Same robot and fly brain as task 13 (two depth cameras, smell, memory, a gripper
       that cannot squeeze hard). A bruise of any tomato, by a knock above 5&nbsp;N or a hard landing, fails the
       harvest. The scripted teacher it learned from solves 75&ndash;83&nbsp;% of these trusses.</p>
-    <ul class="facts"><li>Solved: <b>67 %</b> of 200</li><li>Three ripe: <b>~51 %</b></li><li>Bruised: <b>14 %</b> of layouts</li><li>Time: <b>5.6 s</b></li></ul>
+    <ul class="facts"><li>Solved: <b>67 %</b> of 200</li><li>Three ripe: <b>~51 %</b></li><li>Bruised: <b>14 %</b> of layouts</li><li>Time: <b>5.6 s</b></li><li>Plateau: <b>67&ndash;72 %</b> (teacher 98 %)</li></ul>
     <div class="gallery">
       <figure>
         <video src="results/v19_panda_pickmany/showcase_2000k.mp4" poster="results/v19_panda_pickmany/poster_showcase_2000k.jpg" controls muted loop playsinline preload="none"
@@ -1185,7 +1202,8 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
       <tr><td>Neurons</td><td class="no">Simple rate units, not spiking cells</td></tr>
       <tr><td>The eye's input</td><td class="no">Early arm: a 16×16 grey image. Drone and Panda: a fly-like compound eye with real photoreceptor types, but 160 instead of ~800 facets per eye and 25 instead of ~200 images per second</td></tr>
       <tr><td>Below the brain</td><td class="no">A controller turns hand commands into joint motions (Panda) or keeps the drone level, standing in for the nerve cord and halteres, which the brain map does not include</td></tr>
-      <tr><td>Learning</td><td class="no">Reinforcement learning (PPO), not how a fly learns</td></tr>
+      <tr><td>Depth (tasks 12&ndash;14)</td><td class="no">Robot depth cameras, fed into the eye neurons by layout; flies judge distance mainly from motion, not stereo depth</td></tr>
+      <tr><td>Learning</td><td class="no">Reinforcement learning (PPO) and imitation of a scripted teacher, not how a fly learns</td></tr>
     </tbody>
   </table>
   <p>So this is not a simulated fly mind. It uses the fly brain's circuit layout as the design of a
@@ -1210,7 +1228,8 @@ python scripts/train.py --env panda_reach --policy connectome \
     processed edge list from Shiu et al. 2024 (<em>Nature</em>), cell types from
     <a href="https://github.com/flyconnectome/flywire_annotations">flywire_annotations</a>.
     Robot: Franka Emika Panda from MuJoCo Menagerie. Simulation: MuJoCo. Training: Stable-Baselines3 PPO.</p>
-  <p>Related work: NeuroMechFly v2 (2024), FLYNN (2026), FlyGM (2026), Lappalainen et al. 2024.</p>
+  <p>Related work: NeuroMechFly v2 (2024), FLYNN (2026), FlyGM (2026), Lappalainen et al. 2024; methods: DAgger
+    (Ross et al. 2011), HG-DAgger (Kelly et al. 2019), Jump-Start RL (Uchendu et al. 2023).</p>
   <p>Exploratory project by S. M. Nihal Ahmed.
     <a href="https://github.com/nihal4/connectome-tray-balance">Source code and full results</a>.</p>
 </footer>
