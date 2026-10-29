@@ -87,10 +87,13 @@ class ConnectomeCore(nn.Module):
         count = torch.as_tensor(d["count"], dtype=torch.float32)
         sign = torch.as_tensor(d["sign"], dtype=torch.float32)
 
-        if wiring == "shuffled":
+        if wiring == "shuffled":            # random graph (Erdos-Renyi style): same number of edges, signs, counts
             g = torch.Generator().manual_seed(seed)
             pre = torch.randint(0, n, pre.shape, generator=g)
             post = torch.randint(0, n, post.shape, generator=g)
+        elif wiring == "rewired":           # degree-preserving: every neuron keeps its number of inputs and outputs
+            g = torch.Generator().manual_seed(seed)          # (and its input/output role), partners are random
+            post = post[torch.randperm(len(post), generator=g)]
         elif wiring != "real":
             raise ValueError(wiring)
 
@@ -228,15 +231,15 @@ class ConnectomeExtractor(nn.Module):
     """SB3 'mlp_extractor': returns (actor latent, critic latent)."""
 
     def __init__(self, obs_dim, subset_path, k_steps, leak, gain, wiring, critic_hidden=64, n_priv=0, mask_inputs=(),
-                 neuron_tau=False, all_dn=False):
+                 neuron_tau=False, all_dn=False, graph_seed=0):
         super().__init__()
         # n_priv > 0: the LAST n_priv observation values are the simulator's true state (block,
         # goal, grasp ...). Only the critic gets them (asymmetric actor-critic, Pinto et al. 2017);
         # the fly brain is built for, and only ever receives, the first obs_dim - n_priv values.
         self.n_priv = n_priv
         self.n_brain = obs_dim - n_priv
-        self.core = ConnectomeCore(self.n_brain, subset_path, k_steps, leak, gain, wiring, neuron_tau=neuron_tau,
-                                   all_dn=all_dn)
+        self.core = ConnectomeCore(self.n_brain, subset_path, k_steps, leak, gain, wiring, seed=graph_seed,
+                                   neuron_tau=neuron_tau, all_dn=all_dn)
         # brain inputs held at zero (e.g. the previous command: copying it is the classic
         # "copycat" shortcut in imitation learning, so the student must read its eyes instead)
         self.register_buffer("mask_idx", torch.as_tensor(list(mask_inputs), dtype=torch.long), persistent=False)
@@ -287,14 +290,65 @@ class ConnectomeExtractor(nn.Module):
 class ConnectomePolicy(ActorCriticPolicy):
     def __init__(self, *args, subset_path: str = "", k_steps: int = 4, leak: float = 0.5,
                  gain: float = 1.5, wiring: str = "real", n_priv: int = 0, mask_inputs=(), neuron_tau: bool = False,
-                 all_dn: bool = False, **kwargs):
+                 all_dn: bool = False, graph_seed: int = 0, **kwargs):
         self._cfg = dict(subset_path=subset_path, k_steps=k_steps, leak=leak, gain=gain, wiring=wiring, n_priv=n_priv,
-                         mask_inputs=tuple(mask_inputs), neuron_tau=bool(neuron_tau), all_dn=bool(all_dn))
+                         mask_inputs=tuple(mask_inputs), neuron_tau=bool(neuron_tau), all_dn=bool(all_dn),
+                         graph_seed=int(graph_seed))
         kwargs["ortho_init"] = False   # keep the connectome-based initial weights
         super().__init__(*args, **kwargs)
 
     def _build_mlp_extractor(self):
         self.mlp_extractor = ConnectomeExtractor(self.features_dim, **self._cfg)
+
+
+class MLPExtractor(nn.Module):
+    """Baseline actor: a plain MLP (tanh) on exactly the inputs the fly brain gets (eyes, body, smell); the critic is
+    the same as the fly brain's (privileged state when n_priv > 0), so only the actor's architecture differs."""
+
+    def __init__(self, obs_dim, hidden=(36, 36), critic_hidden=64, n_priv=0):
+        super().__init__()
+        self.n_priv = n_priv
+        self.n_brain = obs_dim - n_priv
+        layers, d = [], self.n_brain
+        for h in hidden:
+            layers += [nn.Linear(d, h), nn.Tanh()]
+            d = h
+        self.actor = nn.Sequential(*layers)
+        crit_in = n_priv if n_priv else obs_dim
+        if n_priv:
+            critic_hidden = max(critic_hidden, 128)
+        self.critic = nn.Sequential(nn.Linear(crit_in, critic_hidden), nn.Tanh(),
+                                    nn.Linear(critic_hidden, critic_hidden), nn.Tanh())
+        self.latent_dim_pi, self.latent_dim_vf = d, critic_hidden
+
+    def forward(self, x):
+        return self.forward_actor(x), self.forward_critic(x)
+
+    def forward_actor(self, x):
+        return self.actor(x[:, :self.n_brain])
+
+    def forward_critic(self, x):
+        return self.critic(x[:, self.n_brain:] if self.n_priv else x)
+
+
+class MLPPolicy(ActorCriticPolicy):
+    def __init__(self, *args, hidden=(36, 36), n_priv: int = 0, **kwargs):
+        self._cfg = dict(hidden=tuple(hidden), n_priv=n_priv)
+        super().__init__(*args, **kwargs)
+
+    def _build_mlp_extractor(self):
+        self.mlp_extractor = MLPExtractor(self.features_dim, **self._cfg)
+
+
+def mlp_hidden_for(n_in: int, n_out: int, n_params: int, layers: int = 2) -> int:
+    """Width of a `layers`-hidden-layer MLP (n_in -> h ... h -> n_out) with about n_params weights."""
+    best = 1
+    for h in range(1, 4096):
+        p = n_in * h + h + (layers - 1) * (h * h + h) + h * n_out + n_out
+        if p > n_params:
+            break
+        best = h
+    return best
 
 
 def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu", custom=None):
@@ -324,7 +378,7 @@ def load_ppo(run_dir: str, model_path: str, env=None, device: str = "cpu", custo
                   gain=cfg.get("gain") if cfg.get("gain") is not None else 1.5,
                   wiring=cfg.get("wiring", "real"), log_std_init=-0.5, n_priv=int(cfg.get("n_priv", 0) or 0),
                   mask_inputs=tuple(cfg.get("mask_inputs", ()) or ()), neuron_tau=bool(cfg.get("neuron_tau")),
-                  all_dn=bool(cfg.get("all_dn")))
+                  all_dn=bool(cfg.get("all_dn")), graph_seed=int(cfg.get("graph_seed", 0) or 0))
     if cfg.get("memory"):                       # fly brain with memory (recurrent PPO, sb3-contrib)
         from sb3_contrib import RecurrentPPO
         return RecurrentPPO.load(model_path, env=env, device=device,
@@ -406,10 +460,10 @@ def _make_recurrent_policy_class():
 
         def __init__(self, observation_space, action_space, lr_schedule, *args, subset_path: str = "",
                      k_steps: int = 4, leak: float = 0.5, gain: float = 1.5, wiring: str = "real", n_priv: int = 0,
-                     mask_inputs=(), neuron_tau: bool = False, all_dn: bool = False, **kwargs):
+                     mask_inputs=(), neuron_tau: bool = False, all_dn: bool = False, graph_seed: int = 0, **kwargs):
             self._cfg = dict(subset_path=subset_path, k_steps=k_steps, leak=leak, gain=gain, wiring=wiring,
                              n_priv=n_priv, mask_inputs=tuple(mask_inputs), neuron_tau=bool(neuron_tau),
-                             all_dn=bool(all_dn))
+                             all_dn=bool(all_dn), graph_seed=int(graph_seed))
             kwargs.update(ortho_init=False, lstm_hidden_size=1, n_lstm_layers=1, shared_lstm=False,
                           enable_critic_lstm=False)
             super().__init__(observation_space, action_space, lr_schedule, *args, **kwargs)

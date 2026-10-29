@@ -61,8 +61,13 @@ def _add_dn(subset):
 def parse():
     ap = argparse.ArgumentParser()
     ap.add_argument("--env", choices=ENV_NAMES, default="tray")
-    ap.add_argument("--policy", choices=["connectome"], default="connectome")  # kept for older commands
-    ap.add_argument("--wiring", choices=["real", "shuffled"], default="real")
+    ap.add_argument("--policy", choices=["connectome", "mlp"], default="connectome",
+                    help="connectome = the fly brain; mlp = baseline MLP actor on the same inputs (fresh runs)")
+    ap.add_argument("--wiring", choices=["real", "shuffled", "rewired"], default="real",
+                    help="fly brain wiring: real; shuffled = random graph with the same edges count, signs and "
+                         "strengths; rewired = degree-preserving random partners (graph seed = --seed)")
+    ap.add_argument("--mlp_hidden", type=int, default=None,
+                    help="--policy mlp: hidden width of its two layers (default: as many weights as the fly brain)")
     ap.add_argument("--subset", default="data/subset_flywire783_N1000.npz")
     ap.add_argument("--profile", choices=list(PROFILES), default="mac")
     ap.add_argument("--k_steps", type=int, default=None,
@@ -514,18 +519,38 @@ def main():
 
         if not os.path.exists(args.subset):
             raise SystemExit(f"{args.subset} not found. Run download_connectome.py and build_subset.py / build_flybrain.py first.")
+        # privileged critic (asymmetric actor-critic) from scratch: the true state is appended to the observation
+        # for the critic only; the actor (fly brain or baseline) gets exactly the same inputs either way
+        n_priv_fresh = 0
+        if args.privileged and args.env.startswith("panda"):
+            from ctb.envs.panda import n_priv as _n_priv
+            n_priv_fresh = _n_priv(args.env.split("_", 1)[1])
+        n_brain = obs_dim - n_priv_fresh
         policy = ConnectomePolicy
         # keep a copy of the wiring next to the model, so the run loads on any machine
         import shutil
         shutil.copy(args.subset, os.path.join(out, "subset.npz"))
         policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
                              leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5,
-                             neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn))
+                             neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn), n_priv=n_priv_fresh,
+                             graph_seed=args.seed)
         if args.all_dn:
             _add_dn(os.path.join(out, "subset.npz"))
-        core = ConnectomeCore(obs_dim, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
+        core = ConnectomeCore(n_brain, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
         actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
         del core
+        if args.policy == "mlp":
+            # baseline: a plain MLP actor on the same inputs, as many weights as the fly brain unless --mlp_hidden
+            from ctb.policies import MLPPolicy, mlp_hidden_for
+            h = args.mlp_hidden or mlp_hidden_for(n_brain, act_dim, actor_params - act_dim)
+            policy = MLPPolicy
+            policy_kwargs = dict(hidden=(h, h), n_priv=n_priv_fresh, log_std_init=-0.5)
+            fly_params, actor_params = actor_params, n_brain * h + h + h * h + h + h * act_dim + act_dim + act_dim
+            args.mlp_hidden = h
+            print(f"[train] baseline MLP actor: {n_brain} -> {h} -> {h} -> {act_dim} ({actor_params:,} weights; "
+                  f"fly brain {fly_params:,})")
+        elif args.wiring != "real":
+            print(f"[train] control wiring: {args.wiring} (graph seed {args.seed})")
 
         model = PPO(
             policy, venv, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
@@ -534,7 +559,8 @@ def main():
             ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0,
         )
         reset = True
-        cfg_dump = dict(vars(args), **cfg, actor_params=int(actor_params), obs_dim=obs_dim, act_dim=act_dim)
+        cfg_dump = dict(vars(args), **cfg, actor_params=int(actor_params), obs_dim=obs_dim, act_dim=act_dim,
+                        n_priv=n_priv_fresh, graph_seed=args.seed)
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(cfg_dump, f, indent=2)
         print(f"[train] {name}: actor params = {actor_params:,}")
