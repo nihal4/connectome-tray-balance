@@ -55,7 +55,7 @@ CARRY_Z = 0.12                                 # teacher: carry height of the cu
 DROP_Z = 0.015                                 # teacher: let go with the item's underside this high above the bin floor
 WS_LO_W = np.array([0.30, -0.32, 0.002])       # the cup may go down to the belt (thin paper is 6 mm high)
 WRONG_BIN_REWARD = -1.0
-LIFT_CLEAR = 0.06                              # reward: a held item this high above the belt is clear of the rims
+OVER_Z = 0.08                                  # reward: carry towards this height above the bin floor (rims: 4 cm)
 
 
 class WasteSortEnv(FlyPandaEnv):
@@ -276,8 +276,8 @@ class WasteSortEnv(FlyPandaEnv):
         return obs, float(np.nan_to_num(r)), terminated, truncated and not terminated, info
 
     def _reward(self):
-        """Staged, every stage pays more than the one before: reach the item's top (0..1) -> held (+1, lifted clear
-        +0.5) -> carried over its bin (+2 x closeness) -> lowered (+0.5) -> in the bin, released (5) -> stays 0.2 s:
+        """Staged, every stage pays more than the one before: reach the item's top (0..1) -> held (+1) -> carried to
+        a point above its bin (+2 x closeness) -> lowered into it (+0.5) -> in the bin, released (5) -> stays 0.2 s:
         success (6)."""
         tcp, it, c = self.tcp_pos(), self.block_pos(), self.bin_pos()
         top = it + np.array([0, 0, self.model.geom_size[self.block_geom][2]])
@@ -285,12 +285,14 @@ class WasteSortEnv(FlyPandaEnv):
         dxy = float(np.linalg.norm(it[:2] - c[:2]))
         r = 1 - np.tanh(5 * d_t)
         if self._held:
-            # (tanh(3 x): still a clear pull from 30 cm away; lifted: the bins' rims are 4 cm high)
-            r += 1.0 + 2.0 * (1 - np.tanh(3 * dxy))
+            # carried towards a point ABOVE its bin (tanh(3 x): a clear pull from 30 cm away). Paid by horizontal
+            # distance only, the item was dragged along the table and stuck on the 4 cm rim; over the bin, the
+            # height no longer counts and lowering it in pays
+            over = c + np.array([0, 0, self.rest_z + OVER_Z])
+            d_over = float(np.linalg.norm(it - over)) if dxy >= 0.03 else 0.0
+            r += 1.0 + 2.0 * (1 - np.tanh(3 * d_over))
             if dxy < 0.03:
                 r += 0.5 * (1 - np.tanh(10 * max(0.0, it[2] - self.rest_z - DROP_Z)))   # lowered into it
-            else:
-                r += 0.5 * min(1.0, max(0.0, it[2] - self.model.geom_size[self.block_geom][2]) / LIFT_CLEAR)
         released = self.in_bin() and not self._held
         if released:
             r = 5.0
