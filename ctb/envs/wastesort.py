@@ -12,8 +12,10 @@ Two senses, each only partly sufficient, so the task needs both:
     responses (DoOR), sensed at the two "antennae" beside the cup and fading with distance. Residue and
     composite items (e.g. a paper-wrapped can) mix in another material's reading.
 
-Suction: with the command on and the cup touching the item, a weld between hand and item switches on (it
-holds until the command goes off). Success: the item released and resting in the right bin for 0.2 s. A
+Suction, as on industrial vacuum grippers: the cup grips whatever it touches (a weld between hand and item
+switches on at contact), and the policy's fourth command is the release valve: > 0 lets go (and keeps the cup
+from gripping again while it stays > 0). So the one gripper decision left is the sorting decision: where to
+let go. Success: the item released and resting in the right bin for 0.2 s. A
 release into a wrong bin ends the episode. Tests (no retraining): eyes_off / smell_off (a failed sense),
 light changes, item_types="heldout" (two item types never shown in training: HELDOUT_ITEMS).
 """
@@ -83,7 +85,7 @@ class WasteSortEnv(FlyPandaEnv):
         super().reset(seed=seed, options=options)
         m, d = self.model, self.data
         self._detach()
-        self._suck = self._wrong = False
+        self._suck, self._wrong = True, False
         for mc, c in zip(self.bin_mocaps, WASTE_BINS):
             d.mocap_pos[mc] = [c[0], c[1], 0.0]
         k = int(self.rng.choice(self.item_types))
@@ -135,7 +137,7 @@ class WasteSortEnv(FlyPandaEnv):
             mujoco.mj_forward(m, d)
             self._attach()
             self._suck = True
-            self._last_action = np.array([0, 0, 0, 1.0])
+            self._last_action = np.array([0, 0, 0, -1.0])
             for _ in range(10):
                 mujoco.mj_step(m, d)
         self._hold, self._steps = 0, 0
@@ -244,7 +246,7 @@ class WasteSortEnv(FlyPandaEnv):
             self._target = tcp + off * 0.05 / n
         d.ctrl[:7] = self._ik_solve(self._target, d.qpos[:7].copy())
         d.ctrl[7] = 255.0                              # (hidden fingers stay open)
-        self._suck = bool(a[3] > 0)
+        self._suck = bool(a[3] <= 0)                   # the release valve: a[3] > 0 vents the cup
         if not self._suck and self._held:
             self._detach()
         bad0 = self._bad_count()
@@ -305,13 +307,14 @@ class WasteSortEnv(FlyPandaEnv):
 
 def waste_teacher(env):
     """Scripted sorter (TRUE item position and material; for checks and imitation only): above the item, down
-    onto its top with suction on, up to carry height, over the right bin, down to DROP_Z, suction off."""
+    onto its top (the cup grips), up to carry height, over the right bin, down to DROP_Z, release (a[3] > 0 vents
+    the cup; kept venting while moving away, so it does not grip the item again)."""
     tcp, it = env.tcp_pos(), env.block_pos()
     a = np.zeros(4)
     hz = float(env.model.geom_size[env.block_geom][2])
     if env.is_grasped():
         c = env.bin_pos()
-        a[3] = 1.0
+        a[3] = -1.0
         dxy = float(np.linalg.norm(tcp[:2] - c[:2]))
         if dxy > 0.015:
             want = np.array([tcp[0], tcp[1], CARRY_Z]) if tcp[2] < CARRY_Z - 0.03 and dxy > 0.06 else \
@@ -319,19 +322,19 @@ def waste_teacher(env):
         else:
             want = np.array([c[0], c[1], env.rest_z + hz + DROP_Z])     # (the cup sits on the item's top)
             if tcp[2] < env.rest_z + hz + DROP_Z + 0.008:
-                a[3] = -1.0                             # over the bin, low enough: let go
+                a[3] = 1.0                             # over the bin, low enough: let go
         target = want
     elif env.in_bin() or env.in_wrong_bin():
         target = np.array([tcp[0], tcp[1], CARRY_Z])    # done: up and away
-        a[3] = -1.0
+        a[3] = 1.0
     else:
         top = it + np.array([0, 0, hz])
         xy_err = float(np.linalg.norm((top - tcp)[:2]))
         if xy_err > 0.01:
             target = np.array([top[0], top[1], max(top[2] + 0.05, min(tcp[2], CARRY_Z))])
-            a[3] = -1.0
+            a[3] = 1.0
         else:
             target = top - np.array([0, 0, 0.004])      # press onto the top, suction on
-            a[3] = 1.0
+            a[3] = -1.0
     a[:3] = np.clip((target - tcp) / STEP * 0.6, -1, 1)
     return a
