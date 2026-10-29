@@ -92,6 +92,7 @@ HEADCAM_FOVY = 34.0                                          # narrow: ~2.8 deg 
 HEADCAM_MIN, HEADCAM_MAX = 0.20, 0.90
 CAM_DEPTH_NOISE, CAM_HOLES = 0.01, 0.03                     # depth noise (x distance), share of missing pixels
 HOME = np.array([0, 0, 0, -1.57079, 0, 1.57079, -0.7853])
+GUIDE_NOISE = 0.1          # guide: a little noise on the teacher's moves, so the hand-over states vary
 
 # task (reach): success = gripper within 3 cm of the target for 5 steps in a row (0.2 s).
 # A dwell, as in standard reaching tasks. An earlier version also required speed < 5 cm/s,
@@ -725,6 +726,11 @@ class FlyPandaEnv(gym.Env):
         # training only (pickripe, two ripe): share of episodes that start after the first pick, one ripe tomato
         # already in the basket and the hand over it (practise the way back to the plant and the second pick)
         self.return_start = return_start
+        # guide (Jump-Start RL, Uchendu et al. 2023): each training episode the scripted teacher drives for a random
+        # number of steps (0 .. guide_max, and at most until the last ripe tomato is picked) inside reset(), then the
+        # brain takes over from wherever that left it and learns from its own reward only. guide_max is lowered during training (set_guide) until the brain does
+        # whole episodes; the evaluation environment is never guided.
+        self.guide_max, self._guided = 0, 0
         # gentle (pickripe): handle the fruit as a quality harvest would -- a force-limited gripper, a low release
         # over the basket, and any bruise (squeeze, hard knock, hard landing) costs reward and fails the episode
         self.gentle = bool(gentle)
@@ -1476,7 +1482,23 @@ class FlyPandaEnv(gym.Env):
         self._adapt = None                                  # eyes adapt to this scene from the first look
         self._cam_gain, self._cam_last = None, None
         self._hcam_gain, self._hcam_last = None, None
-        return self._get_obs(), {}
+        obs = self._get_obs()
+        self._guided = 0
+        if self.guide_max > 0 and self.n_tom > 1 and not (options or {}).get("no_guide"):
+            h = int(self.rng.integers(0, self.guide_max + 1))
+            for _ in range(h):
+                a = np.clip(harvest_teacher(self) + self.rng.normal(0, GUIDE_NOISE, 4), -1, 1)
+                obs, _, te, tr, info = self.step(a)
+                if te or tr:                                # the teacher finished (or ended) it: start over unguided
+                    return self.reset(options={"no_guide": True})
+                self._guided += 1
+                if not any(self.att[k] for k in range(self.n_tom) if self.ripe[k] == 2):
+                    break                                   # every ripe one picked: the brain at least delivers the last
+        return obs, {"guided": self._guided}
+
+    def set_guide(self, n):
+        """guide: the most steps the teacher drives at the start of a training episode (0 = off)."""
+        self.guide_max = int(n)
 
     def _reward(self):
         if self.n_tom > 1:

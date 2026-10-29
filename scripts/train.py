@@ -116,6 +116,11 @@ def parse():
                          "one (rare one-step decisions; 1 = plain mean error)")
     ap.add_argument("--imitate_segment", type=int, default=0,
                     help="imitation: decide who drives per stretch of this many steps (0 = per step)")
+    ap.add_argument("--guide", type=int, default=0,
+                    help="Jump-Start RL: the teacher drives the first 0..N steps of each training episode (random), "
+                         "the brain learns from its own reward after the hand-over; N falls to 0 over --guide_until")
+    ap.add_argument("--guide_until", type=float, default=0.75,
+                    help="--guide: share of the training after which the brain drives whole episodes")
     ap.add_argument("--imitate_cap", type=int, default=120_000, help="imitation examples kept (the oldest drop out)")
     ap.add_argument("--imitate_updates", type=int, default=2000, help="most gradient updates per later imitation round")
     ap.add_argument("--privileged", action="store_true", default=None,
@@ -402,7 +407,8 @@ def main():
         parent.update(reward_mode=args.reward_mode, lift_reward=args.lift_reward or "height", env=args.env, name=name, init_from=os.path.abspath(init), lr=lr, std=args.std, edge_bias=args.edge_bias,
                       random_start=args.random_start, eval_episodes=cfg["eval_episodes"], smooth=bool(args.smooth),
                       head_fovy=args.head_fovy, bruise_end=bool(args.bruise_end), max_steps=args.max_steps,
-                      init_brain="latest" if args.init_last else "best")
+                      init_brain="latest" if args.init_last else "best", guide=args.guide,
+                      guide_until=args.guide_until if args.guide else None)
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(parent, f, indent=2)
         src_model = "model.zip" if args.init_last else "best_model.zip"
@@ -649,6 +655,26 @@ def main():
             print(f"[train] best evaluation so far: score {eval_cb.best_score:.1f} (solved x 1000 + return; "
                   "best_model.zip kept until beaten)")
     callbacks = [eval_cb]
+    if args.guide:
+        class _Guide(BaseCallback):
+            """Jump-Start RL schedule: before each rollout, the longest teacher start for this stage of training."""
+            last = None
+
+            def _on_rollout_start(self):
+                frac = self.model.num_timesteps / max(cfg["total_steps"], 1)
+                n = int(round(args.guide * max(0.0, 1.0 - frac / args.guide_until)))
+                if n != self.last:
+                    self.training_env.env_method("set_guide", n)
+                    if self.last is None or n == 0 or n // 50 != self.last // 50:
+                        print(f"[train] guide: the teacher drives up to {n} steps at the start of training episodes",
+                              flush=True)
+                    self.last = n
+
+            def _on_step(self):
+                return True
+        callbacks.append(_Guide())
+        print(f"[train] guide (Jump-Start RL): teacher starts up to {args.guide} steps, down to 0 at "
+              f"{args.guide_until:.0%} of training; training-episode scores include the teacher's part")
     # Save model + normalisation every 50k steps, so a crashed or timed-out session
     # (Kaggle limit, laptop sleep) can continue with --resume instead of starting over.
     from stable_baselines3.common.callbacks import EveryNTimesteps

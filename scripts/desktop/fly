@@ -42,6 +42,7 @@ case "${1:-help}" in
       case "$EXTRA" in *--all_dn*) NAME="$NAME-dn" ;; esac              # brain: reads all its descending neurons
       case "$EXTRA" in *--imitate_grip_w*) NAME="$NAME-gw" ;; esac      # imitation: the close decision weighted
       case "$EXTRA" in *--imitate_segment*) NAME="$NAME-seg" ;; esac    # imitation: student drives stretches
+      case "$EXTRA" in *--guide\ *) NAME="$NAME-guide" ;; esac         # Jump-Start RL: the teacher starts episodes
     fi
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;
