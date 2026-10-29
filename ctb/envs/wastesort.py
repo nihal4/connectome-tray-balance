@@ -348,7 +348,7 @@ def waste_teacher(env):
         xy_err = float(np.linalg.norm((top - tcp)[:2]))
         if xy_err > 0.01:
             target = np.array([top[0], top[1], max(top[2] + 0.05, min(tcp[2], CARRY_Z))])
-            a[3] = 1.0
+            a[3] = -1.0                                 # (valve closed: the only valve decision is the drop)
         else:
             target = top - np.array([0, 0, 0.004])      # press onto the top, suction on
             a[3] = -1.0
