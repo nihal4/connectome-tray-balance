@@ -1139,12 +1139,34 @@ footer p { margin-top: 0.6rem; max-width: 44rem; }
         breaks the cameras (no white balance); one training run. Training on a GPU (MuJoCo MJX, Kaggle T4) was
         measured and was slower than the training PC for this contact-rich scene, so it stays on the CPU.</p>
     </details>
+    <details>
+      <summary>How far the fly brain reaches: the closing experiments</summary>
+      <p>The goal afterwards was a near-perfect teacher and a fly brain at 95&nbsp;%. The teacher got there;
+        the brain did not.</p>
+      <table>
+        <thead><tr><th>Attempt</th><th>Solved</th></tr></thead>
+        <tbody>
+          <tr><td>Scripted teacher, rebuilt from its own failure list (1,000 new trusses)</td><td class="num yes">98 %</td></tr>
+          <tr><td>The v19 brain on that version of the task (200 trusses)</td><td class="num">72 %</td></tr>
+          <tr><td>Copying the teacher again (imitation, 5 variants)</td><td class="num">best 26 %</td></tr>
+          <tr><td>+ a learned speed for every neuron / all 156 command neurons instead of 64</td><td class="num">no effect</td></tr>
+          <tr><td>Teacher drives the start of each practice try, the brain the rest (Jump-Start RL)</td><td class="num">no gain</td></tr>
+        </tbody>
+      </table>
+      <p>The cameras are not the problem: a standard machine-learning model reads the teacher's &ldquo;close
+        now&rdquo; moment from exactly the brain's inputs almost perfectly, and the distance to 0.3&nbsp;mm.
+        Watching the copying brain step by step found why it froze: closing or opening the hand happens on one
+        step per tomato, and it learned the average, a hand that stays open. Weighting those moments removed the
+        freeze (5 to 17 of 40 trusses), but never brought copying past the brain's own practice. On this task the
+        fly brain plateaus at <b>67&ndash;72&nbsp;%</b>, and the arm series ends here.</p>
+    </details>
   </section>
 
   <!-- roadmap ------------------------------------------------------------- -->
-  <h2 id="roadmap">What's next</h2>
-  <p>The aim is to test whether a fly brain can learn basic human-like handling tasks with a robot
-    arm, and then to use the senses a fly is best at.</p>
+  <h2 id="roadmap">Where the arm series ends</h2>
+  <p>The aim was to test whether a fly brain can learn basic human-like handling tasks with a robot
+    arm. Over fourteen tasks it got as far as any truss of tomatoes, where it plateaus at 67&ndash;72&nbsp;% (task 14).
+    Since the next steps add more of the same kind of decision, they are left as open directions:</p>
   <ol class="road">
     <li><b>Rotten and infected fruit</b><span class="why">grey mould and rot by look and smell, into a separate reject bin so it does not spread</span></li>
     <li><b>A real plant</b><span class="why">leaves that hide fruit, bending stems, fruit at different heights, leaf shadows (uneven light)</span></li>

@@ -442,6 +442,15 @@ layouts, unripe picked in 3 %.** Two fine-tunes, each found by measuring:
   each tomato in the basket paid ~0.5 per step for the rest of the episode, and with a bruise ending the
   episode every risky move put all of that at stake. Three-ripe trusses ~31 % -> ~51 %, solved 67 %.
 
+**Where the arm series ends: the fly brain's limit on phase 2c.** Afterwards the scripted teacher was brought
+from 75-83 % to 98.0 % (1,000 new trusses; the v19 brain scores 72 % on that version of the task), and the
+brain was pushed towards 95 %: five imitation variants (best 26 % alone), two biologically grounded brain
+changes (a learned time constant per neuron; all 156 descending neurons as outputs instead of 64: no effect)
+and teacher-guided reward practice (Jump-Start RL: no gain) all stayed at or below 67-72 %. A generic learner
+reads the teacher's "close now" moment from the same camera inputs (AUC 0.998, distance to 0.3 mm), so the
+limit is not what the brain senses but how much of the step-by-step decisions it learns. Details:
+`results/v19_panda_pickmany/README.md`. Phase 3 (rotten fruit to a reject bin) is not attempted.
+
 ### Teacher -> student (imitation, then PPO) for `panda_lift`
 
 Pure PPO from the fly eyes (height reward, mid-task starts) learned to find, grasp and partly lift;
@@ -653,7 +662,7 @@ Run on policies trained only on the clean task: sensor noise (0.1, 0.3), **blind
 - **v16, greenhouse phase 1: pick a tomato off the plant** (`results/v16_panda_harvest/`): 98 % of 200 layouts into the basket in 2.4 s; finds the tomato by sight, times the grasp by smell strength.
 - **v17, greenhouse phase 2a: pick only the ripe tomato** (`results/v17_panda_pickripe_cam/`): wrist depth camera into the fly's wrist-eye neurons; 98 % of 200 layouts, 0 of 400 unripe picked.
 - **v18, greenhouse phase 2b: pick every ripe tomato** (`results/v18_panda_pickripe_2ripe/`): wrist and front depth cameras, smell, memory, gentle handling; 79-82 % of 200 layouts (one ripe 86 %, two ripe 74 %), 1 of 290 unripe picked, 4.9 s; bruises in 10 % of layouts remain the main failure.
-- **v19, greenhouse phase 2c: any truss** (`results/v19_panda_pickmany/`): 2-6 tomatoes at irregular places, 1-3 ripe; 67 % of 200 layouts (three ripe ~51 %), bruised in 14 % of layouts; a bruise ends the episode, and each tomato is paid once (banked) so the brain does not stop after the first.
+- **v19, greenhouse phase 2c: any truss** (`results/v19_panda_pickmany/`): 2-6 tomatoes at irregular places, 1-3 ripe; 67 % of 200 layouts (three ripe ~51 %), bruised in 14 % of layouts; a bruise ends the episode, and each tomato is paid once (banked) so the brain does not stop after the first. Closing experiments (teacher 98 %, imitation, brain changes, guided practice) found a plateau at 67-72 %: the end of the arm series.
 - **Next:** `maze3_vision` (new random maze every episode) to see whether the brain can learn to read walls through the eye.
 - **Drone:** `drone_reach` with compound eyes (see above), ready to train with `notebooks/kaggle_drone.ipynb`.
 

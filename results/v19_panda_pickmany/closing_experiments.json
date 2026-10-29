@@ -1,0 +1,107 @@
+{
+  "teacher": {
+    "before": "75-83 % (v19 task)",
+    "teacher_v2_solved": 0.98,
+    "trusses": 1000,
+    "feasibility_filter_rejects": "0 of 1000",
+    "script": "scripts/teacher_check.py"
+  },
+  "v19_brain_on_teacher_v2_task": {
+    "solved": 0.72,
+    "by_ripe": {
+      "1": 0.75,
+      "2": 0.8,
+      "3": "~0.53"
+    },
+    "ripe_in_basket": "336/373",
+    "bruised": 0.16,
+    "layouts": 200
+  },
+  "imitation_student_alone_50_trusses": {
+    "V0_baseline": [
+      0.0,
+      0.1,
+      0.0
+    ],
+    "V1_neuron_tau": [
+      0.02,
+      0.14,
+      0.06
+    ],
+    "V2_all_156_descending": [
+      0.0,
+      0.2,
+      0.0
+    ],
+    "V3_grip_decisions_weighted_10_and_50_step_stretches": [
+      0.14,
+      0.26,
+      0.16
+    ],
+    "V4_V3_plus_release_weighted_6_rounds": [
+      0.04,
+      0.08,
+      0.24,
+      0.02
+    ],
+    "imitation_loss_V0": [
+      0.0313,
+      0.0293,
+      0.0326
+    ],
+    "imitation_loss_V1": [
+      0.0313,
+      0.0313,
+      0.0317
+    ],
+    "imitation_loss_V2": [
+      0.031,
+      0.0294,
+      0.0353
+    ],
+    "imitation_loss_V4_rising": [
+      0.0453,
+      0.0611,
+      0.0731,
+      0.0911
+    ]
+  },
+  "close_cue_visible": {
+    "script": "scripts/diag_close_cue.py",
+    "trusses": 400,
+    "steps_within_4cm": 15986,
+    "close_steps": 733,
+    "auc_all_brain_inputs": 0.998,
+    "auc_wrist_camera_only": 0.995,
+    "auc_privileged": 0.997,
+    "distance_median_error_mm": 0.3,
+    "distance_90pct_error_mm": 1.0
+  },
+  "student_vs_teacher": {
+    "script": "scripts/diag_student_vs_teacher.py",
+    "trusses": 40,
+    "V2": {
+      "solved": "5/40",
+      "steps_teacher_says_close": 0.414,
+      "student_grip_there": 0.18,
+      "teacher_grip_there": -1.0
+    },
+    "V3": {
+      "solved": "17/40",
+      "steps_teacher_says_close": 0.001,
+      "failures": {
+        "holding over the basket, teacher says open": 8,
+        "stuck before the truss (servo / pre-grasp)": 9,
+        "not back to the truss after the first tomato": 4,
+        "other": 2
+      }
+    }
+  },
+  "jump_start_rl_guide_200": {
+    "stopped_at_steps": 1000000,
+    "eval_20_trusses_mean_first_0.5M": "~0.70",
+    "eval_20_trusses_mean_second_0.5M": "~0.58",
+    "best_single_test": 0.85
+  },
+  "conclusion": "phase 2c plateau of the fly brain: 67-72 %; teacher 98 %"
+}
