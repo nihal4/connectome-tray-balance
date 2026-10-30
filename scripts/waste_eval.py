@@ -11,6 +11,7 @@ Per condition: solved (right bin), wrong bin, not placed, and sorting accuracy (
 ended in a bin).
 
     python scripts/waste_eval.py RUN OUT.json [N=200]
+    BRAIN=imitation python scripts/waste_eval.py ...   # the run's best imitation-round brain instead
 """
 import json
 import os
@@ -34,9 +35,17 @@ def _chunk(args):
     torch.set_num_threads(1)
     import evaluate as E
     model = E.load(run, best=True)
+    stats = None
+    if os.environ.get("BRAIN") == "imitation":     # the best imitation round's brain and its input scaling
+        import pickle
+        model.model.policy.load_state_dict(torch.load(os.path.join(run, "imitate_best_policy.pt")))
+        with open(os.path.join(run, "imitate_obs_stats.pkl"), "rb") as f:
+            stats = pickle.load(f)
     rows = []
     for s in seeds:
         vn = E.make_norm(run, kw, int(s), best=True)
+        if stats is not None:
+            vn.obs_rms.mean, vn.obs_rms.var = stats["mean"], stats["var"]
         obs = vn.reset()
         model.reset_memory()
         info, n = {}, 0
@@ -59,7 +68,8 @@ def main():
     run, out = sys.argv[1], sys.argv[2]
     n = int(sys.argv[3]) if len(sys.argv) > 3 else 200
     workers = int(os.environ.get("WORKERS", os.cpu_count() or 2))
-    res = {"run": os.path.basename(os.path.normpath(run)), "n": n, "conditions": {}}
+    res = {"run": os.path.basename(os.path.normpath(run)), "brain": os.environ.get("BRAIN", "best"), "n": n,
+           "conditions": {}}
     t0 = time.time()
     for name, kw in CONDITIONS.items():
         seeds = np.arange(SEED0, SEED0 + n)
