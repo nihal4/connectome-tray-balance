@@ -18,15 +18,12 @@
     panda_harvest greenhouse phase 1: pick a cherry tomato off a plant (hand sideways) into the basket
     panda_pickripe greenhouse phase 2: a truss of three tomatoes; pick only the ripe ones into the basket
     panda_pickmany greenhouse phase 2c: a truss of 2-6 tomatoes at irregular places, 1-3 of them ripe
-    panda_waste   waste-sorting station: a suction arm over a conveyor sorts one item into plastic / metal /
-                  paper / glass, by compound eyes and a material sensor through the smell pathway
 """
 import numpy as np
 
 from .labyrinth import LEVELS, LabyrinthEnv, planner_controller
 from .drone import FlyDroneEnv, drone_controller
 from .panda import FlyPandaEnv, panda_controller
-from .wastesort import WasteSortEnv
 from .tray_balance import HOME_QPOS, TrayBalanceEnv, pd_controller
 
 ENVS = {"tray": (TrayBalanceEnv, {})}
@@ -45,7 +42,6 @@ ENVS["panda_smell"] = (FlyPandaEnv, {"task": "smell"})
 ENVS["panda_harvest"] = (FlyPandaEnv, {"task": "harvest"})
 ENVS["panda_pickripe"] = (FlyPandaEnv, {"task": "pickripe"})
 ENVS["panda_pickmany"] = (FlyPandaEnv, {"task": "pickripe", "many": True})
-ENVS["panda_waste"] = (WasteSortEnv, {})
 
 
 def build_env(name: str = "tray", seed: int | None = None, **overrides):

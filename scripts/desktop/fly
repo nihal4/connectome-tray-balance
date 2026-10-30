@@ -12,7 +12,6 @@ case "${1:-help}" in
     ENV="$2"; STEPS="${3:-2000000}"
     case "$ENV" in
       drone*)    BRAIN=data/flybrain_eye160_N4000.npz; EXTRA="${4:---random_start 0.5}"; NAME="$ENV-connectome-real-s0" ;;
-      panda_waste) BRAIN=data/flybrain_eye160_smell_N4476.npz; EXTRA="${4:---privileged --grip_mode absolute --eye_adapt}"; NAME="$ENV" ;;
       panda_smell|panda_harvest|panda_pickripe|panda_pickmany) BRAIN=data/flybrain_eye160_smell_N4476.npz; EXTRA="${4:---random_start 0.3}"; NAME="$ENV-connectome-real-s0" ;;
       panda*)    BRAIN=data/flybrain_eye160_N4000.npz; EXTRA="${4:---random_start 0.3}"; NAME="$ENV-connectome-real-s0" ;;
       *_vision)  BRAIN=data/flybrain_cam16_N2500.npz;  EXTRA="${4:---action_rate 0.1 --random_start 0.5}"; NAME="$ENV-connectome-real-s0-slow" ;;
@@ -45,32 +44,8 @@ case "${1:-help}" in
       case "$EXTRA" in *--imitate_segment*) NAME="$NAME-seg" ;; esac    # imitation: student drives stretches
       case "$EXTRA" in *--guide\ *) NAME="$NAME-guide" ;; esac         # Jump-Start RL: the teacher starts episodes
     fi
-    if [ "$ENV" = panda_waste ]; then                                          # paper runs: controller, wiring, seed
-      P=connectome; W=real
-      case "$EXTRA" in *--policy\ mlp*) P=mlp ;; esac
-      case "$EXTRA" in *--wiring\ shuffled*) W=shuffled ;; *--wiring\ rewired*) W=rewired ;; esac
-      SD=$(echo "$EXTRA" | grep -o -- '--seed [0-9]*' | awk '{print $2}')
-      NAME="$ENV-$P"; [ "$P" = connectome ] && NAME="$NAME-$W"; NAME="$NAME-s${SD:-0}"
-      case "$EXTRA" in *--mlp_hidden*) NAME="$NAME-wide" ;; esac
-      case "$EXTRA" in *--init_from*) NAME="$NAME-pre" ;; esac             # pretrained on another task first
-    fi
-    case "$EXTRA" in *--policy\ mlp*)                                         # MLP baselines: never a fly-brain run name
-      if [ "$ENV" != panda_waste ]; then
-        SD=$(echo "$EXTRA" | grep -o -- '--seed [0-9]*' | awk '{print $2}'); NAME="$ENV-mlp-s${SD:-0}"
-      fi ;;
-    esac
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;
-  queue)
-    # jobs that start one after another: each starts when the one before has FINISHED (not after a stop, a
-    # failure or a reboot: training never starts by itself). fly queue | fly queue add ENV STEPS "EXTRA" | fly queue clear
-    Q="$ROOT/queue.txt"; touch "$Q"
-    case "${2:-list}" in
-      add)   [ -n "${3:-}" ] || { echo 'usage: fly queue add ENV STEPS "EXTRA"'; exit 1; }
-             echo "${3}|${4:-2000000}|${5:-}" >> "$Q"; echo "queued ($(wc -l < "$Q") waiting): $3 ${4:-2000000} ${5:-}" ;;
-      clear) : > "$Q"; echo "queue cleared" ;;
-      *)     if [ -s "$Q" ]; then nl -w2 -s'. ' "$Q" | tr '|' ' '; else echo "queue empty"; fi ;;
-    esac ;;
   start)   $U start flybrain-train && echo "started: $("$0" job)" ;;
   stop)    $U stop flybrain-train && echo "stopped (checkpoint kept; fly start resumes)" ;;
   restart) $U restart flybrain-train && echo "restarted: $("$0" job)" ;;

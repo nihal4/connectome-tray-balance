@@ -212,8 +212,7 @@ BASKET3_Z = 0.10                          # carry at table height twisted the ar
 def n_priv(task):
     """Size of privileged_state() for a task (place adds the bin position and block-to-bin;
     sort also the block's colour, one-hot)."""
-    return N_PRIV + {"place": 6, "sort": 9, "smell": 8, "harvest": 8, "pickripe": 18, "pickmany": 33,
-                     "waste": 8}.get(task, 0)
+    return N_PRIV + {"place": 6, "sort": 9, "smell": 8, "harvest": 8, "pickripe": 18, "pickmany": 33}.get(task, 0)
 
 
 SORT_BINS = np.array([[0.60, 0.17], [0.60, 0.0], [0.60, -0.17]])   # sort: left, centre, right bin
@@ -230,19 +229,6 @@ SMELL_FLICKER = 0.25         # log-normal sd of the concentration, per step and 
 SMELL_NOISE = 0.03           # receptor noise
 SMELL_BINS = SORT_BINS[[0, 2]]   # ripe -> left bin, rotten -> right bin
 
-
-# waste sorting (wastesort.py): four bins beside the belt, plastic / metal / paper / glass, in the usual colour code
-WASTE_BIN_LOOK = (("plastic", [0.95, 0.80, 0.10, 1]), ("metal", [0.55, 0.57, 0.60, 1]),
-                  ("paper", [0.15, 0.35, 0.80, 1]), ("glass", [0.15, 0.55, 0.25, 1]))
-WASTE_RIM = 0.03
-# the material sensor's reading, delivered through the smell pathway: each material is a fixed mixture of the
-# 8 odorants whose receptor responses were measured (DoOR, smell_door.npz), so the glomeruli get realistic,
-# overlapping response patterns (columns: isopentyl acetate, ethyl butyrate, hexyl acetate, ethyl hexanoate,
-# ethanol, acetic acid, ethyl acetate, diacetyl)
-WASTE_RECIPES = np.array([[0.0, 0.0, 1.0, 0.5, 0.0, 0.0, 0.0, 0.0],     # plastic
-                          [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.4],     # metal
-                          [0.3, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],     # paper
-                          [0.0, 0.6, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0]])    # glass
 
 # what each photoreceptor type sees: (R1-6 brightness, R7 UV, R8 green)
 TABLE = np.array([0.35, 0.30, 0.35])     # grey
@@ -390,36 +376,7 @@ def _tomato_plant_look(body, seed, y0=0.0, ripe_truss=False, back_only=False):
               fromto=[*p0, *(p0 + [0.03, -0.02, -0.005])])
 
 
-def _waste_parts(spec, wb):
-    """Waste-sorting station: a conveyor belt in front of the arm (seen by the eyes, not solid: the items rest on
-    the table under it), a suction cup in place of the fingers (hidden, not solid), and the suction itself: a
-    weld between hand and item, switched on at run time when the cup touches the item with suction on."""
-    belt = wb.add_body()
-    belt.name, belt.pos = "belt", [0.41, 0.0, 0.0006]
-    bg = belt.add_geom()
-    bg.name, bg.type, bg.size, bg.rgba = "belt", mujoco.mjtGeom.mjGEOM_BOX, [0.075, 0.36, 0.0005], [0.12, 0.12, 0.13, 1]
-    bg.contype = bg.conaffinity = 0
-    bg.group = 0
-    for y in (-0.36, 0.36):                      # end rollers (drawn only)
-        _vis_geom(belt, mujoco.mjtGeom.mjGEOM_CYLINDER, [0.25, 0.25, 0.27, 1], size=[0.012, 0.078],
-                  pos=[0, y, 0.006], quat=[np.cos(np.pi / 4), np.sin(np.pi / 4), 0, 0])
-    hand = spec.body("hand")
-    for fname in ("left_finger", "right_finger"):
-        for g in spec.body(fname).geoms:
-            g.contype = g.conaffinity = 0
-            g.group = 5                          # not drawn, not seen by the eyes
-    cup = hand.add_geom()
-    cup.name, cup.type, cup.size = "cup", mujoco.mjtGeom.mjGEOM_CYLINDER, [0.016, 0.022, 0]
-    cup.pos, cup.rgba, cup.group = [0, 0, 0.1034 - 0.022], [0.15, 0.15, 0.17, 1], 0
-    cup.friction = [1.2, 0.01, 0.002]
-    cup.mass = 0.01
-    eq = spec.add_equality()
-    eq.name, eq.type, eq.objtype = "suction", mujoco.mjtEq.mjEQ_WELD, mujoco.mjtObj.mjOBJ_BODY
-    eq.name1, eq.name2, eq.active = "hand", "block", False
-    eq.solref = [0.01, 1.0]
-
-
-def _build_model(n_decoys, n_facets, bins=(), harvest=False, n_tom=1, waste=False):
+def _build_model(n_decoys, n_facets, bins=(), harvest=False, n_tom=1):
     spec = mujoco.MjSpec.from_file(PANDA_XML)
     wb = spec.worldbody
     light = wb.add_light()
@@ -531,8 +488,6 @@ def _build_model(n_decoys, n_facets, bins=(), harvest=False, n_tom=1, waste=Fals
         if bname == "basket" and n_tom > 1:      # (phase 2) the post it stands on, drawn only
             _vis_geom(bn, mujoco.mjtGeom.mjGEOM_CYLINDER, [0.35, 0.35, 0.38, 1], size=[0.012, BASKET3_Z / 2],
                       pos=[0, 0, -BASKET3_Z / 2])
-    if waste:                                    # waste-sorting station (wastesort.py): see _waste_parts
-        _waste_parts(spec, wb)
     for i in range(n_decoys):
         block(f"decoy{i}", [0.3, 0.3, 0.95, 1]).gravcomp = 1.0     # (reset switches gravity on when it is used)
     right, _, _, _ = eye_facets(n_facets)
@@ -598,9 +553,7 @@ class FlyPandaEnv(gym.Env):
                  light_gradient=0.0, light_tint=None, smell_off=False, smell_noise_x=1.0, tomato_look=None,
                  wrist_cam=None, head_cam=None, ripe_max=2, smell_confuse=False, smooth=False, head_fovy=None, guarded=False,
                  many=False, bruise_end=False, reward_mode="state", truss_filter=True, **_):
-        assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe", "waste"), task
-        if task == "waste" and max_steps == 60:
-            max_steps = 100                      # one item: reach, suck, carry, drop (4 s)
+        assert task in ("reach", "lift", "place", "sort", "smell", "harvest", "pickripe"), task
         if task == "lift" and max_steps == 60:
             max_steps = 100                      # reach + descend + close + lift needs ~3 s
         if task in ("place", "sort", "smell") and max_steps == 60:
@@ -609,7 +562,7 @@ class FlyPandaEnv(gym.Env):
             max_steps = 200                      # line up, go in, close, pull, carry, drop
         if task == "pickripe" and max_steps == 60:
             max_steps = 500 if many else 300     # up to two tomatoes (phase 2c: up to three, 20 s)
-        if task in ("sort", "smell", "harvest", "pickripe", "waste"):
+        if task in ("sort", "smell", "harvest", "pickripe"):
             max_distractors = 0                  # the other two bins are the clutter
         if not os.path.exists(PANDA_XML):
             raise FileNotFoundError(f"{PANDA_XML} not found. Run: python scripts/download_panda.py")
@@ -620,13 +573,11 @@ class FlyPandaEnv(gym.Env):
         bins = [("bin", [0.75, 0.12, 0.1, 1])] if task == "place" else \
             [(f"bin_{n}", [0.75, 0.12, 0.1, 1]) for n in ("left", "centre", "right")] if task == "sort" else \
             [(f"bin_{n}", [0.75, 0.12, 0.1, 1]) for n in ("ripe", "rotten")] if task == "smell" else \
-            [("basket", [0.55, 0.35, 0.15, 1], BASKET_RIM)] if task in ("harvest", "pickripe") else \
-            [(f"bin_{n}", rgba, WASTE_RIM) for n, rgba in WASTE_BIN_LOOK] if task == "waste" else []
+            [("basket", [0.55, 0.35, 0.15, 1], BASKET_RIM)] if task in ("harvest", "pickripe") else []
         self.harvest = task in ("harvest", "pickripe")
         self.many = bool(many) and task == "pickripe"   # phase 2c: 2-6 tomatoes at irregular places
         self.n_tom = (MANY_MAX if self.many else 3) if task == "pickripe" else 1
-        self.model = _build_model(self.n_decoys, n_facets, bins=bins, harvest=self.harvest, n_tom=self.n_tom,
-                                  waste=task == "waste")
+        self.model = _build_model(self.n_decoys, n_facets, bins=bins, harvest=self.harvest, n_tom=self.n_tom)
         self.data = mujoco.MjData(self.model)
         self._ik = mujoco.MjData(self.model)
         m = self.model
@@ -735,10 +686,10 @@ class FlyPandaEnv(gym.Env):
         self.n_vis = 2 * n_facets * N_CH
         # smell (task smell): per antenna and glomerulus type, the receptor response (left antenna first)
         self.n_smell = 0
-        if task in ("smell", "harvest", "pickripe", "waste"):
+        if task in ("smell", "harvest", "pickripe"):
             t = np.load(SMELL_TABLE)
             self.smell_resp = t["response"]                        # (glomerulus, odorant)
-            self.smell_recipes = t["recipes"] if task != "waste" else WASTE_RECIPES   # (fruit / material, odorant)
+            self.smell_recipes = t["recipes"]                      # (fruit, odorant)
             self.smell_drive = self.smell_recipes @ self.smell_resp.T   # (fruit, glomerulus) at full strength
             self.n_smell = 2 * self.smell_resp.shape[0]
             glo = list(t["glomeruli"])                              # for the video panel only
@@ -1016,9 +967,6 @@ class FlyPandaEnv(gym.Env):
         """The imitation teacher's move for the current situation (called across processes)."""
         if self.harvest:
             return harvest_teacher(self)
-        if self.task == "waste":
-            from .wastesort import waste_teacher
-            return waste_teacher(self)
         return place_teacher(self) if self.task in ("place", "sort", "smell") else lift_teacher(self)
 
     def bin_pos(self):

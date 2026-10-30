@@ -61,13 +61,8 @@ def _add_dn(subset):
 def parse():
     ap = argparse.ArgumentParser()
     ap.add_argument("--env", choices=ENV_NAMES, default="tray")
-    ap.add_argument("--policy", choices=["connectome", "mlp"], default="connectome",
-                    help="connectome = the fly brain; mlp = baseline MLP actor on the same inputs (fresh runs)")
-    ap.add_argument("--wiring", choices=["real", "shuffled", "rewired"], default="real",
-                    help="fly brain wiring: real; shuffled = random graph with the same edges count, signs and "
-                         "strengths; rewired = degree-preserving random partners (graph seed = --seed)")
-    ap.add_argument("--mlp_hidden", type=int, default=None,
-                    help="--policy mlp: hidden width of its two layers (default: as many weights as the fly brain)")
+    ap.add_argument("--policy", choices=["connectome"], default="connectome")  # kept for older commands
+    ap.add_argument("--wiring", choices=["real", "shuffled"], default="real")
     ap.add_argument("--subset", default="data/subset_flywire783_N1000.npz")
     ap.add_argument("--profile", choices=list(PROFILES), default="mac")
     ap.add_argument("--k_steps", type=int, default=None,
@@ -155,9 +150,6 @@ def parse():
                          "are banked), +1 when done, -1 for an unripe pick; both end the episode. Default 'state'")
     ap.add_argument("--max_steps", type=int, default=None,
                     help="episode length in brain steps (25 per second); default per task (panda_pickmany: 400 = 16 s)")
-    ap.add_argument("--copycat_mask", choices=["on", "off"], default="on",
-                    help="--init_from + --imitate: hide the gripper flag and the previous command from the student "
-                         "(on, as before) or not (off: the same inputs as fresh runs)")
     ap.add_argument("--init_last", action="store_true",
                     help="--init_from: start from the parent's LATEST brain (model.zip) instead of its best one")
     ap.add_argument("--gentle", action="store_true", default=None,
@@ -314,9 +306,6 @@ def main():
             raise SystemExit(f"--init_from: no best_model.zip in {init}")
 
     do_imitate = False
-    mlp_parent = None
-    if init and args.policy == "mlp":       # MLP transfer: the fresh path builds it, then copies the parent's actor
-        mlp_parent, init = init, None
     if init and args.imitate:
         # teacher -> student: a new run whose policy has the asymmetric critic. The fly brain's
         # learned weights are copied from the parent; imitation (DAgger) then PPO follow below.
@@ -346,7 +335,7 @@ def main():
         n_brain = venv.observation_space.shape[0] - N_PRIV
         n_smell = int(venv.get_attr("n_smell")[0])                 # smell inputs come after the body sense
         body_end = n_brain - n_smell
-        mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end)) if args.copycat_mask == "on" else []
+        mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
         parent.update(mask_inputs=mask, neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn))
         parent.update(memory=bool(args.memory), gentle=bool(args.gentle), head_cam=args.head_cam)
         # the task / robot settings of THIS run (what the environments were built with), not the parent's
@@ -466,10 +455,6 @@ def main():
             model = load_ppo(out, model_path + ".bak", env=norm, device=args.device)
             model_path_used = model_path + ".bak"
         venv = norm
-        _ist = os.path.join(out, "imitate_state.json")
-        if args.imitate and os.path.exists(_ist) and json.load(open(_ist)).get("round", 0) < args.imitate:
-            do_imitate = True               # stopped during the imitation rounds: continue them (run_dagger resumes)
-            print("[train] resuming the imitation rounds")
         eval_env = VecNormalize(eval_env, training=False, norm_reward=False)
         if json.load(open(os.path.join(out, "config.json"))).get("memory"):
             from ctb.policies import SEQ_LEN, chunk_rollout_buffer
@@ -529,38 +514,18 @@ def main():
 
         if not os.path.exists(args.subset):
             raise SystemExit(f"{args.subset} not found. Run download_connectome.py and build_subset.py / build_flybrain.py first.")
-        # privileged critic (asymmetric actor-critic) from scratch: the true state is appended to the observation
-        # for the critic only; the actor (fly brain or baseline) gets exactly the same inputs either way
-        n_priv_fresh = 0
-        if args.privileged and args.env.startswith("panda"):
-            from ctb.envs.panda import n_priv as _n_priv
-            n_priv_fresh = _n_priv(args.env.split("_", 1)[1])
-        n_brain = obs_dim - n_priv_fresh
         policy = ConnectomePolicy
         # keep a copy of the wiring next to the model, so the run loads on any machine
         import shutil
         shutil.copy(args.subset, os.path.join(out, "subset.npz"))
         policy_kwargs = dict(subset_path=os.path.abspath(os.path.join(out, "subset.npz")), k_steps=args.k_steps,
                              leak=args.leak, gain=args.gain, wiring=args.wiring, log_std_init=-0.5,
-                             neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn), n_priv=n_priv_fresh,
-                             graph_seed=args.seed)
+                             neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn))
         if args.all_dn:
             _add_dn(os.path.join(out, "subset.npz"))
-        core = ConnectomeCore(n_brain, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
+        core = ConnectomeCore(obs_dim, args.subset, args.k_steps, args.leak, args.gain, wiring=args.wiring)
         actor_params = sum(p.numel() for p in core.parameters()) + 2 * core.out_dim + core.out_dim * act_dim + act_dim
         del core
-        if args.policy == "mlp":
-            # baseline: a plain MLP actor on the same inputs, as many weights as the fly brain unless --mlp_hidden
-            from ctb.policies import MLPPolicy, mlp_hidden_for
-            h = args.mlp_hidden or mlp_hidden_for(n_brain, act_dim, actor_params - act_dim)
-            policy = MLPPolicy
-            policy_kwargs = dict(hidden=(h, h), n_priv=n_priv_fresh, log_std_init=-0.5)
-            fly_params, actor_params = actor_params, n_brain * h + h + h * h + h + h * act_dim + act_dim + act_dim
-            args.mlp_hidden = h
-            print(f"[train] baseline MLP actor: {n_brain} -> {h} -> {h} -> {act_dim} ({actor_params:,} weights; "
-                  f"fly brain {fly_params:,})")
-        elif args.wiring != "real":
-            print(f"[train] control wiring: {args.wiring} (graph seed {args.seed})")
 
         model = PPO(
             policy, venv, policy_kwargs=policy_kwargs, seed=args.seed, device=args.device,
@@ -569,23 +534,7 @@ def main():
             ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0,
         )
         reset = True
-        if mlp_parent:                      # MLP transfer: the parent MLP's actor (same inputs), a fresh critic
-            from ctb.policies import load_ppo
-            src = load_ppo(mlp_parent, os.path.join(mlp_parent, "best_model.zip"), device=args.device).policy.state_dict()
-            dst = model.policy.state_dict()
-            same = [k for k in dst if k in src and src[k].shape == dst[k].shape
-                    and not k.startswith(("mlp_extractor.critic", "value_net"))]
-            for k in same:
-                dst[k] = src[k]
-            model.policy.load_state_dict(dst)
-            print(f"[train] MLP actor copied from {mlp_parent}/best_model.zip ({len(same)} tensors)")
-        if args.imitate:                    # fresh controller taught by the scripted teacher first (any --policy)
-            if not args.privileged:
-                raise SystemExit("--imitate needs --privileged (the critic for the PPO phase)")
-            do_imitate, init = True, mlp_parent   # (a parent MLP: its input statistics are kept)
-            print(f"[train] teacher -> fresh {args.policy} controller: {args.imitate} imitation rounds, then PPO (lr {lr})")
-        cfg_dump = dict(vars(args), **cfg, actor_params=int(actor_params), obs_dim=obs_dim, act_dim=act_dim,
-                        n_priv=n_priv_fresh, graph_seed=args.seed)
+        cfg_dump = dict(vars(args), **cfg, actor_params=int(actor_params), obs_dim=obs_dim, act_dim=act_dim)
         with open(os.path.join(out, "config.json"), "w") as f:
             json.dump(cfg_dump, f, indent=2)
         print(f"[train] {name}: actor params = {actor_params:,}")
@@ -622,7 +571,7 @@ def main():
         nv = 2 * F * 3
         # (only inputs whose source changed from the parent: re-measuring a camera the parent already had gave
         # the copied brain differently scaled images, and the student fell from 72 % to 0 %)
-        _pc = json.load(open(os.path.join(init, "config.json"))) if init else {}
+        _pc = json.load(open(os.path.join(init, "config.json")))
         if args.wrist_cam and _pc.get("wrist_cam") != args.wrist_cam:   # wrist-eye inputs now from the camera
             remeasure = np.r_[F * 3:2 * F * 3, nv + F * 3:nv + 2 * F * 3]
         if args.head_cam and (_pc.get("head_cam") != args.head_cam or _pc.get("head_fovy") != args.head_fovy):
@@ -634,7 +583,6 @@ def main():
                    cap=args.imitate_cap, max_updates=args.imitate_updates,
                    grip_w=args.imitate_grip_w, segment=args.imitate_segment,
                    log=lambda m: print(m, flush=True), save_fn=save)
-        reset = False      # PPO continues the step count and the evaluation history of the imitation rounds
         if model.num_timesteps >= cfg["total_steps"]:
             print(f"[train] finished after imitation. Saved to {out}.")
             venv.close()
@@ -697,9 +645,8 @@ def main():
         eval_cb.evaluations_length = [list(r) for r in old["ep_lengths"][keep]]
         if "successes" in old.files and len(old["successes"]):
             eval_cb.evaluations_successes = [list(r) for r in old["successes"][keep]]
-        # remember the best score so far: otherwise the first evaluation after a restart (or after the
-        # imitation rounds) counts as a "new best" and overwrites best_model.zip even when it is worse
-        # (a fresh fly brain's 15 % imitation brain was replaced by a 0 % PPO one)
+        # remember the best score so far: otherwise the first evaluation after a restart counts as
+        # a "new best" and overwrites best_model.zip even when it is worse
         if keep.any():
             sc = old["results"][keep].mean(axis=1)
             if "successes" in old.files and len(old["successes"]) == len(old["results"]):
