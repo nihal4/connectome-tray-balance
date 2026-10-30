@@ -52,7 +52,13 @@ case "${1:-help}" in
       SD=$(echo "$EXTRA" | grep -o -- '--seed [0-9]*' | awk '{print $2}')
       NAME="$ENV-$P"; [ "$P" = connectome ] && NAME="$NAME-$W"; NAME="$NAME-s${SD:-0}"
       case "$EXTRA" in *--mlp_hidden*) NAME="$NAME-wide" ;; esac
+      case "$EXTRA" in *--init_from*) NAME="$NAME-pre" ;; esac             # pretrained on another task first
     fi
+    case "$EXTRA" in *--policy\ mlp*)                                         # MLP baselines: never a fly-brain run name
+      if [ "$ENV" != panda_waste ]; then
+        SD=$(echo "$EXTRA" | grep -o -- '--seed [0-9]*' | awk '{print $2}'); NAME="$ENV-mlp-s${SD:-0}"
+      fi ;;
+    esac
     printf 'ENV=%s\nBRAIN=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$ENV" "$BRAIN" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $ENV, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (fly restart to switch now)" ;;
   queue)

@@ -155,6 +155,9 @@ def parse():
                          "are banked), +1 when done, -1 for an unripe pick; both end the episode. Default 'state'")
     ap.add_argument("--max_steps", type=int, default=None,
                     help="episode length in brain steps (25 per second); default per task (panda_pickmany: 400 = 16 s)")
+    ap.add_argument("--copycat_mask", choices=["on", "off"], default="on",
+                    help="--init_from + --imitate: hide the gripper flag and the previous command from the student "
+                         "(on, as before) or not (off: the same inputs as fresh runs)")
     ap.add_argument("--init_last", action="store_true",
                     help="--init_from: start from the parent's LATEST brain (model.zip) instead of its best one")
     ap.add_argument("--gentle", action="store_true", default=None,
@@ -311,6 +314,9 @@ def main():
             raise SystemExit(f"--init_from: no best_model.zip in {init}")
 
     do_imitate = False
+    mlp_parent = None
+    if init and args.policy == "mlp":       # MLP transfer: the fresh path builds it, then copies the parent's actor
+        mlp_parent, init = init, None
     if init and args.imitate:
         # teacher -> student: a new run whose policy has the asymmetric critic. The fly brain's
         # learned weights are copied from the parent; imitation (DAgger) then PPO follow below.
@@ -340,7 +346,7 @@ def main():
         n_brain = venv.observation_space.shape[0] - N_PRIV
         n_smell = int(venv.get_attr("n_smell")[0])                 # smell inputs come after the body sense
         body_end = n_brain - n_smell
-        mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end))
+        mask = [body_end - 13 + 7] + list(range(body_end - 4, body_end)) if args.copycat_mask == "on" else []
         parent.update(mask_inputs=mask, neuron_tau=bool(args.neuron_tau), all_dn=bool(args.all_dn))
         parent.update(memory=bool(args.memory), gentle=bool(args.gentle), head_cam=args.head_cam)
         # the task / robot settings of THIS run (what the environments were built with), not the parent's
@@ -563,10 +569,20 @@ def main():
             ent_coef=0.0, vf_coef=0.5, max_grad_norm=0.5, verbose=0,
         )
         reset = True
+        if mlp_parent:                      # MLP transfer: the parent MLP's actor (same inputs), a fresh critic
+            from ctb.policies import load_ppo
+            src = load_ppo(mlp_parent, os.path.join(mlp_parent, "best_model.zip"), device=args.device).policy.state_dict()
+            dst = model.policy.state_dict()
+            same = [k for k in dst if k in src and src[k].shape == dst[k].shape
+                    and not k.startswith(("mlp_extractor.critic", "value_net"))]
+            for k in same:
+                dst[k] = src[k]
+            model.policy.load_state_dict(dst)
+            print(f"[train] MLP actor copied from {mlp_parent}/best_model.zip ({len(same)} tensors)")
         if args.imitate:                    # fresh controller taught by the scripted teacher first (any --policy)
             if not args.privileged:
                 raise SystemExit("--imitate needs --privileged (the critic for the PPO phase)")
-            do_imitate, init = True, None
+            do_imitate, init = True, mlp_parent   # (a parent MLP: its input statistics are kept)
             print(f"[train] teacher -> fresh {args.policy} controller: {args.imitate} imitation rounds, then PPO (lr {lr})")
         cfg_dump = dict(vars(args), **cfg, actor_params=int(actor_params), obs_dim=obs_dim, act_dim=act_dim,
                         n_priv=n_priv_fresh, graph_seed=args.seed)
