@@ -618,6 +618,7 @@ def main():
                    cap=args.imitate_cap, max_updates=args.imitate_updates,
                    grip_w=args.imitate_grip_w, segment=args.imitate_segment,
                    log=lambda m: print(m, flush=True), save_fn=save)
+        reset = False      # PPO continues the step count and the evaluation history of the imitation rounds
         if model.num_timesteps >= cfg["total_steps"]:
             print(f"[train] finished after imitation. Saved to {out}.")
             venv.close()
@@ -680,8 +681,9 @@ def main():
         eval_cb.evaluations_length = [list(r) for r in old["ep_lengths"][keep]]
         if "successes" in old.files and len(old["successes"]):
             eval_cb.evaluations_successes = [list(r) for r in old["successes"][keep]]
-        # remember the best score so far: otherwise the first evaluation after a restart counts as
-        # a "new best" and overwrites best_model.zip even when it is worse
+        # remember the best score so far: otherwise the first evaluation after a restart (or after the
+        # imitation rounds) counts as a "new best" and overwrites best_model.zip even when it is worse
+        # (a fresh fly brain's 15 % imitation brain was replaced by a 0 % PPO one)
         if keep.any():
             sc = old["results"][keep].mean(axis=1)
             if "successes" in old.files and len(old["successes"]) == len(old["results"]):
