@@ -1,13 +1,14 @@
-"""A high-quality presentation video of a trained brain (for LinkedIn, talks, the website).
+"""A high-quality presentation video of trained brains (for LinkedIn, talks, the website).
 
 Full-HD (1920 x 1080, or 1080 x 1080 / 1080 x 1350), anti-aliased, shadows, a slowly moving camera,
-H.264 at high quality. A title card, the BEST brain solving several new layouts (found first with the
-camera off, then replayed identically with it on, as in showcase.py), labels in the scene, the wrist
-camera (full detail and what the brain receives) or the fly eye as insets, and a closing card with the
-run's measured results. Nothing is staged: every clip is the brain acting on its own.
+H.264 at high quality. A title card, then one continuous run of solved episodes: each brain's BEST brain on
+new layouts (found first with the camera off, then replayed identically with it on), one run after another
+(--run several times: a montage from the easiest task to the hardest), labels in the scene, the cameras and
+the smell the brain receives as insets, and a closing card with each run's MEASURED success rate. Only solved
+attempts are shown, and the closing card says so; nothing is staged: every clip is the brain acting alone.
 
-    python scripts/linkedin_video.py --run ~/flybrain/runs/<run> [--clips 3] [--tries 30] [--aspect 16:9]
-Output: <run>/progress/linkedin_<steps>k.mp4 (or --out).
+    python scripts/linkedin_video.py --run RUN [--run RUN2 ...] [--clips 2,3,4] [--max_seconds 95] [--aspect 16:9]
+Output: --out, or <first run>/progress/linkedin_<steps>k.mp4.
 """
 import argparse
 import json
@@ -18,6 +19,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 REPO = "github.com/nihal4/connectome-tray-balance"
+# measured results for the closing card (from the results/ write-ups), by run name; other runs: their own tests
+HEADLINE = {
+    "panda_smell-connectome-real-s0-adapt": "98 % of 300 new layouts, none in the wrong bin",
+    "panda_harvest-connectome-real-s0-adapt": "98 % of 200 new layouts, in 2.4 s",
+    "panda_pickripe-connectome-real-s0-cam-1ripe": "98 % of 200 new layouts, 0 of 400 unripe picked",
+    "panda_pickripe-connectome-real-s0-2cam-2ripe-mem-zoom": "79-82 % of 200 new layouts, 1 of 290 unripe picked",
+    "panda_pickmany-connectome-real-s0-2cam-mem-strict-events": "67-72 % of 200 new trusses (scripted teacher: 98 %)",
+}
 TEXT = {    # env -> (title, one line on the task, label of the progress counter)
     "panda_pickripe": ("Picking only the ripe tomatoes",
                        "Three tomatoes on a truss, each green, turning or ripe. Pick only the ripe ones into the basket."),
@@ -233,10 +242,11 @@ class Presenter:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", required=True)
-    ap.add_argument("--clips", type=int, default=3, help="solved episodes to show")
-    ap.add_argument("--tries", type=int, default=30, help="new layouts to try (camera off) to find them")
+    ap.add_argument("--run", required=True, action="append", help="a run folder; repeat for a montage (in order)")
+    ap.add_argument("--clips", default="3", help="solved episodes to show per run: one number, or one per run (2,3,4)")
+    ap.add_argument("--tries", type=int, default=60, help="new layouts to try per run (camera off) to find them")
     ap.add_argument("--first_seed", type=int, default=60_000)
+    ap.add_argument("--max_seconds", type=float, default=95.0, help="stop adding clips beyond this length")
     ap.add_argument("--aspect", default="16:9", choices=["16:9", "1:1", "4:5"])
     ap.add_argument("--width", type=int, default=0, help="override the width (e.g. 960 for a quick test)")
     ap.add_argument("--author", default="S. M. Nihal Ahmed")
@@ -245,69 +255,81 @@ def main():
     args = ap.parse_args()
 
     import imageio.v2 as imageio
-    import mujoco
     import numpy as np
     from PIL import Image, ImageDraw
     from ctb.envs import build_env
     from scripts.evaluate import load, make_norm, run_config, run_env_kw
 
-    run = os.path.abspath(os.path.expanduser(args.run))
-    cfg = run_config(run)
-    env_name = cfg["env"]
-    model = load(run, best=True)
-    vn = make_norm(run, {}, best=True)
-    kw = run_env_kw(run)
+    runs = [os.path.abspath(os.path.expanduser(r)) for r in args.run]
+    clips = [int(c) for c in str(args.clips).split(",")]
+    clips = (clips * len(runs))[:len(runs)] if len(clips) == 1 else clips
+    assert len(clips) == len(runs), "--clips: one number, or one per --run"
     W, H = {"16:9": (1920, 1080), "1:1": (1080, 1080), "4:5": (1080, 1350)}[args.aspect]
     if args.width:
         H, W = int(round(H * args.width / W / 8)) * 8, args.width
     s = W / 1920 if args.aspect == "16:9" else W / 1080          # text scale
-    fps = 25
+    fps = 25                                                      # one frame per control step (25 Hz)
 
-    # ---- 1. find solved layouts (camera off; the brain is deterministic, so replays are identical) ----
-    solved, n_tried = [], 0
-    for i in range(args.tries):
-        seed = args.first_seed + i
-        env = build_env(env_name, seed, **kw)
-        obs, _ = env.reset(seed=seed)
-        model.reset_memory()
-        info = {}
-        for _ in range(env.max_steps):
-            a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
-            obs, _, te, tr, info = env.step(a[0])
-            if te or tr or info.get("is_success"):
-                break
-        n_tried += 1
-        env.close()
-        if info.get("is_success") or args.any:
-            solved.append(seed)
-            print(f"layout {seed}: solved", flush=True)
-            if len(solved) >= args.clips:
-                break
-    if not solved:
+    def measured(run):
+        """Closing-card line: the write-up's 200-layout result, else the run's own best test."""
+        name = os.path.basename(run)
+        if name in HEADLINE:
+            return HEADLINE[name]
+        ev = os.path.join(run, "evaluations.npz")
+        if os.path.exists(ev):
+            d = np.load(ev)
+            if "successes" in d.files and len(d["successes"]):
+                return f"best test: {float(d['successes'].mean(1).max()):.0%} of {d['successes'].shape[1]} new layouts"
+        return "see the write-up"
+
+    # ---- 1. per run: find solved layouts (camera off; the brain is deterministic, so replays are identical) --
+    plan = []                                                     # (run, env_name, kw, model, vn, seeds, tried)
+    for run, n_clips in zip(runs, clips):
+        cfg = run_config(run)
+        env_name = cfg["env"]
+        model = load(run, best=True)
+        vn = make_norm(run, {}, best=True)
+        kw = run_env_kw(run)
+        solved, n_tried = [], 0
+        for i in range(args.tries):
+            seed = args.first_seed + i
+            env = build_env(env_name, seed, **kw)
+            obs, _ = env.reset(seed=seed)
+            model.reset_memory()
+            info = {}
+            for _ in range(env.max_steps):
+                a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
+                obs, _, te, tr, info = env.step(a[0])
+                if te or tr or info.get("is_success"):
+                    break
+            n_tried += 1
+            env.close()
+            if info.get("is_success") or args.any:
+                solved.append(seed)
+                if len(solved) >= n_clips:
+                    break
+        print(f"{os.path.basename(run)}: {len(solved)} solved of {n_tried} tried", flush=True)
+        if solved:
+            plan.append((run, env_name, kw, model, vn, solved, n_tried))
+    if not plan:
         raise SystemExit("no solved layout found; try more --tries")
 
-    # measured results for the closing card
-    best = None
-    ev = os.path.join(run, "evaluations.npz")
-    if os.path.exists(ev):
-        d = np.load(ev)
-        if "successes" in d.files and len(d["successes"]):
-            m = d["successes"].mean(1)
-            best = (float(m.max()), d["successes"].shape[1])
-    subset = np.load(os.path.join(run, "subset.npz"))
-    n_neurons = int(subset["n"]) if "n" in subset.files else None
-    n_syn = len(subset["pre"]) if "pre" in subset.files else None
-
-    title, task_line = TEXT.get(env_name, (env_name, ""))
+    first = plan[0][0]
     steps_k = 0
-    if os.path.exists(ev):
-        steps_k = int(np.load(ev)["timesteps"][-1]) // 1000
-    out = args.out or os.path.join(run, "progress", f"linkedin_{steps_k:05d}k{'' if args.aspect == '16:9' else '_' + args.aspect.replace(':', 'x')}.mp4")
+    ev0 = os.path.join(first, "evaluations.npz")
+    if os.path.exists(ev0):
+        steps_k = int(np.load(ev0)["timesteps"][-1]) // 1000
+    out = args.out or os.path.join(first, "progress", f"linkedin_{steps_k:05d}k{'' if args.aspect == '16:9' else '_' + args.aspect.replace(':', 'x')}.mp4")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     tmp = out[:-4] + ".part.mp4"
     writer = imageio.get_writer(tmp, fps=fps, codec="libx264", quality=None, macro_block_size=8,
                                 pixelformat="yuv420p",
                                 ffmpeg_params=["-crf", "17", "-preset", "slow", "-movflags", "+faststart"])
+    n_frames = [0]
+
+    def put(fr):
+        writer.append_data(fr)
+        n_frames[0] += 1
 
     def card(lines, frames, fade=10):
         """Dark title / closing card: lines = [(text, size, bold, colour)]."""
@@ -323,57 +345,72 @@ def main():
         base = np.asarray(img).astype(np.float32)
         for k in range(frames):
             a = min(1.0, (k + 1) / fade, (frames - k) / fade)
-            writer.append_data((base * a).astype(np.uint8))
+            put((base * a).astype(np.uint8))
 
+    subset = np.load(os.path.join(plan[-1][0], "subset.npz"))
+    n_neurons = int(subset["n"]) if "n" in subset.files else None
+    n_syn = len(subset["pre"]) if "pre" in subset.files else None
     brain = f"{n_neurons:,} neurons, {n_syn:,} synapses" if n_neurons and n_syn else "fly brain wiring"
+    sub = TEXT.get(plan[0][1], ("", ""))[0] if len(plan) == 1 else \
+        f"{TEXT.get(plan[0][1], ('', ''))[0]}  ->  {TEXT.get(plan[-1][1], ('', ''))[0]}"
     card([("A fruit fly's brain wiring", 54, True, (240, 242, 245)),
           ("controlling a robot arm", 54, True, (240, 242, 245)),
           ("", 20, False, (0, 0, 0)),
-          (title, 40, False, (120, 200, 140)),
+          (sub, 36, False, (120, 200, 140)),
           ("", 16, False, (0, 0, 0)),
           (f"FlyWire connectome  ·  {brain}  ·  MuJoCo  ·  Franka Panda", 26, False, (170, 176, 186)),
           (args.author, 26, False, (170, 176, 186))], frames=int(3.5 * fps))
 
-    # ---- 2. replay the solved layouts with a good camera -----------------------------------------
-    for ci, seed in enumerate(solved):
-        env = build_env(env_name, seed, **kw)
-        pres = Presenter(env, W, H, args.aspect, ci, title, task_line)
-        obs, _ = env.reset(seed=seed)
-        model.reset_memory()
-        info = {}
-        frames_ep = []
-        for t in range(env.max_steps):
-            a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
-            obs, _, te, tr, info = env.step(a[0])
-            frames_ep.append(pres.frame(t, info))
-            if info.get("is_success") or te or tr:
-                break
-        hold = frames_ep[-1]
-        frames_ep += [hold] * int(1.2 * fps)
-        for k, fr in enumerate(frames_ep):                    # fade in / out
-            a = min(1.0, (k + 1) / 8, (len(frames_ep) - k) / 8)
-            writer.append_data((fr.astype(np.float32) * a).astype(np.uint8))
-        pres.close()
-        env.close()
-        print(f"clip {ci + 1}/{len(solved)}: layout {seed}, {len(frames_ep)} frames", flush=True)
+    # ---- 2. the solved layouts, one after another (a short dip to dark between clips, no cards) -----------
+    end_frames = int(6 * fps)
+    shown = []
+    ci = 0
+    for ri, (run, env_name, kw, model, vn, solved, n_tried) in enumerate(plan):
+        title, task_line = TEXT.get(env_name, (env_name, ""))
+        if len(plan) > 1:
+            title = f"{ri + 1}/{len(plan)}  {title}"
+        n_here = 0
+        for seed in solved:
+            if (n_frames[0] + end_frames) / fps > args.max_seconds and n_here > 0:
+                break                                        # (at least one clip of every run)
+            env = build_env(env_name, seed, **kw)
+            pres = Presenter(env, W, H, args.aspect, ci, title, task_line)
+            obs, _ = env.reset(seed=seed)
+            model.reset_memory()
+            info = {}
+            frames_ep = []
+            for t in range(env.max_steps):
+                a, _ = model.predict(vn.normalize_obs(obs[None]), deterministic=True)
+                obs, _, te, tr, info = env.step(a[0])
+                frames_ep.append(pres.frame(t, info))
+                if info.get("is_success") or te or tr:
+                    break
+            frames_ep += [frames_ep[-1]] * int(0.8 * fps)    # a short hold on the result
+            for k, fr in enumerate(frames_ep):               # quick fade in / out
+                a = min(1.0, (k + 1) / 5, (len(frames_ep) - k) / 5)
+                put((fr.astype(np.float32) * a).astype(np.uint8))
+            pres.close()
+            env.close()
+            ci += 1
+            n_here += 1
+            print(f"clip {ci}: {os.path.basename(run)} layout {seed}, {len(frames_ep)} frames "
+                  f"({n_frames[0] / fps:.0f} s so far)", flush=True)
+        shown.append((env_name, run, n_here, n_tried))
 
-    # ---- 3. closing card: measured results ------------------------------------------------------
-    facts = []
-    if best:
-        facts.append(f"best test: {best[0]:.0%} of {best[1]} new layouts solved")
-    facts.append(f"this video: the first {len(solved)} solved of {n_tried} new layouts tried")
-    learn = "copied a scripted teacher (DAgger), then practised (PPO)" if cfg.get("imitation") else \
-        "learned by trial and error (PPO)"
-    lines = [("How it learned", 40, True, (240, 242, 245)), ("", 10, False, (0, 0, 0)),
-             (learn, 28, False, (200, 205, 212))]
-    lines += [(f, 28, False, (120, 200, 140)) for f in facts]
+    # ---- 3. closing card: what was measured, and that only solved attempts are shown ----------------------
+    lines = [("Measured on new layouts", 40, True, (240, 242, 245)), ("", 10, False, (0, 0, 0))]
+    for env_name, run, n_here, n_tried in shown:
+        lines.append((f"{TEXT.get(env_name, (env_name, ''))[0]}:  {measured(run)}", 26, False, (200, 205, 212)))
     lines += [("", 10, False, (0, 0, 0)),
-              ("The wiring is the fruit fly's own (FlyWire); connection strengths are learned.", 24, False, (170, 176, 186)),
+              ("This video shows solved attempts only; every clip is the brain acting on its own.", 24, False,
+               (170, 176, 186)),
+              ("The wiring is the fruit fly's own (FlyWire); only connection strengths are learned.", 24, False,
+               (170, 176, 186)),
               (REPO, 26, True, (240, 242, 245))]
-    card(lines, frames=int(5 * fps))
+    card(lines, frames=end_frames)
     writer.close()
     os.replace(tmp, out)
-    print(f"saved {out}")
+    print(f"saved {out} ({n_frames[0] / fps:.0f} s)")
 
 
 if __name__ == "__main__":

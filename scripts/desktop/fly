@@ -76,6 +76,15 @@ case "${1:-help}" in
     A="${3:-16:9}"; mkdir -p "$ROOT/exports"; O="$ROOT/exports/${R}_linkedin_$(echo "$A" | tr ':' 'x')_$(date +%Y%m%d-%H%M).mp4"
     cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/linkedin_video.py --run "$D" --aspect "$A" --out "$O" \
       && echo "download on the Mac:  http://$(hostname -I | awk '{print $1}'):8080/exports/$(basename "$O")" ;;
+  montage)
+    # the LinkedIn montage: solved attempts of the best brains, easiest task to hardest (v15 -> v19), 60-90 s
+    A="${2:-16:9}"; mkdir -p "$ROOT/exports"; O="$ROOT/exports/flybrain_montage_$(echo "$A" | tr ':' 'x')_$(date +%Y%m%d-%H%M).mp4"
+    R="$ROOT/runs"
+    cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/linkedin_video.py --aspect "$A" --out "$O" --clips 2,2,3,3,4 \
+      --run "$R/panda_smell-connectome-real-s0-adapt" --run "$R/panda_harvest-connectome-real-s0-adapt" \
+      --run "$R/panda_pickripe-connectome-real-s0-cam-1ripe" --run "$R/panda_pickripe-connectome-real-s0-2cam-2ripe-mem-zoom" \
+      --run "$R/panda_pickmany-connectome-real-s0-2cam-mem-strict-events" \
+      && echo "download on the Mac:  http://$(hostname -I | awk '{print $1}'):8080/exports/$(basename "$O")" ;;
   update)  git -C "$REPO" pull && "$ROOT/.venv/bin/python" -m pip install -q -r "$REPO/requirements.txt" && $U restart flybrain-watch && echo "code updated (fly restart to use it for training)" ;;
   eval)    cur; cd "$REPO" && "$ROOT/.venv/bin/python" scripts/evaluate.py --run "$ROOT/runs/$NAME" --robustness --episodes "${2:-20}" ;;
   showcase) cur; cd "$REPO" && nice -n 15 "$ROOT/.venv/bin/python" scripts/showcase.py --run "$ROOT/runs/$NAME" --episodes "${2:-40}" ;;
