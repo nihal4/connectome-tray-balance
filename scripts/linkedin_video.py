@@ -27,6 +27,12 @@ HEADLINE = {
     "panda_pickripe-connectome-real-s0-2cam-2ripe-mem-zoom": "79-82 % of 200 new layouts, 1 of 290 unripe picked",
     "panda_pickmany-connectome-real-s0-2cam-mem-strict-events": "67-72 % of 200 new trusses (scripted teacher: 98 %)",
 }
+# runs whose task differs from their env's default text (same env, another phase)
+TEXT_BY_RUN = {
+    "panda_pickripe-connectome-real-s0-2cam-2ripe-mem-zoom": (
+        "Picking every ripe tomato, gently",
+        "Three tomatoes on a truss, up to two ripe. Pick every ripe one into the basket without bruising any."),
+}
 TEXT = {    # env -> (title, one line on the task, label of the progress counter)
     "panda_pickripe": ("Picking only the ripe tomatoes",
                        "Three tomatoes on a truss, each green, turning or ripe. Pick only the ripe ones into the basket."),
@@ -284,7 +290,10 @@ def main():
 
     # ---- 1. per run: find solved layouts (camera off; the brain is deterministic, so replays are identical) --
     plan = []                                                     # (run, env_name, kw, model, vn, seeds, tried)
-    for run, n_clips in zip(runs, clips):
+    def text_of(run, env_name):
+        return TEXT_BY_RUN.get(os.path.basename(run), TEXT.get(env_name, (env_name, "")))
+
+    for ri, (run, n_clips) in enumerate(zip(runs, clips)):
         cfg = run_config(run)
         env_name = cfg["env"]
         model = load(run, best=True)
@@ -292,7 +301,7 @@ def main():
         kw = run_env_kw(run)
         solved, n_tried = [], 0
         for i in range(args.tries):
-            seed = args.first_seed + i
+            seed = args.first_seed + 1000 * ri + i          # (each run its own layouts)
             env = build_env(env_name, seed, **kw)
             obs, _ = env.reset(seed=seed)
             model.reset_memory()
@@ -351,8 +360,8 @@ def main():
     n_neurons = int(subset["n"]) if "n" in subset.files else None
     n_syn = len(subset["pre"]) if "pre" in subset.files else None
     brain = f"{n_neurons:,} neurons, {n_syn:,} synapses" if n_neurons and n_syn else "fly brain wiring"
-    sub = TEXT.get(plan[0][1], ("", ""))[0] if len(plan) == 1 else \
-        f"{TEXT.get(plan[0][1], ('', ''))[0]}  ->  {TEXT.get(plan[-1][1], ('', ''))[0]}"
+    sub = text_of(plan[0][0], plan[0][1])[0] if len(plan) == 1 else \
+        f"{text_of(plan[0][0], plan[0][1])[0]}  ->  {text_of(plan[-1][0], plan[-1][1])[0]}"
     card([("A fruit fly's brain wiring", 54, True, (240, 242, 245)),
           ("controlling a robot arm", 54, True, (240, 242, 245)),
           ("", 20, False, (0, 0, 0)),
@@ -366,7 +375,7 @@ def main():
     shown = []
     ci = 0
     for ri, (run, env_name, kw, model, vn, solved, n_tried) in enumerate(plan):
-        title, task_line = TEXT.get(env_name, (env_name, ""))
+        title, task_line = text_of(run, env_name)
         if len(plan) > 1:
             title = f"{ri + 1}/{len(plan)}  {title}"
         n_here = 0
@@ -400,7 +409,7 @@ def main():
     # ---- 3. closing card: what was measured, and that only solved attempts are shown ----------------------
     lines = [("Measured on new layouts", 40, True, (240, 242, 245)), ("", 10, False, (0, 0, 0))]
     for env_name, run, n_here, n_tried in shown:
-        lines.append((f"{TEXT.get(env_name, (env_name, ''))[0]}:  {measured(run)}", 26, False, (200, 205, 212)))
+        lines.append((f"{text_of(run, env_name)[0]}:  {measured(run)}", 26, False, (200, 205, 212)))
     lines += [("", 10, False, (0, 0, 0)),
               ("This video shows solved attempts only; every clip is the brain acting on its own.", 24, False,
                (170, 176, 186)),
